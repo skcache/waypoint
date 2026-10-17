@@ -69,7 +69,15 @@ func migrateFiles(ctx context.Context, pool *pgxpool.Pool, files []migrations.Fi
 	defer func() {
 		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), lockCleanupTimeout)
 		defer cancel()
-		if _, err := conn.Exec(cleanupCtx, `SELECT pg_advisory_unlock($1)`, migrationLockID); err != nil {
+		// Inspect the unlock result instead of discarding it: pg_advisory_unlock
+		// returns false when the session did not hold the lock, meaning the
+		// connection's state cannot be trusted for reuse.
+		var unlocked bool
+		err := conn.QueryRow(cleanupCtx, `SELECT pg_advisory_unlock($1)`, migrationLockID).Scan(&unlocked)
+		if err != nil || !unlocked {
+			// Unconfirmed unlock (error, or the lock was not held by this
+			// session): destroy the session so a possibly-held advisory lock
+			// can never strand on a reusable pooled connection.
 			raw := conn.Hijack()
 			_ = raw.Close(cleanupCtx)
 			return

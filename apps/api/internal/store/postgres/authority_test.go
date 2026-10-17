@@ -274,3 +274,110 @@ func TestStoreCloseClosesPool(t *testing.T) {
 		t.Fatalf("Check after Close = %q, want %q", got, postgres.ReadinessUnreachable)
 	}
 }
+
+// ---------------------------------------------------------------------------
+// Final integrity patch — transaction id + payment operation identity
+// ---------------------------------------------------------------------------
+
+func TestTransactionIDIsImmutableEvenWhenUnreferenced(t *testing.T) {
+	pool := testPool(t)
+	resetSchema(t, pool)
+	ctx := context.Background()
+
+	session := seedSession(t, pool)
+	contract := seedIntentDraft(t, pool, session)
+	confirmContract(t, pool, contract, 1)
+	seedCatalogItem(t, pool, "keyboard-office-quiet")
+	txn := seedTransaction(t, pool, session, contract, 1, "keyboard-office-quiet")
+
+	// Proving the transaction has zero dependents makes this decisive: with
+	// nothing referencing it, only the immutability guard stands between the
+	// row and an identity rewrite.
+	var dependents int
+	if err := pool.QueryRow(ctx, `
+		SELECT (SELECT count(*) FROM payment_operations      WHERE transaction_id = $1)
+		     + (SELECT count(*) FROM semantic_verifications  WHERE transaction_id = $1)
+		     + (SELECT count(*) FROM transaction_events      WHERE transaction_id = $1)`, txn).Scan(&dependents); err != nil {
+		t.Fatalf("count dependents: %v", err)
+	}
+	if dependents != 0 {
+		t.Fatalf("expected an unreferenced transaction, found %d dependents", dependents)
+	}
+
+	_, err := pool.Exec(ctx,
+		`UPDATE transactions SET id = '99999999-0000-0000-0000-000000000001' WHERE id = $1`, txn)
+	pgErr := wantPgError(t, err, "P0001")
+	if !strings.Contains(pgErr.Message, "immutable") {
+		t.Fatalf("want immutability guidance, got %q", pgErr.Message)
+	}
+}
+
+func TestPaymentOperationIdentityIsImmutable(t *testing.T) {
+	pool := testPool(t)
+	resetSchema(t, pool)
+	ctx := context.Background()
+
+	session := seedSession(t, pool)
+	contract := seedIntentDraft(t, pool, session)
+	confirmContract(t, pool, contract, 1)
+	seedCatalogItem(t, pool, "keyboard-office-quiet")
+	txn := seedTransaction(t, pool, session, contract, 1, "keyboard-office-quiet")
+
+	var opID string
+	if err := pool.QueryRow(ctx, `
+		INSERT INTO payment_operations (transaction_id, operation_type, paypal_request_id, payload_fingerprint)
+		VALUES ($1, 'CREATE_ORDER', $2, $3) RETURNING id`,
+		txn, "req-"+randomHex(t), randomHash(t)).Scan(&opID); err != nil {
+		t.Fatalf("seed payment operation: %v", err)
+	}
+
+	// Each identity field is independently immutable.
+	updates := []struct{ name, stmt string }{
+		{"id", `UPDATE payment_operations SET id = '99999999-0000-0000-0000-0000000000aa' WHERE id = $1`},
+		{"transaction_id", `UPDATE payment_operations SET transaction_id = '99999999-0000-0000-0000-0000000000bb' WHERE id = $1`},
+		{"operation_type", `UPDATE payment_operations SET operation_type = 'CAPTURE' WHERE id = $1`},
+		{"paypal_request_id", `UPDATE payment_operations SET paypal_request_id = 'rewritten' WHERE id = $1`},
+		{"payload_fingerprint", `UPDATE payment_operations SET payload_fingerprint = decode(repeat('dd',32),'hex') WHERE id = $1`},
+		{"created_at", `UPDATE payment_operations SET created_at = created_at - interval '1 hour' WHERE id = $1`},
+	}
+	for _, u := range updates {
+		t.Run(u.name, func(t *testing.T) {
+			_, err := pool.Exec(ctx, u.stmt, opID)
+			pgErr := wantPgError(t, err, "P0001")
+			if !strings.Contains(pgErr.Message, "immutable") {
+				t.Fatalf("want identity guidance, got %q", pgErr.Message)
+			}
+		})
+	}
+
+	// provider_resource_id: NULL -> value is the one permitted transition
+	// (the provider result becomes known).
+	if _, err := pool.Exec(ctx,
+		`UPDATE payment_operations SET provider_resource_id = 'PAYPAL-SET-1' WHERE id = $1`, opID); err != nil {
+		t.Fatalf("NULL -> value transition must be allowed: %v", err)
+	}
+	// Writing the same value again is a no-op, not a change.
+	if _, err := pool.Exec(ctx,
+		`UPDATE payment_operations SET provider_resource_id = 'PAYPAL-SET-1' WHERE id = $1`, opID); err != nil {
+		t.Fatalf("same-value rewrite must be allowed: %v", err)
+	}
+	// A different value is refused...
+	if _, err := pool.Exec(ctx,
+		`UPDATE payment_operations SET provider_resource_id = 'PAYPAL-SET-2' WHERE id = $1`, opID); err == nil || !strings.Contains(err.Error(), "cannot change") {
+		t.Fatalf("a different provider resource id must be refused, got %v", err)
+	}
+	// ...including clearing it back to NULL.
+	if _, err := pool.Exec(ctx,
+		`UPDATE payment_operations SET provider_resource_id = NULL WHERE id = $1`, opID); err == nil || !strings.Contains(err.Error(), "cannot change") {
+		t.Fatalf("clearing a set provider resource id must be refused, got %v", err)
+	}
+
+	// Execution-state fields remain mutable.
+	if _, err := pool.Exec(ctx, `
+		UPDATE payment_operations
+		   SET status = 'SUCCEEDED', attempt_count = 2,
+		       first_attempted_at = now(), last_checked_at = now()
+		 WHERE id = $1`, opID); err != nil {
+		t.Fatalf("execution-state update must be allowed: %v", err)
+	}
+}
