@@ -5,6 +5,8 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"sort"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -16,6 +18,10 @@ import (
 // that serializes concurrent migration runs (e.g. tests and a running
 // migrate command starting at the same time).
 const migrationLockID int64 = 728198431
+
+// lockCleanupTimeout bounds the deferred unlock attempt so a cancelled
+// migrate call cannot hang during cleanup (F06).
+const lockCleanupTimeout = 5 * time.Second
 
 const createMigrationsTableSQL = `
 CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -35,19 +41,45 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
 //     checksum; a modified file aborts the run with an explicit error.
 //   - Failed migrations roll back atomically and are not recorded.
 func Migrate(ctx context.Context, pool *pgxpool.Pool) ([]int64, error) {
+	files, err := migrations.All()
+	if err != nil {
+		return nil, err
+	}
+	return migrateFiles(ctx, pool, files)
+}
+
+// migrateFiles applies an explicit, version-ordered migration set. It is the
+// internal seam the tests use to exercise failure and rollback behavior
+// without shipping deliberately broken migrations.
+func migrateFiles(ctx context.Context, pool *pgxpool.Pool, files []migrations.File) ([]int64, error) {
+	ordered := append([]migrations.File(nil), files...)
+	sort.Slice(ordered, func(i, j int) bool { return ordered[i].Version < ordered[j].Version })
+
 	conn, err := pool.Acquire(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("acquire migration connection: %w", err)
 	}
-	defer conn.Release()
+	// Exactly one deferred closure manages both the advisory lock and the
+	// pooled connection, in that order (F06):
+	//   - the unlock runs under a bounded cleanup context, so a cancelled
+	//     migrate call cannot block here;
+	//   - if the unlock cannot be confirmed, the underlying session is
+	//     destroyed (Hijack + Close) so a still-held session-level lock can
+	//     never leak back into the pool and deadlock later migration runs.
+	defer func() {
+		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), lockCleanupTimeout)
+		defer cancel()
+		if _, err := conn.Exec(cleanupCtx, `SELECT pg_advisory_unlock($1)`, migrationLockID); err != nil {
+			raw := conn.Hijack()
+			_ = raw.Close(cleanupCtx)
+			return
+		}
+		conn.Release()
+	}()
 
-	if _, err := conn.Exec(ctx, "SELECT pg_advisory_lock($1)", migrationLockID); err != nil {
+	if _, err := conn.Exec(ctx, `SELECT pg_advisory_lock($1)`, migrationLockID); err != nil {
 		return nil, fmt.Errorf("acquire migration lock: %w", err)
 	}
-	defer func() {
-		// Unlock even if the caller's context was cancelled.
-		_, _ = conn.Exec(context.WithoutCancel(ctx), "SELECT pg_advisory_unlock($1)", migrationLockID)
-	}()
 
 	if _, err := conn.Exec(ctx, createMigrationsTableSQL); err != nil {
 		return nil, fmt.Errorf("ensure schema_migrations table: %w", err)
@@ -58,15 +90,9 @@ func Migrate(ctx context.Context, pool *pgxpool.Pool) ([]int64, error) {
 		return nil, err
 	}
 
-	all, err := migrations.All()
-	if err != nil {
-		return nil, err
-	}
-
 	var newlyApplied []int64
-	for _, m := range all {
-		sum := sha256.Sum256([]byte(m.SQL))
-		checksum := hex.EncodeToString(sum[:])
+	for _, m := range ordered {
+		checksum := fileChecksum(m.SQL)
 
 		if previous, ok := applied[m.Version]; ok {
 			if previous != checksum {
@@ -84,6 +110,13 @@ func Migrate(ctx context.Context, pool *pgxpool.Pool) ([]int64, error) {
 	}
 
 	return newlyApplied, nil
+}
+
+// fileChecksum is the hex SHA-256 of a migration's contents, used both for
+// the apply-time ledger and for readiness verification.
+func fileChecksum(sql string) string {
+	sum := sha256.Sum256([]byte(sql))
+	return hex.EncodeToString(sum[:])
 }
 
 func applyOne(ctx context.Context, conn *pgxpool.Conn, m migrations.File, checksum string) error {

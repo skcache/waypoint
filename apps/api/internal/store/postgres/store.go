@@ -72,9 +72,12 @@ func (s *Store) Close() {
 }
 
 // Check implements the API readiness contract: it returns ReadinessOK only
-// when the database answers a bounded probe AND the applied schema version
-// covers every migration embedded in this binary. Every other outcome
-// returns a non-secret reason code.
+// when the database answers a bounded probe AND the recorded migration
+// history is exactly the set embedded in this binary — every version present
+// with the same name and checksum, and nothing unknown on top. This detects
+// missing, modified, and inconsistent migration metadata (F05).
+//
+// Readiness is strictly read-only: it never applies migrations.
 func (s *Store) Check(ctx context.Context) string {
 	ctx, cancel := context.WithTimeout(ctx, readinessTimeout)
 	defer cancel()
@@ -83,20 +86,41 @@ func (s *Store) Check(ctx context.Context) string {
 		return ReadinessUnreachable
 	}
 
-	var applied int64
-	err := s.pool.QueryRow(ctx, `SELECT COALESCE(MAX(version), 0) FROM schema_migrations`).Scan(&applied)
+	expected, err := migrations.All()
+	if err != nil {
+		return ReadinessSchemaNotReady
+	}
+
+	rows, err := s.pool.Query(ctx, `SELECT version, name, checksum FROM schema_migrations`)
 	if err != nil {
 		// Missing schema_migrations table (or any other query failure) means
 		// the schema is not ready from this binary's point of view.
 		return ReadinessSchemaNotReady
 	}
+	defer rows.Close()
 
-	required, err := migrations.Latest()
-	if err != nil {
+	type appliedRecord struct{ name, checksum string }
+	applied := make(map[int64]appliedRecord)
+	for rows.Next() {
+		var version int64
+		var record appliedRecord
+		if err := rows.Scan(&version, &record.name, &record.checksum); err != nil {
+			return ReadinessSchemaNotReady
+		}
+		applied[version] = record
+	}
+	if err := rows.Err(); err != nil {
 		return ReadinessSchemaNotReady
 	}
-	if applied < required {
+
+	if len(applied) != len(expected) {
 		return ReadinessSchemaNotReady
+	}
+	for _, file := range expected {
+		record, ok := applied[file.Version]
+		if !ok || record.name != file.Name || record.checksum != fileChecksum(file.SQL) {
+			return ReadinessSchemaNotReady
+		}
 	}
 	return ReadinessOK
 }

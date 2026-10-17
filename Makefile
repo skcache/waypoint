@@ -11,7 +11,7 @@ include .env
 export
 endif
 
-.PHONY: help dev-api dev-web db-up db-down db-migrate db-reset test test-api lint lint-api lint-web build-api build-web clean
+.PHONY: help dev-api dev-web db-up db-down db-migrate db-reset test test-api test-integration lint lint-api lint-web build-api build-web clean
 
 help: ## List available targets
 	@grep -h -E '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "}; {printf "  %-12s %s\n", $$1, $$2}'
@@ -40,6 +40,9 @@ test: test-api ## Run the automated test suites that exist today
 
 test-api: ## Go tests for the API
 	cd $(API_DIR) && go test ./...
+
+test-integration: ## Go tests with database integration REQUIRED (fails instead of skipping without PostgreSQL)
+	cd $(API_DIR) && REQUIRE_DATABASE_TESTS=1 go test ./...
 
 lint: lint-api lint-web ## Run available linters
 

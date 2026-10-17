@@ -83,7 +83,7 @@ out of version control on purpose.
 # 1. Environment file (placeholders only — example credentials for local dev)
 cp .env.example .env
 
-# 2. Local PostgreSQL on port 5433 (5432 is commonly occupied locally)
+# 2. Local PostgreSQL on 127.0.0.1:5433 (5432 is commonly occupied locally)
 make db-up
 make db-migrate    # applies the versioned SQL migrations
 
@@ -111,6 +111,8 @@ settings) — `/readyz` reports `not_configured` until the database is set up.
 make test        # go test ./... — integration tests run against a real PostgreSQL
                  # (waypoint_test, created by the compose init script; override with
                  # TEST_DATABASE_URL; they skip cleanly when the database is down)
+make test-integration  # database integration REQUIRED: fails (not skips) when
+                       # PostgreSQL is unavailable — for CI and pre-merge checks
 make lint        # go vet + gofmt check, ESLint
 make build-web   # production build of the web app
 ```

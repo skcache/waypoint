@@ -36,7 +36,8 @@ func run() error {
 		return err
 	}
 
-	ready := prepareReadiness(cfg)
+	ready, closeDatabase := prepareReadiness(cfg)
+	defer closeDatabase()
 
 	srv := &http.Server{
 		Addr:              cfg.Addr(),
@@ -70,19 +71,25 @@ func run() error {
 // prepareReadiness wires the /readyz checker from configuration. A missing or
 // unusable DATABASE_URL is not fatal: the process starts and readiness
 // fail-closes with a non-secret reason code. The pool connects lazily, so no
-// database I/O happens here.
-func prepareReadiness(cfg config.Config) httpapi.ReadinessChecker {
+// database I/O happens here. The returned cleanup func closes the pool and
+// runs on every shutdown path (F09).
+func prepareReadiness(cfg config.Config) (httpapi.ReadinessChecker, func()) {
+	noop := func() {}
+
 	if cfg.DatabaseURL == "" {
 		slog.Info("no database configured; /readyz will report not_configured")
-		return nil
+		return nil, noop
 	}
 
 	store, err := postgres.Open(context.Background(), cfg.DatabaseURL)
 	if err != nil {
 		// Deliberately no error detail: it may echo parts of the DSN.
 		slog.Warn("DATABASE_URL rejected; /readyz will report not_configured")
-		return nil
+		return nil, noop
 	}
 	slog.Info("database configured; /readyz probes it on request")
-	return store
+	return store, func() {
+		slog.Info("closing database connection pool")
+		store.Close()
+	}
 }

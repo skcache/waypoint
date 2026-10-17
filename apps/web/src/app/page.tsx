@@ -1,8 +1,8 @@
 const status: { area: string; state: string; note: string }[] = [
   {
     area: "API runtime — Go",
-    state: "Scaffolded",
-    note: "Liveness endpoint GET /healthz implemented with automated tests.",
+    state: "Implemented",
+    note: "Liveness and database-readiness endpoints (GET /healthz, GET /readyz) with automated tests. Readiness reports database state, never credentials.",
   },
   {
     area: "Web interface — Next.js",
@@ -11,8 +11,8 @@ const status: { area: string; state: string; note: string }[] = [
   },
   {
     area: "PostgreSQL",
-    state: "Not connected",
-    note: "Local service defined in compose.yaml. Schema and migrations arrive in a later phase.",
+    state: "Implemented",
+    note: "Schema with versioned SQL migrations and readiness checks that detect missing or inconsistent schema state. Local service runs via compose.yaml.",
   },
   {
     area: "PayPal sandbox — Orders v2",
@@ -55,8 +55,9 @@ export default function Home() {
           decision and outcome.
         </p>
         <p className="mt-3 max-w-2xl text-sm leading-6 text-zinc-500">
-          This site is the Phase 01 scaffold. No integrations are configured
-          yet and no payments are processed.
+          This site is an early prototype. The API and database foundation
+          exist; no payment or AI integrations are configured yet and no
+          payments are processed.
         </p>
 
         <section className="mt-14" aria-labelledby="status-heading">
@@ -109,7 +110,7 @@ export default function Home() {
       </main>
 
       <footer className="mt-16 flex flex-col gap-2 border-t border-zinc-200 pt-6 text-xs text-zinc-500 sm:flex-row sm:items-center sm:justify-between">
-        <p>Phase 01 — repository bootstrap. PayPal sandbox only; no real money.</p>
+        <p>Early prototype — database foundation in place. PayPal sandbox only; no real money.</p>
         <p>MIT licensed</p>
       </footer>
     </div>
