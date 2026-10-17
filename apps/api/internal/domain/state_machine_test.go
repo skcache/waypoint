@@ -238,6 +238,17 @@ func TestEvidenceGates(t *testing.T) {
 			ev:     []EvidenceKind{EvidenceProviderFailure},
 			wantOK: true,
 		},
+		{
+			name: "reconciliation completion without provider confirmation",
+			from: StateReconciliationRequired, to: StateCompleted,
+			wantOK: false, missing: []EvidenceKind{EvidenceProviderCompletion},
+		},
+		{
+			name: "reconciliation completion with provider confirmation",
+			from: StateReconciliationRequired, to: StateCompleted,
+			ev:     []EvidenceKind{EvidenceProviderCompletion},
+			wantOK: true,
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -286,6 +297,77 @@ func TestUnknownPaymentOutcomeIsNeverDefinitiveFailure(t *testing.T) {
 	out = EvaluateTransition(TransitionRequest{From: StateReconciliationRequired, To: StateFailed})
 	if out.Allowed || out.Code != TransitionMissingEvidence {
 		t.Fatalf("failure from reconciliation must require provider evidence, got allowed=%v code=%s", out.Allowed, out.Code)
+	}
+}
+
+// TestEveryCompletionEdgeRequiresProviderEvidence audits the transition table
+// itself: every edge targeting COMPLETED must demand authoritative provider
+// confirmation, and only the two intended sources may ever reach it.
+func TestEveryCompletionEdgeRequiresProviderEvidence(t *testing.T) {
+	sources := map[TransactionState]bool{}
+	for from, tos := range legalTransitions {
+		for _, to := range tos {
+			if to != StateCompleted {
+				continue
+			}
+			sources[from] = true
+			gated := false
+			for _, k := range requiredEvidence[transitionKey{from, to}] {
+				if k == EvidenceProviderCompletion {
+					gated = true
+				}
+			}
+			if !gated {
+				t.Errorf("edge %s -> COMPLETED does not require provider completion", from)
+			}
+		}
+	}
+	want := map[TransactionState]bool{StateCapturePending: true, StateReconciliationRequired: true}
+	if !reflect.DeepEqual(sources, want) {
+		t.Fatalf("edges into COMPLETED come from %v, want exactly %v", sources, want)
+	}
+}
+
+// TestReconciliationFromOrderCreationCannotCompleteSilently walks the exact
+// scenario from the review: an order that lands in reconciliation straight
+// from ORDER_CREATING — buyer approval never happened — must still be unable
+// to record COMPLETED without provider confirmation, and wrong evidence must
+// not substitute for the right kind.
+func TestReconciliationFromOrderCreationCannotCompleteSilently(t *testing.T) {
+	setup := []TransitionRequest{
+		{From: StateProposed, To: StateVerifying},
+		{From: StateVerifying, To: StateAuthorized, Evidence: []EvidenceKind{EvidenceAuthorizationDecision}},
+		{From: StateAuthorized, To: StateOrderCreating},
+		{From: StateOrderCreating, To: StateReconciliationRequired},
+	}
+	for _, step := range setup {
+		if out := EvaluateTransition(step); !out.Allowed {
+			t.Fatalf("setup step %s -> %s rejected: %s", step.From, step.To, out.Code)
+		}
+	}
+
+	out := EvaluateTransition(TransitionRequest{From: StateReconciliationRequired, To: StateCompleted})
+	if out.Allowed || out.Code != TransitionMissingEvidence {
+		t.Fatalf("completion without evidence: allowed=%v code=%s", out.Allowed, out.Code)
+	}
+	if !reflect.DeepEqual(out.Missing, []EvidenceKind{EvidenceProviderCompletion}) {
+		t.Fatalf("missing=%v, want [PROVIDER_COMPLETION]", out.Missing)
+	}
+
+	out = EvaluateTransition(TransitionRequest{
+		From: StateReconciliationRequired, To: StateCompleted,
+		Evidence: []EvidenceKind{EvidenceProviderFailure},
+	})
+	if out.Allowed {
+		t.Fatal("provider failure must not substitute for provider completion")
+	}
+
+	out = EvaluateTransition(TransitionRequest{
+		From: StateReconciliationRequired, To: StateCompleted,
+		Evidence: []EvidenceKind{EvidenceProviderCompletion},
+	})
+	if !out.Allowed {
+		t.Fatalf("provider-confirmed completion refused: %s", out.Code)
 	}
 }
 

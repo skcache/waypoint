@@ -48,14 +48,17 @@ var legalTransitions = map[TransactionState][]TransactionState{
 }
 
 // requiredEvidence gates the transitions that must not be driven by wishful
-// thinking: authorization needs a decision, capture needs buyer approval and
-// provider confirmation, failure needs authoritative provider evidence.
+// thinking: authorization needs a decision, capture needs buyer approval,
+// failure needs authoritative provider evidence, and NO path — direct or
+// through reconciliation — may record a completed payment without the
+// provider itself confirming it.
 var requiredEvidence = map[transitionKey][]EvidenceKind{
 	{StateVerifying, StateAuthorized}:                 {EvidenceAuthorizationDecision},
 	{StateOrderCreating, StateAwaitingBuyerApproval}:  {EvidenceOrderIdentity},
 	{StateAwaitingBuyerApproval, StateCapturePending}: {EvidenceBuyerApproval},
 	{StateAuthorized, StateFailed}:                    {EvidenceProviderFailure},
 	{StateCapturePending, StateCompleted}:             {EvidenceProviderCompletion},
+	{StateReconciliationRequired, StateCompleted}:     {EvidenceProviderCompletion},
 	{StateReconciliationRequired, StateFailed}:        {EvidenceProviderFailure},
 }
 
