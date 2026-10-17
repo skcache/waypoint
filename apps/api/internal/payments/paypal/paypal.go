@@ -85,6 +85,22 @@ func newValidationError(format string, args ...any) *ValidationError {
 	return &ValidationError{msg: fmt.Sprintf(format, args...)}
 }
 
+// ResponseError marks a provider response that was received (the HTTP status
+// looked acceptable) but cannot establish the operation's outcome: malformed
+// JSON, missing required fields, trailing garbage. The mutation may well have
+// executed, so callers must treat a ResponseError as ambiguous — never as a
+// definite failure — and must preserve the operation identity for
+// reconciliation.
+type ResponseError struct {
+	msg string
+}
+
+func (e *ResponseError) Error() string { return "paypal: invalid provider response: " + e.msg }
+
+func newResponseError(format string, args ...any) *ResponseError {
+	return &ResponseError{msg: fmt.Sprintf(format, args...)}
+}
+
 // APIError is a sanitized PayPal REST error. It carries only provider-supplied
 // diagnostic fields (name, message, issue codes, debug id) — never request
 // headers, credentials, or raw response bodies.

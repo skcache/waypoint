@@ -393,7 +393,7 @@ func TestCreateOrderRejected(t *testing.T) {
 	assertNoSecrets(t, err.Error())
 }
 
-func TestCreateOrderMissingOrderID(t *testing.T) {
+func TestCreateOrderMissingOrderIDIsAmbiguous(t *testing.T) {
 	f, c := newFake(t)
 	f.create = func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusCreated, map[string]any{"status": "CREATED"})
@@ -401,12 +401,43 @@ func TestCreateOrderMissingOrderID(t *testing.T) {
 	_, err := c.CreateOrder(context.Background(), CreateOrderInput{
 		Intent: "CAPTURE", CurrencyCode: "USD", AmountValue: "1.00",
 	}, "req-1")
-	var vErr *ValidationError
-	if !errors.As(err, &vErr) {
-		t.Fatalf("err = %v, want *ValidationError", err)
+	var respErr *ResponseError
+	if !errors.As(err, &respErr) {
+		t.Fatalf("err = %v, want *ResponseError", err)
 	}
-	if AmbiguousOutcome(err) {
-		t.Fatal("a response without an order id must be a definite local failure")
+	if !AmbiguousOutcome(err) {
+		t.Fatal("a 2xx whose body lacks the order id cannot prove nothing happened")
+	}
+}
+
+func TestRedirectPolicyRefusesDowngradeAndCrossHost(t *testing.T) {
+	// A redirected request must never leave HTTPS or the host. The token
+	// call is the first request the client makes, so the refusal surfaces
+	// there.
+	downgrade := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "http://downgrade.example.com/steal", http.StatusFound)
+	}))
+	t.Cleanup(downgrade.Close)
+	client := newWithBase(
+		Config{Environment: EnvironmentSandbox, ClientID: testClientID, ClientSecret: testSecret},
+		downgrade.URL, defaultHTTPClient(),
+	)
+	_, err := client.Authenticate(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "refusing redirect") {
+		t.Fatalf("err = %v, want an HTTPS-downgrade refusal", err)
+	}
+
+	crossHost := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "https://evil.example.com/steal", http.StatusFound)
+	}))
+	t.Cleanup(crossHost.Close)
+	client2 := newWithBase(
+		Config{Environment: EnvironmentSandbox, ClientID: testClientID, ClientSecret: testSecret},
+		crossHost.URL, defaultHTTPClient(),
+	)
+	_, err = client2.Authenticate(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "refusing cross-host redirect") {
+		t.Fatalf("err = %v, want a cross-host refusal", err)
 	}
 }
 
@@ -454,9 +485,15 @@ func TestAmbiguousOutcomeClassification(t *testing.T) {
 		{"400", &APIError{StatusCode: 400}, false},
 		{"401", &APIError{StatusCode: 401}, false},
 		{"404", &APIError{StatusCode: 404}, false},
+		{"415", &APIError{StatusCode: 415}, false},
 		{"422", &APIError{StatusCode: 422}, false},
+		{"408 request timeout", &APIError{StatusCode: 408}, true},
+		{"429 rate limited", &APIError{StatusCode: 429}, true},
+		{"unlisted 4xx", &APIError{StatusCode: 425}, true},
 		{"500", &APIError{StatusCode: 500}, true},
 		{"503", &APIError{StatusCode: 503}, true},
+		{"response error", newResponseError("missing order id"), true},
+		{"wrapped response error", fmt.Errorf("wrapped: %w", newResponseError("x")), true},
 		{"wrapped 502", fmt.Errorf("wrapped: %w", &APIError{StatusCode: 502}), true},
 		{"http timeout", &url.Error{Op: "Post", URL: "https://x.test/", Err: context.DeadlineExceeded}, true},
 		{"connection break", &url.Error{Op: "Post", URL: "https://x.test/", Err: io.ErrUnexpectedEOF}, true},

@@ -71,6 +71,9 @@ func defaultHTTPClient() *http.Client {
 			if len(via) == 0 {
 				return nil
 			}
+			if req.URL.Scheme != "https" {
+				return errors.New("paypal: refusing redirect that leaves HTTPS")
+			}
 			if req.URL.Host != via[0].URL.Host {
 				return errors.New("paypal: refusing cross-host redirect")
 			}
@@ -233,13 +236,15 @@ func handleResponse(resp *http.Response, out any) error {
 // trailing garbage. Unknown fields are tolerated deliberately: PayPal adds
 // response fields over time, and refusing them would break on provider
 // evolution — required fields are validated explicitly after decoding.
+// Failures are ResponseErrors: the caller received *something* to a request
+// whose status looked fine, so the outcome cannot be assumed either way.
 func decodeStrict(r io.Reader, out any) error {
 	dec := json.NewDecoder(io.LimitReader(r, maxResponseBytes))
 	if err := dec.Decode(out); err != nil {
-		return fmt.Errorf("paypal: malformed response JSON: %w", err)
+		return newResponseError("malformed response JSON: %v", err)
 	}
 	if _, err := dec.Token(); err != io.EOF {
-		return errors.New("paypal: malformed response JSON: unexpected trailing data")
+		return newResponseError("malformed response JSON: unexpected trailing data")
 	}
 	return nil
 }
@@ -397,21 +402,30 @@ func validateRequestID(id string) error {
 	return nil
 }
 
+// validateOrderResponse checks the fields every order resource must carry.
+// Violations are ResponseErrors, not local validation errors: a 2xx response
+// we cannot read must not be mistaken for a definite outcome.
 func validateOrderResponse(o *Order) error {
 	if o.ID == "" {
-		return newValidationError("provider response did not include an order id")
+		return newResponseError("provider response did not include an order id")
 	}
 	if o.Status == "" {
-		return newValidationError("provider response did not include an order status")
+		return newResponseError("provider response did not include an order status")
 	}
 	return nil
 }
 
 // AmbiguousOutcome reports whether an error from a mutating provider call
-// leaves the payment outcome unknown. Only a definitive 4xx provider
-// rejection (or a local validation error, which means no request was sent)
-// proves nothing happened; timeouts, transport failures, 5xx responses, and
-// unreadable success bodies all require reconciliation, never a blind retry.
+// leaves the payment outcome genuinely unknown:
+//
+//   - local validation errors mean no request left the process — definite;
+//   - a 2xx whose body cannot establish the outcome (ResponseError) is
+//     ambiguous even though the HTTP status looked fine;
+//   - provider rejections are definite only for statuses that refuse a
+//     request before processing it (see definiteRejection). This is not a
+//     blanket "every 4xx is definite" rule: 408 request timeouts and 429
+//     rate limits prove nothing about processing and stay ambiguous;
+//   - transport failures and timeouts are always ambiguous.
 func AmbiguousOutcome(err error) bool {
 	if err == nil {
 		return false
@@ -420,9 +434,28 @@ func AmbiguousOutcome(err error) bool {
 	if errors.As(err, &validation) {
 		return false
 	}
+	var response *ResponseError
+	if errors.As(err, &response) {
+		return true
+	}
 	var apiErr *APIError
 	if errors.As(err, &apiErr) {
-		return apiErr.StatusCode >= 500
+		return !definiteRejection(apiErr.StatusCode)
 	}
 	return true
+}
+
+// definiteRejection lists the provider statuses that establish a request was
+// refused without ever being processed: the standard "your request itself is
+// unacceptable" family. 408 (request timeout) and 429 (too many requests)
+// are deliberately excluded — a server timeout can race a mutation that did
+// happen, and throttling semantics are not something to bet an outcome on.
+func definiteRejection(status int) bool {
+	switch status {
+	case http.StatusBadRequest, http.StatusUnauthorized, http.StatusForbidden,
+		http.StatusNotFound, http.StatusMethodNotAllowed, http.StatusNotAcceptable,
+		http.StatusUnsupportedMediaType, http.StatusUnprocessableEntity:
+		return true
+	}
+	return false
 }
