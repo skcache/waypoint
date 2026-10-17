@@ -1,118 +1,256 @@
-const status: { area: string; state: string; note: string }[] = [
+import type { Metadata } from "next";
+import { Panel } from "@/components/panel";
+import { SampleLabel } from "@/components/sample-label";
+
+export const metadata: Metadata = {
+  title: "Workbench",
+};
+
+const systems = [
   {
-    area: "API runtime — Go",
-    state: "Implemented",
-    note: "Liveness and database-readiness endpoints (GET /healthz, GET /readyz) with automated tests. Readiness reports database state, never credentials.",
+    name: "API runtime",
+    state: "In place",
+    tone: "text-ok",
+    note: "Go API with liveness and database-readiness endpoints. This UI does not call it yet.",
   },
   {
-    area: "Web interface — Next.js",
-    state: "Scaffolded",
-    note: "This page only. No interactive flows exist yet.",
+    name: "Database",
+    state: "In place",
+    tone: "text-ok",
+    note: "PostgreSQL schema with versioned migrations. No UI reads it yet.",
   },
   {
-    area: "PostgreSQL",
-    state: "Implemented",
-    note: "Schema with versioned SQL migrations and readiness checks that detect missing or inconsistent schema state. Local service runs via compose.yaml.",
-  },
-  {
-    area: "PayPal sandbox — Orders v2",
+    name: "Runtime AI",
     state: "Not configured",
-    note: "Checkout, buyer approval and capture are planned. No provider calls exist yet.",
+    tone: "text-muted",
+    note: "Intent drafting and semantic verification arrive in later phases.",
   },
   {
-    area: "Runtime AI — intent compiler, semantic verifier",
-    state: "Not configured",
-    note: "Model-backed verification is planned. No AI is running here yet.",
+    name: "PayPal checkout",
+    state: "Not wired",
+    tone: "text-muted",
+    note: "The sandbox flow was proven server-side in the Phase 04 spike. Product checkout wiring is not built yet.",
   },
 ];
 
-const planned = [
-  "Human-confirmed purchase mandates with enforced limits — currency, ceiling, quantity, expiration.",
-  "Deterministic policy plus semantic verification: hard rules always win; ambiguous cases fail closed to review.",
-  "PayPal sandbox execution — one-time order, buyer approval, server-side capture, no blind retries on unknown outcomes.",
-  "Correlated transaction traces that explain why a purchase was allowed, blocked, or left unresolved.",
+const mandate: [string, string][] = [
+  ["Currency", "USD"],
+  ["Ceiling", "$150.00"],
+  ["Max quantity", "1"],
+  ["Category", "keyboard"],
+  ["Preferences", "quiet, office use, no gaming RGB"],
+  ["Expires", "2026-10-24 18:00 UTC"],
 ];
 
-export default function Home() {
+const proposal: [string, string][] = [
+  ["Catalog item", "keyboard-office-quiet"],
+  ["Description", "Quiet office keyboard, 87-key, non-backlit"],
+  ["Unit price", "$142.00"],
+  ["Quantity", "1"],
+  ["Total", "$142.00"],
+  ["Agent rationale", "Selected for quiet office typing"],
+];
+
+const decisions = [
+  {
+    state: "Allow",
+    tone: "text-ok",
+    rule: "Hard checks pass and the semantic verifier supports the fit.",
+    effect: "Eligible for one PayPal sandbox checkout.",
+  },
+  {
+    state: "Deny",
+    tone: "text-bad",
+    rule: "A hard-rule violation, or a qualitative contradiction with cited evidence.",
+    effect: "Never calls the payment provider.",
+  },
+  {
+    state: "Review",
+    tone: "text-warn",
+    rule: "Missing evidence, model UNKNOWN, timeout, or ambiguity.",
+    effect: "Fails closed. Not payable until a human resolves it.",
+  },
+];
+
+const scenarios = [
+  {
+    tag: "Scenario A - authorized checkout",
+    rows: [
+      ["Human confirmed", "One quiet office keyboard, up to $150.00, quantity 1."],
+      [
+        "Agent proposed",
+        "Quiet office keyboard, 87-key, non-backlit at $142.00 from the controlled catalog.",
+      ],
+      [
+        "Waypoint decided",
+        "Allow. Hard checks pass and the verifier supports the fit.",
+      ],
+      [
+        "PayPal",
+        "Not executed in this preview. In a wired run, the buyer approves on PayPal, the server captures, and the result appears only when the provider confirms it.",
+      ],
+    ],
+  },
+  {
+    tag: "Scenario B - qualitative mismatch",
+    rows: [
+      [
+        "Human confirmed",
+        "Quiet keyboard for office work. No loud gaming keyboards, no RGB.",
+      ],
+      [
+        "Agent proposed",
+        "Clicky gaming keyboard with bright RGB lighting at $120.00. Amount and quantity pass the numeric checks.",
+      ],
+      [
+        "Waypoint decided",
+        "Deny, or review. The verifier finds the contradiction between the evidence and the confirmed preferences.",
+      ],
+      ["PayPal", "No order is created. A denied or reviewed proposal never reaches the provider."],
+    ],
+  },
+  {
+    tag: "Scenario C - ambiguous provider outcome (fault injection)",
+    rows: [
+      [
+        "Context",
+        "A mocked capture times out with an unknown outcome while a duplicate client request arrives. This is controlled fault injection, not a live provider outage.",
+      ],
+      [
+        "Waypoint decided",
+        "One logical operation is preserved with the recorded provider request ID. The run moves to reconciliation instead of retrying blindly.",
+      ],
+      [
+        "PayPal",
+        "Nothing is recorded as failed or completed without evidence. A status check or an idempotent retry resolves the outcome.",
+      ],
+    ],
+  },
+];
+
+export default function WorkbenchPage() {
   return (
-    <div className="mx-auto flex min-h-dvh max-w-3xl flex-col px-5 py-10 sm:px-8 sm:py-14">
-      <header className="flex items-baseline justify-between gap-4">
-        <span className="text-sm font-semibold tracking-tight">Waypoint</span>
-        <span className="text-[11px] uppercase tracking-wider text-zinc-500">
-          PayPal AI Hackathon 2026
-        </span>
+    <div className="space-y-10">
+      <header>
+        <h1 className="text-xl font-semibold tracking-tight">Workbench</h1>
+        <p className="mt-2 max-w-2xl text-sm leading-6 text-muted">
+          The intended flow, end to end: what the human confirmed, what the
+          agent proposed, what Waypoint decided, and what PayPal confirmed.
+          Nothing on this page runs; every value is a labeled sample.
+        </p>
       </header>
 
-      <main className="mt-14 flex-1 sm:mt-20">
-        <h1 className="max-w-2xl text-balance text-3xl font-semibold tracking-tight sm:text-4xl">
-          An intent-aware execution boundary for AI-initiated financial
-          transactions.
-        </h1>
-        <p className="mt-5 max-w-2xl text-sm leading-6 text-zinc-600 sm:text-base sm:leading-7">
-          Waypoint checks an AI agent&apos;s proposed purchase against a
-          human-confirmed mandate and deterministic policy before anything
-          reaches a payment provider — then records a correlated trace of every
-          decision and outcome.
-        </p>
-        <p className="mt-3 max-w-2xl text-sm leading-6 text-zinc-500">
-          This site is an early prototype. The API and database foundation
-          exist; no payment or AI integrations are configured yet and no
-          payments are processed.
-        </p>
-
-        <section className="mt-14" aria-labelledby="status-heading">
-          <h2
-            id="status-heading"
-            className="text-xs font-medium uppercase tracking-wider text-zinc-500"
-          >
-            Development status
-          </h2>
-          <ul className="mt-4 divide-y divide-zinc-200 border-y border-zinc-200">
-            {status.map((item) => (
-              <li
-                key={item.area}
-                className="grid gap-1 py-4 sm:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] sm:gap-6"
-              >
-                <div>
-                  <p className="text-sm font-medium">{item.area}</p>
-                  <p className="mt-0.5 text-xs text-zinc-500">{item.state}</p>
-                </div>
-                <p className="text-sm leading-6 text-zinc-600">{item.note}</p>
-              </li>
-            ))}
-          </ul>
-        </section>
-
-        <section className="mt-14" aria-labelledby="planned-heading">
-          <h2
-            id="planned-heading"
-            className="text-xs font-medium uppercase tracking-wider text-zinc-500"
-          >
-            Planned capabilities
-          </h2>
-          <p className="mt-3 text-xs text-zinc-500">
-            Locked product requirements. None are implemented yet.
+      <section
+        aria-labelledby="flow-heading"
+        className="grid gap-6 lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)]"
+      >
+        <h2 id="flow-heading" className="sr-only">
+          Confirmed mandate and agent proposal
+        </h2>
+        <Panel title="Request and confirmed mandate" label={<SampleLabel />}>
+          <p className="text-sm leading-6">
+            &ldquo;Buy one quiet office keyboard, under $150.&rdquo;
           </p>
-          <ul className="mt-4 space-y-3">
-            {planned.map((text) => (
-              <li
-                key={text}
-                className="flex gap-3 text-sm leading-6 text-zinc-600"
-              >
-                <span aria-hidden className="select-none text-zinc-400">
-                  —
-                </span>
-                <span>{text}</span>
-              </li>
+          <p className="mt-1 text-xs text-muted">
+            Human confirmation happens in a later phase. This draft is not
+            spendable.
+          </p>
+          <dl className="mt-4 grid gap-x-6 gap-y-2 text-sm sm:grid-cols-[minmax(0,9rem)_minmax(0,1fr)]">
+            {mandate.map(([key, value]) => (
+              <div key={key} className="contents">
+                <dt className="text-muted">{key}</dt>
+                <dd className="font-mono text-[13px]">{value}</dd>
+              </div>
             ))}
-          </ul>
-        </section>
-      </main>
+          </dl>
+        </Panel>
 
-      <footer className="mt-16 flex flex-col gap-2 border-t border-zinc-200 pt-6 text-xs text-zinc-500 sm:flex-row sm:items-center sm:justify-between">
-        <p>Early prototype — database foundation in place. PayPal sandbox only; no real money.</p>
-        <p>MIT licensed</p>
-      </footer>
+        <Panel title="Agent proposal" label={<SampleLabel />}>
+          <dl className="grid gap-x-6 gap-y-2 text-sm sm:grid-cols-[minmax(0,8rem)_minmax(0,1fr)]">
+            {proposal.map(([key, value]) => (
+              <div key={key} className="contents">
+                <dt className="text-muted">{key}</dt>
+                <dd className="font-mono text-[13px]">{value}</dd>
+              </div>
+            ))}
+          </dl>
+          <p className="mt-4 border-t border-line pt-3 text-xs leading-5 text-muted">
+            The agent proposes. It never grants permission, and its rationale is
+            evidence, not authorization.
+          </p>
+        </Panel>
+      </section>
+
+      <section aria-labelledby="decisions-heading">
+        <h2
+          id="decisions-heading"
+          className="text-xs font-medium uppercase tracking-wider text-muted"
+        >
+          Decision outcomes
+        </h2>
+        <p className="mt-2 max-w-2xl text-sm leading-6 text-muted">
+          Every proposal resolves to exactly one of these. The runtime that
+          produces them live arrives in later phases.
+        </p>
+        <div className="mt-4 grid gap-4 md:grid-cols-3">
+          {decisions.map((decision) => (
+            <div
+              key={decision.state}
+              className="rounded-panel border border-line bg-surface px-4 py-4"
+            >
+              <p className={`text-sm font-medium ${decision.tone}`}>
+                {decision.state}
+              </p>
+              <p className="mt-2 text-xs leading-5 text-muted">{decision.rule}</p>
+              <p className="mt-3 border-t border-line pt-3 text-xs leading-5">
+                {decision.effect}
+              </p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section aria-labelledby="scenarios-heading">
+        <h2
+          id="scenarios-heading"
+          className="text-xs font-medium uppercase tracking-wider text-muted"
+        >
+          Demonstration scenarios
+        </h2>
+        <div className="mt-4 space-y-6">
+          {scenarios.map((scenario) => (
+            <Panel
+              key={scenario.tag}
+              title={scenario.tag}
+              label={<SampleLabel>Illustrative</SampleLabel>}
+            >
+              <dl className="grid gap-x-6 gap-y-3 text-sm sm:grid-cols-[minmax(0,9rem)_minmax(0,1fr)]">
+                {scenario.rows.map(([key, value]) => (
+                  <div key={key} className="contents">
+                    <dt className="text-muted">{key}</dt>
+                    <dd className="leading-6">{value}</dd>
+                  </div>
+                ))}
+              </dl>
+            </Panel>
+          ))}
+        </div>
+      </section>
+
+      <Panel title="System status" label={<SampleLabel>As of Phase 05</SampleLabel>}>
+        <ul className="divide-y divide-line">
+          {systems.map((system) => (
+            <li
+              key={system.name}
+              className="grid gap-1 py-3 first:pt-0 last:pb-0 sm:grid-cols-[minmax(0,10rem)_minmax(0,7rem)_minmax(0,1fr)] sm:gap-6"
+            >
+              <p className="text-sm font-medium">{system.name}</p>
+              <p className={`text-sm ${system.tone}`}>{system.state}</p>
+              <p className="text-sm leading-6 text-muted">{system.note}</p>
+            </li>
+          ))}
+        </ul>
+      </Panel>
     </div>
   );
 }
