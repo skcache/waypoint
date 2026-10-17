@@ -11,9 +11,11 @@ Built for the [PayPal AI Hackathon 2026](https://paypalaihackathon.devpost.com/)
 
 > **Status: early prototype.** The repository currently contains a Go API
 > with liveness and database-readiness endpoints, the PostgreSQL schema with
-> versioned SQL migrations, a static Next.js page, and local development
-> tooling. There is no PayPal integration and no AI integration yet. Nothing
-> here processes real money.
+> versioned SQL migrations, a static Next.js page, a sandbox-only PayPal
+> feasibility spike (developer CLI — not wired to the product yet), and local
+> development tooling. There is no AI integration and no checkout UI yet.
+> Nothing here processes real money: the spike talks only to the PayPal
+> sandbox.
 
 ## Current status
 
@@ -22,7 +24,7 @@ Built for the [PayPal AI Hackathon 2026](https://paypalaihackathon.devpost.com/)
 | Go API (`apps/api`) | Scaffolded — `GET /healthz` implemented with tests |
 | Web app (`apps/web`) | Scaffolded — static status page (Next.js + TypeScript + Tailwind) |
 | PostgreSQL | **Implemented** — schema + versioned SQL migrations; `/readyz` reports database readiness |
-| PayPal sandbox (Orders v2) | Planned — not implemented |
+| PayPal sandbox (Orders v2) | **Feasibility spike implemented** — sandbox-only developer CLI (OAuth, order create, operator-driven capture); live verification pending sandbox credentials |
 | Runtime AI (intent compiler, semantic verifier) | Planned — not implemented |
 | Transaction state machine, trace explorer, evaluation | Planned — not implemented |
 
@@ -116,6 +118,43 @@ make test-integration  # database integration REQUIRED: fails (not skips) when
 make lint        # go vet + gofmt check, ESLint
 make build-web   # production build of the web app
 ```
+
+## PayPal sandbox feasibility spike (developer-only)
+
+`apps/api/cmd/paypal-spike` is an isolated feasibility tool for the PayPal
+REST Orders v2 integration. It is **not** a product surface: no HTTP
+endpoints, sandbox-only (any `PAYPAL_ENV` other than `sandbox` is refused),
+and a fixed synthetic $1.00 "Waypoint sandbox feasibility test" order —
+amounts are never accepted from arguments or browsers.
+
+```bash
+# 1. Sandbox credential from a PayPal developer app (server-side only):
+#    PAYPAL_ENV=sandbox, PAYPAL_CLIENT_ID, PAYPAL_CLIENT_SECRET — see .env.example
+set -a && source .env && set +a
+
+# 2. Run from apps/api
+cd apps/api
+go run ./cmd/paypal-spike auth      # verify sandbox OAuth (token never printed)
+go run ./cmd/paypal-spike create    # create the fixed $1.00 sandbox order
+#   -> prints the buyer approval URL; approve it MANUALLY in a browser with a
+#      PayPal sandbox buyer account. Approval is never automated or simulated.
+go run ./cmd/paypal-spike status    # refresh provider state
+go run ./cmd/paypal-spike capture   # capture only after the provider reports
+                                    # APPROVED; verifies the provider response
+                                    # before reporting success
+```
+
+Safety properties: capture is refused until the provider confirms buyer
+approval (nothing is sent on refusal); success is reported only when the
+provider response proves a COMPLETED capture of the exact expected amount and
+currency; timeouts, 5xx responses, and unreadable responses are reported as
+`PAYMENT_OUTCOME_UNKNOWN` and never blindly retried — a retry reuses the same
+idempotency request id so the provider returns the original result. Local
+records are written under `docs/spike/records/`, which is git-ignored.
+
+**Current status:** implementation and the full mock-server test suite are
+complete. Live sandbox order/approval/capture evidence is pending real
+sandbox credentials (`PAYPAL_CLIENT_ID` / `PAYPAL_CLIENT_SECRET` are not set).
 
 ## Security and privacy
 
