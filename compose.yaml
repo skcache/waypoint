@@ -1,0 +1,25 @@
+services:
+  # Local development PostgreSQL only. The application runtime (Go API and
+  # Next.js web app) runs on the host during development.
+  db:
+    # Pinned minor version — deliberately not `latest`. Postgres 17 is a
+    # supported stable line; bump this tag on purpose, never automatically.
+    image: postgres:17.7
+    environment:
+      POSTGRES_USER: waypoint
+      # Example local-development credential. Not a secret; not used anywhere
+      # outside this machine's dev database.
+      POSTGRES_PASSWORD: waypoint
+      POSTGRES_DB: waypoint
+    ports:
+      - "5432:5432"
+    volumes:
+      - waypoint_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U waypoint -d waypoint"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  waypoint_pgdata:

@@ -1,0 +1,56 @@
+# ---------------------------------------------------------------------------
+# Waypoint .gitignore
+#
+# Rule of the house: private planning documents, secrets, generated artifacts
+# and local data never enter version control. Everything public is deliberate.
+# ---------------------------------------------------------------------------
+
+# Private, local-only planning and progress documents (never publish).
+# See docs/PRD.md — it must stay on this machine.
+/docs/
+
+# Environment files and secrets. `.env.example` is the only env file allowed
+# in the repository because it contains safe placeholder values.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+secrets/
+.credentials/
+
+# Dependencies
+node_modules/
+
+# Build outputs
+.next/
+out/
+dist/
+build/
+apps/api/bin/
+*.exe
+
+# Test and coverage artifacts
+coverage/
+*.test
+*.out
+
+# Logs
+*.log
+logs/
+
+# Local data (databases, dumps, caches)
+*.sqlite
+*.sqlite3
+*.db-journal
+pgdata/
+*.dump
+
+# Deployment tooling state
+.vercel/
+*.tsbuildinfo
+
+# OS and editor noise
+.DS_Store
+.idea/
