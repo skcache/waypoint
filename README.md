@@ -9,10 +9,11 @@ and records a correlated, auditable trace of every decision and outcome.
 
 Built for the [PayPal AI Hackathon 2026](https://paypalaihackathon.devpost.com/).
 
-> **Status: Phase 01 scaffold.** The repository currently contains a Go API
-> with a liveness endpoint, a static Next.js page, and local development
-> tooling. There is no PayPal integration, no AI integration, and no database
-> schema yet. Nothing here processes real money.
+> **Status: early prototype.** The repository currently contains a Go API
+> with liveness and database-readiness endpoints, the PostgreSQL schema with
+> versioned SQL migrations, a static Next.js page, and local development
+> tooling. There is no PayPal integration and no AI integration yet. Nothing
+> here processes real money.
 
 ## Current status
 
@@ -20,7 +21,7 @@ Built for the [PayPal AI Hackathon 2026](https://paypalaihackathon.devpost.com/)
 |---|---|
 | Go API (`apps/api`) | Scaffolded — `GET /healthz` implemented with tests |
 | Web app (`apps/web`) | Scaffolded — static status page (Next.js + TypeScript + Tailwind) |
-| PostgreSQL | Provided via `compose.yaml`; not yet wired to the application |
+| PostgreSQL | **Implemented** — schema + versioned SQL migrations; `/readyz` reports database readiness |
 | PayPal sandbox (Orders v2) | Planned — not implemented |
 | Runtime AI (intent compiler, semantic verifier) | Planned — not implemented |
 | Transaction state machine, trace explorer, evaluation | Planned — not implemented |
@@ -70,34 +71,46 @@ out of version control on purpose.
 ## Prerequisites
 
 - Go 1.27+ — `go version`
-- Node.js 20.9+ and npm — `node -v && npm -v` (Next.js 16 requires ≥ 20.9)
+- Node.js 22 LTS and npm — `node -v && npm -v` (a `.nvmrc` pins 22; Next.js
+  needs ≥ 20.9, but on Apple Silicon use the native arm64 build — an Intel
+  Node under Rosetta builds several times slower)
 - Docker with Compose — `docker compose version` (only for the local database)
 - `make` — optional; every target is a short command you can also run directly
 
 ## Local development
 
 ```bash
-# API — http://localhost:8080
-make dev-api
-curl -s http://localhost:8080/healthz
-# => {"status":"ok"}
+# 1. Environment file (placeholders only — example credentials for local dev)
+cp .env.example .env
 
-# Web — http://localhost:3000
+# 2. Local PostgreSQL on port 5433 (5432 is commonly occupied locally)
+make db-up
+make db-migrate    # applies the versioned SQL migrations
+
+# 3. API — http://localhost:8080
+make dev-api
+curl -s http://localhost:8080/healthz   # => {"status":"ok"}
+curl -s http://localhost:8080/readyz    # => {"status":"ok"} when the database and
+                                        #    schema are ready; 503 + reason code otherwise
+
+# 4. Web — http://localhost:3000
 make dev-web
 
-# Local PostgreSQL (optional for the current scaffold)
-make db-up     # postgres:17.7 on localhost:5432, example credentials in compose.yaml
-make db-down
+# Reset the local database (destructive; local development only)
+make db-reset && make db-migrate
 ```
 
-Configuration is optional at this stage: the API starts correctly on an empty
-environment. To override defaults (`API_PORT`, `APP_ENV`, ...), copy
-`.env.example` to `.env`.
+Configuration is optional at this stage: the API starts correctly on an
+empty environment and `/healthz` never needs configuration. Copy
+`.env.example` to `.env` to wire `DATABASE_URL` (and later PayPal/LLM
+settings) — `/readyz` reports `not_configured` until the database is set up.
 
 ## Tests and checks
 
 ```bash
-make test        # go test ./...
+make test        # go test ./... — integration tests run against a real PostgreSQL
+                 # (waypoint_test, created by the compose init script; override with
+                 # TEST_DATABASE_URL; they skip cleanly when the database is down)
 make lint        # go vet + gofmt check, ESLint
 make build-web   # production build of the web app
 ```

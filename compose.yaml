@@ -12,9 +12,14 @@ services:
       POSTGRES_PASSWORD: waypoint
       POSTGRES_DB: waypoint
     ports:
-      - "5432:5432"
+      # Host port 5433 on purpose: 5432 is commonly occupied by other local
+      # databases (on this machine a separate project's container holds it).
+      - "5433:5432"
     volumes:
       - waypoint_pgdata:/var/lib/postgresql/data
+      # Creates the waypoint_test database on first volume initialization so
+      # integration tests can never touch development data.
+      - ./scripts/compose/initdb:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U waypoint -d waypoint"]
       interval: 5s
