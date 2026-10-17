@@ -14,7 +14,10 @@
   --color-line-strong: oklch(0.845 0.005 260);
   --color-ink: oklch(0.245 0.006 260);
   --color-muted: oklch(0.505 0.009 260);
-  --color-faint: oklch(0.635 0.009 260);
+  /* faint is used for normal-sized labels (10-12px): measured WCAG contrast
+     4.73:1 on --color-background and 4.93:1 on --color-surface at L=0.545
+     (the previous 0.635 measured 3.28:1 / 3.41:1 and failed the 4.5:1 bar). */
+  --color-faint: oklch(0.545 0.009 260);
   --color-accent: oklch(0.52 0.11 252);
   --color-ok: oklch(0.46 0.09 155);
   --color-warn: oklch(0.52 0.1 75);
