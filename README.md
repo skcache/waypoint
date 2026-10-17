@@ -24,7 +24,7 @@ Built for the [PayPal AI Hackathon 2026](https://paypalaihackathon.devpost.com/)
 | Go API (`apps/api`) | Scaffolded — `GET /healthz` implemented with tests |
 | Web app (`apps/web`) | Scaffolded — static status page (Next.js + TypeScript + Tailwind) |
 | PostgreSQL | **Implemented** — schema + versioned SQL migrations; `/readyz` reports database readiness |
-| PayPal sandbox (Orders v2) | **Feasibility spike implemented** — sandbox-only developer CLI (OAuth, order create, operator-driven capture); live verification pending sandbox credentials |
+| PayPal sandbox (Orders v2) | **Feasibility spike verified end-to-end** — sandbox-only developer CLI; real OAuth, order creation, manual buyer approval, and a provider-confirmed `COMPLETED` capture of a USD 1.00 sandbox order |
 | Runtime AI (intent compiler, semantic verifier) | Planned — not implemented |
 | Transaction state machine, trace explorer, evaluation | Planned — not implemented |
 
