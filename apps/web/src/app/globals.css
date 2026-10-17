@@ -1,1 +1,42 @@
 @import "tailwindcss";
+
+/*
+  Waypoint design tokens (Phase 05, P05.1).
+
+  Near-grayscale surfaces, thin hairline borders, one restrained accent.
+  Status colors are text-only on purpose: every decision must stay readable
+  without relying on color alone.
+*/
+@theme {
+  --color-background: oklch(0.984 0.002 260);
+  --color-surface: oklch(0.998 0 0);
+  --color-line: oklch(0.906 0.004 260);
+  --color-line-strong: oklch(0.845 0.005 260);
+  --color-ink: oklch(0.245 0.006 260);
+  --color-muted: oklch(0.505 0.009 260);
+  --color-faint: oklch(0.635 0.009 260);
+  --color-accent: oklch(0.52 0.11 252);
+  --color-ok: oklch(0.46 0.09 155);
+  --color-warn: oklch(0.52 0.1 75);
+  --color-bad: oklch(0.5 0.13 25);
+  --radius-panel: 10px;
+}
+
+@layer base {
+  html {
+    color-scheme: light;
+  }
+
+  ::selection {
+    background: color-mix(in oklch, var(--color-accent) 16%, transparent);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+
+  summary {
+    cursor: pointer;
+  }
+}
