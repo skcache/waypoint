@@ -71,23 +71,31 @@ type AuthorizedAction struct {
 type ViolationCode string
 
 const (
-	ViolationTimeInvalid            ViolationCode = "TIME_INVALID"
-	ViolationContractMismatch       ViolationCode = "CONTRACT_MISMATCH"
-	ViolationPrincipalMismatch      ViolationCode = "PRINCIPAL_MISMATCH"
-	ViolationContractVersionUnbound ViolationCode = "CONTRACT_VERSION_UNBOUND"
-	ViolationContractUnconfirmed    ViolationCode = "CONTRACT_UNCONFIRMED"
-	ViolationContractExpired        ViolationCode = "CONTRACT_EXPIRED"
-	ViolationCurrencyUnsupported    ViolationCode = "CURRENCY_UNSUPPORTED"
-	ViolationCurrencyMismatch       ViolationCode = "CURRENCY_MISMATCH"
-	ViolationQuantityInvalid        ViolationCode = "QUANTITY_INVALID"
-	ViolationQuantityExceedsMax     ViolationCode = "QUANTITY_EXCEEDS_MAX"
-	ViolationItemMismatch           ViolationCode = "ITEM_MISMATCH"
-	ViolationItemVersionUnbound     ViolationCode = "ITEM_VERSION_UNBOUND"
-	ViolationAmountInvalid          ViolationCode = "AMOUNT_INVALID"
-	ViolationAmountExceedsMax       ViolationCode = "AMOUNT_EXCEEDS_MAX"
-	ViolationAmountOverflow         ViolationCode = "AMOUNT_OVERFLOW"
-	ViolationPriceMismatch          ViolationCode = "CATALOG_PRICE_MISMATCH"
-	ViolationOperationKeyReuse      ViolationCode = "OPERATION_KEY_REUSE_CONFLICT"
+	ViolationTimeInvalid                ViolationCode = "TIME_INVALID"
+	ViolationContractIDInvalid          ViolationCode = "CONTRACT_ID_INVALID"
+	ViolationPrincipalInvalid           ViolationCode = "PRINCIPAL_INVALID"
+	ViolationItemIDInvalid              ViolationCode = "ITEM_ID_INVALID"
+	ViolationContractHashMissing        ViolationCode = "CONTRACT_HASH_MISSING"
+	ViolationContractMismatch           ViolationCode = "CONTRACT_MISMATCH"
+	ViolationPrincipalMismatch          ViolationCode = "PRINCIPAL_MISMATCH"
+	ViolationContractVersionUnbound     ViolationCode = "CONTRACT_VERSION_UNBOUND"
+	ViolationContractUnconfirmed        ViolationCode = "CONTRACT_UNCONFIRMED"
+	ViolationConfirmationInFuture       ViolationCode = "CONFIRMATION_IN_FUTURE"
+	ViolationContractExpired            ViolationCode = "CONTRACT_EXPIRED"
+	ViolationContractMaxTotalInvalid    ViolationCode = "CONTRACT_MAX_TOTAL_INVALID"
+	ViolationContractMaxQuantityInvalid ViolationCode = "CONTRACT_MAX_QUANTITY_INVALID"
+	ViolationCurrencyUnsupported        ViolationCode = "CURRENCY_UNSUPPORTED"
+	ViolationCurrencyMismatch           ViolationCode = "CURRENCY_MISMATCH"
+	ViolationQuantityInvalid            ViolationCode = "QUANTITY_INVALID"
+	ViolationQuantityExceedsMax         ViolationCode = "QUANTITY_EXCEEDS_MAX"
+	ViolationItemMismatch               ViolationCode = "ITEM_MISMATCH"
+	ViolationItemVersionUnbound         ViolationCode = "ITEM_VERSION_UNBOUND"
+	ViolationAmountInvalid              ViolationCode = "AMOUNT_INVALID"
+	ViolationAmountExceedsMax           ViolationCode = "AMOUNT_EXCEEDS_MAX"
+	ViolationAmountOverflow             ViolationCode = "AMOUNT_OVERFLOW"
+	ViolationPriceMismatch              ViolationCode = "CATALOG_PRICE_MISMATCH"
+	ViolationOperationKeyInvalid        ViolationCode = "OPERATION_KEY_INVALID"
+	ViolationOperationKeyReuse          ViolationCode = "OPERATION_KEY_REUSE_CONFLICT"
 )
 
 // Violation is one breached invariant with a human-readable detail.
@@ -143,6 +151,11 @@ type ValidationRequest struct {
 //  11. reusing an operation key for different action content is a conflict,
 //     not an idempotent success.
 //
+// All inputs are also treated as hostile structs: values that bypassed their
+// constructors (missing identifiers, zero or out-of-range limits, absent
+// canonical hash, empty operation key, future confirmation timestamps) are
+// rejected rather than silently skipped — validation is fail-closed.
+//
 // This is deterministic authorization only. Semantic verification remains a
 // separate gate: AggregateDecision is where its verdict enters, and nothing
 // here should be read as replacing it. Callers must re-run this validation at
@@ -162,6 +175,20 @@ func ValidateProposal(req ValidationRequest) ValidationResult {
 		add(ViolationTimeInvalid, "decision time must be provided")
 	}
 
+	// 0. Malformed inputs: reject anything that bypassed its constructor.
+	if _, err := canonicalUUID(string(c.ID)); err != nil {
+		add(ViolationContractIDInvalid, "contract id %q is not a canonical UUID", c.ID)
+	}
+	if _, err := canonicalUUID(string(c.Principal)); err != nil {
+		add(ViolationPrincipalInvalid, "contract principal %q is not a canonical UUID", c.Principal)
+	}
+	if _, err := NewCatalogItemID(string(item.ID)); err != nil {
+		add(ViolationItemIDInvalid, "catalog item id %q is invalid", item.ID)
+	}
+	if c.CanonicalHash.IsZero() {
+		add(ViolationContractHashMissing, "contract %s v%d has no canonical hash", c.ID, c.Version)
+	}
+
 	// 1–4. Authority identity, ownership, version binding, confirmation.
 	if p.ContractID != c.ID {
 		add(ViolationContractMismatch, "proposal contract %s does not match loaded contract %s", p.ContractID, c.ID)
@@ -176,8 +203,22 @@ func ValidateProposal(req ValidationRequest) ValidationResult {
 	if !confirmed {
 		add(ViolationContractUnconfirmed, "contract %s v%d is not confirmed", c.ID, c.Version)
 	}
+	if confirmed && timeOK && c.ConfirmedAt.After(req.Now) {
+		add(ViolationConfirmationInFuture, "contract %s v%d claims confirmation at %s, after the decision time %s",
+			c.ID, c.Version, c.ConfirmedAt.UTC().Format(time.RFC3339), req.Now.UTC().Format(time.RFC3339))
+	}
 	if confirmed && timeOK && !req.Now.Before(c.ExpiresAt) {
 		add(ViolationContractExpired, "contract %s v%d expired at %s", c.ID, c.Version, c.ExpiresAt.UTC().Format(time.RFC3339))
+	}
+
+	// Confirmed limits must exist and be sane; mirror the database bounds.
+	limitsOK := c.MaxTotal > 0 && c.MaxTotal <= MaxAmountMinor
+	if !limitsOK {
+		add(ViolationContractMaxTotalInvalid, "contract maximum total %d outside 1..%d", c.MaxTotal, MaxAmountMinor)
+	}
+	maxQtyOK := c.MaxQuantity >= 1 && c.MaxQuantity <= MaxQuantity
+	if !maxQtyOK {
+		add(ViolationContractMaxQuantityInvalid, "contract maximum quantity %d outside 1..%d", c.MaxQuantity, MaxQuantity)
 	}
 
 	// 5. Currency: contract must be USD, item must match the contract.
@@ -187,10 +228,10 @@ func ValidateProposal(req ValidationRequest) ValidationResult {
 		add(ViolationCurrencyMismatch, "item currency %q does not match contract currency %q", item.Currency, c.Currency)
 	}
 
-	// 6. Quantity bounds.
-	if p.Quantity < 1 {
-		add(ViolationQuantityInvalid, "quantity %d must be positive", p.Quantity)
-	} else if confirmed && c.MaxQuantity > 0 && p.Quantity > c.MaxQuantity {
+	// 6. Quantity bounds (hard bounds always; confirmed maximum when known).
+	if p.Quantity < 1 || p.Quantity > MaxQuantity {
+		add(ViolationQuantityInvalid, "quantity %d outside 1..%d", p.Quantity, MaxQuantity)
+	} else if confirmed && maxQtyOK && p.Quantity > c.MaxQuantity {
 		add(ViolationQuantityExceedsMax, "quantity %d exceeds confirmed maximum %d", p.Quantity, c.MaxQuantity)
 	}
 
@@ -229,7 +270,7 @@ func ValidateProposal(req ValidationRequest) ValidationResult {
 				add(ViolationAmountInvalid, "computed total %d must be positive", computed)
 			case computed > MaxAmountMinor:
 				add(ViolationAmountExceedsMax, "computed total %d exceeds hard cap %d", computed, MaxAmountMinor)
-			case confirmed && c.MaxTotal > 0 && computed > c.MaxTotal:
+			case confirmed && limitsOK && computed > c.MaxTotal:
 				add(ViolationAmountExceedsMax, "computed total %d exceeds confirmed ceiling %d", computed, c.MaxTotal)
 			}
 			if p.ClaimedAmountMinor != computed {
@@ -239,7 +280,10 @@ func ValidateProposal(req ValidationRequest) ValidationResult {
 	}
 	action.Fingerprint = ComputeActionFingerprint(action)
 
-	// 11. Operation-key reuse semantics.
+	// 11. Operation-key validity and reuse semantics.
+	if _, err := NewOperationKey(string(p.OperationKey)); err != nil {
+		add(ViolationOperationKeyInvalid, "operation key invalid: %v", err)
+	}
 	if req.Existing != nil {
 		if req.Existing.Key != p.OperationKey {
 			add(ViolationOperationKeyReuse, "stored action is bound to key %q, not %q", req.Existing.Key, p.OperationKey)

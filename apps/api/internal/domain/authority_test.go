@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"strings"
 	"testing"
 	"time"
 )
@@ -204,7 +205,7 @@ func TestValidateProposalTable(t *testing.T) {
 			name: "computed total exceeds hard cap",
 			mutate: func(r *ValidationRequest) {
 				r.Item.Price = MaxAmountMinor + 1
-				r.Contract.MaxTotal = MinorUnits(MaxAmountMinor) * 2
+				r.Contract.MaxTotal = MaxAmountMinor
 				r.Proposal.ClaimedAmountMinor = MaxAmountMinor + 1
 			},
 			wantCodes: []ViolationCode{
@@ -360,5 +361,187 @@ func TestOperationKeyReplaySemantics(t *testing.T) {
 	newKey.Proposal.OperationKey = OperationKey("op-base-2")
 	if res := ValidateProposal(newKey); !res.OK() {
 		t.Fatalf("a fresh key with valid content must be accepted, got %v", codesOf(res.Violations))
+	}
+}
+
+// TestValidateProposalFailClosedOnMalformedInputs feeds ValidateProposal
+// structs that bypassed their constructors. Every one of these must produce
+// its specific violation — silently skipping them was the pre-patch bug.
+func TestValidateProposalFailClosedOnMalformedInputs(t *testing.T) {
+	tests := []struct {
+		name      string
+		mutate    func(*ValidationRequest)
+		wantCodes []ViolationCode
+	}{
+		{
+			name: "missing contract id",
+			mutate: func(r *ValidationRequest) {
+				r.Contract.ID = ContractID("")
+				r.Proposal.ContractID = ContractID("")
+			},
+			wantCodes: []ViolationCode{ViolationContractIDInvalid},
+		},
+		{
+			name: "malformed contract id",
+			mutate: func(r *ValidationRequest) {
+				r.Contract.ID = ContractID("not-a-uuid")
+				r.Proposal.ContractID = ContractID("not-a-uuid")
+			},
+			wantCodes: []ViolationCode{ViolationContractIDInvalid},
+		},
+		{
+			name: "malformed principal",
+			mutate: func(r *ValidationRequest) {
+				r.Contract.Principal = PrincipalID("bogus")
+				r.Proposal.Principal = PrincipalID("bogus")
+			},
+			wantCodes: []ViolationCode{ViolationPrincipalInvalid},
+		},
+		{
+			name: "malformed catalog item id",
+			mutate: func(r *ValidationRequest) {
+				r.Item.ID = CatalogItemID("Bad Item")
+				r.Proposal.CatalogItemID = CatalogItemID("Bad Item")
+			},
+			wantCodes: []ViolationCode{ViolationItemIDInvalid},
+		},
+		{
+			name:      "missing canonical contract hash",
+			mutate:    func(r *ValidationRequest) { r.Contract.CanonicalHash = Fingerprint{} },
+			wantCodes: []ViolationCode{ViolationContractHashMissing},
+		},
+		{
+			name:      "zero maximum total",
+			mutate:    func(r *ValidationRequest) { r.Contract.MaxTotal = 0 },
+			wantCodes: []ViolationCode{ViolationContractMaxTotalInvalid},
+		},
+		{
+			name:      "negative maximum total",
+			mutate:    func(r *ValidationRequest) { r.Contract.MaxTotal = -1 },
+			wantCodes: []ViolationCode{ViolationContractMaxTotalInvalid},
+		},
+		{
+			name:      "maximum total above hard cap",
+			mutate:    func(r *ValidationRequest) { r.Contract.MaxTotal = MaxAmountMinor + 1 },
+			wantCodes: []ViolationCode{ViolationContractMaxTotalInvalid},
+		},
+		{
+			name:      "missing maximum quantity",
+			mutate:    func(r *ValidationRequest) { r.Contract.MaxQuantity = 0 },
+			wantCodes: []ViolationCode{ViolationContractMaxQuantityInvalid},
+		},
+		{
+			name:      "maximum quantity above hard bound",
+			mutate:    func(r *ValidationRequest) { r.Contract.MaxQuantity = MaxQuantity + 1 },
+			wantCodes: []ViolationCode{ViolationContractMaxQuantityInvalid},
+		},
+		{
+			name:      "empty operation key",
+			mutate:    func(r *ValidationRequest) { r.Proposal.OperationKey = "" },
+			wantCodes: []ViolationCode{ViolationOperationKeyInvalid},
+		},
+		{
+			name:      "padded operation key",
+			mutate:    func(r *ValidationRequest) { r.Proposal.OperationKey = OperationKey(" padded ") },
+			wantCodes: []ViolationCode{ViolationOperationKeyInvalid},
+		},
+		{
+			name: "oversized operation key",
+			mutate: func(r *ValidationRequest) {
+				r.Proposal.OperationKey = OperationKey(strings.Repeat("x", maxOperationKey+1))
+			},
+			wantCodes: []ViolationCode{ViolationOperationKeyInvalid},
+		},
+		{
+			name: "proposal quantity above hard bound",
+			mutate: func(r *ValidationRequest) {
+				r.Contract.MaxTotal = 20000000
+				r.Proposal.Quantity = MaxQuantity + 1
+				r.Proposal.ClaimedAmountMinor = 12000 * (MaxQuantity + 1)
+			},
+			wantCodes: []ViolationCode{ViolationQuantityInvalid},
+		},
+		{
+			name: "contract version missing on both sides",
+			mutate: func(r *ValidationRequest) {
+				r.Contract.Version = 0
+				r.Proposal.ContractVersion = 0
+			},
+			wantCodes: []ViolationCode{ViolationContractVersionUnbound},
+		},
+		{
+			name: "item version missing on both sides",
+			mutate: func(r *ValidationRequest) {
+				r.Item.Version = 0
+				r.Proposal.CatalogItemVersion = 0
+			},
+			wantCodes: []ViolationCode{ViolationItemVersionUnbound},
+		},
+		{
+			name:      "confirmation timestamp after decision time",
+			mutate:    func(r *ValidationRequest) { r.Contract.ConfirmedAt = testNow.Add(time.Hour) },
+			wantCodes: []ViolationCode{ViolationConfirmationInFuture},
+		},
+		{
+			name: "multiple malformed inputs report in deterministic order",
+			mutate: func(r *ValidationRequest) {
+				r.Contract.CanonicalHash = Fingerprint{}
+				r.Proposal.OperationKey = ""
+			},
+			wantCodes: []ViolationCode{ViolationContractHashMissing, ViolationOperationKeyInvalid},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			req := baseRequest()
+			tc.mutate(&req)
+			res := ValidateProposal(req)
+			if res.OK() {
+				t.Fatalf("expected %v, got acceptance", tc.wantCodes)
+			}
+			got := codesOf(res.Violations)
+			if len(got) != len(tc.wantCodes) {
+				t.Fatalf("violations %v, want %v", got, tc.wantCodes)
+			}
+			for i := range got {
+				if got[i] != tc.wantCodes[i] {
+					t.Fatalf("violations %v, want %v", got, tc.wantCodes)
+				}
+			}
+		})
+	}
+}
+
+// TestActionFingerprintBindsContractHash closes the chain from F02: the
+// action fingerprint must change when the canonical contract hash changes,
+// so a proposal cannot ride on stale or different confirmed terms.
+func TestActionFingerprintBindsContractHash(t *testing.T) {
+	termsA := ContractTerms{
+		Principal:       testOwner,
+		OriginalRequest: "buy a quiet keyboard",
+		Currency:        CurrencyUSD,
+		MaxTotal:        15000,
+		MaxQuantity:     1,
+		Category:        "keyboard",
+		Preferences:     []string{"quiet"},
+	}
+	termsB := termsA
+	termsB.MaxTotal = 20000 // an authorized term changed
+
+	reqA := baseRequest()
+	reqA.Contract.CanonicalHash = ComputeContractHash(termsA)
+	reqB := baseRequest()
+	reqB.Contract.CanonicalHash = ComputeContractHash(termsB)
+
+	resA := ValidateProposal(reqA)
+	resB := ValidateProposal(reqB)
+	if !resA.OK() || !resB.OK() {
+		t.Fatalf("fixtures must be valid: A=%v B=%v", codesOf(resA.Violations), codesOf(resB.Violations))
+	}
+	if resA.Action.ContractHash == resB.Action.ContractHash {
+		t.Fatal("fixtures must carry different contract hashes")
+	}
+	if resA.Action.Fingerprint == resB.Action.Fingerprint {
+		t.Fatal("different contract terms must yield different action fingerprints")
 	}
 }
