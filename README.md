@@ -152,9 +152,11 @@ currency; timeouts, 5xx responses, and unreadable responses are reported as
 idempotency request id so the provider returns the original result. Local
 records are written under `docs/spike/records/`, which is git-ignored.
 
-**Current status:** implementation and the full mock-server test suite are
-complete. Live sandbox order/approval/capture evidence is pending real
-sandbox credentials (`PAYPAL_CLIENT_ID` / `PAYPAL_CLIENT_SECRET` are not set).
+**Current status:** implemented and verified end-to-end against the PayPal
+sandbox: real OAuth, order creation, manual buyer approval, and a
+provider-confirmed `COMPLETED` capture of the fixed $1.00 order. Evidence
+(order/capture identifiers, provider debug ids) is kept in local, git-ignored
+records — never published.
 
 ## Security and privacy
 
