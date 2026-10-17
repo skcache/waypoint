@@ -115,33 +115,36 @@ func TestCompileRejectsInvalidOutput(t *testing.T) {
 	valid := `{"currency":"USD","max_total_minor":100,"max_quantity":1,"category":"keyboard"}`
 
 	cases := map[string]string{
-		"prose only":              "I cannot help with that.",
-		"trailing garbage":        valid + ` extra`,
-		"unknown field":           `{"currency":"USD","confirmed":true}`,
-		"authority field":         `{"currency":"USD","spendable":true}`,
-		"string for integer":      `{"max_total_minor":"15000"}`,
-		"boolean for integer":     `{"max_quantity":true}`,
-		"array for integer":       `{"max_total_minor":[15000]}`,
-		"float ceiling":           `{"max_total_minor":15000.5}`,
-		"float-form ceiling":      `{"max_total_minor":15000.0}`,
-		"negative ceiling":        `{"max_total_minor":-5}`,
-		"zero ceiling":            `{"max_total_minor":0}`,
-		"ceiling above hard cap":  `{"max_total_minor":1000000001}`,
-		"zero quantity":           `{"max_quantity":0}`,
-		"quantity above max":      `{"max_quantity":1001}`,
-		"foreign currency":        `{"currency":"EUR"}`,
-		"lowercase currency":      `{"currency":"usd"}`,
-		"empty category":          `{"category":""}`,
-		"overlong category":       `{"category":"` + longCategory + `"}`,
-		"category with newline":   `{"category":"key\nboard"}`,
-		"too many preferences":    `{"qualitative_preferences":` + prefs9 + `}`,
-		"overlong preference":     `{"qualitative_preferences":["` + longPref + `"]}`,
-		"empty preference":        `{"qualitative_preferences":[""]}`,
-		"control char preference": `{"qualitative_preferences":["quiet\u0007"]}`,
-		"too many assumptions":    `{"assumptions":` + assumptions6 + `}`,
-		"overlong assumption":     `{"assumptions":["` + longAssumption + `"]}`,
-		"malformed JSON":          `{`,
-		"array not object":        `[1,2,3]`,
+		"prose only":                "I cannot help with that.",
+		"trailing garbage":          valid + ` extra`,
+		"unknown field":             `{"currency":"USD","confirmed":true}`,
+		"authority field":           `{"currency":"USD","spendable":true}`,
+		"string for integer":        `{"max_total_minor":"15000"}`,
+		"boolean for integer":       `{"max_quantity":true}`,
+		"array for integer":         `{"max_total_minor":[15000]}`,
+		"float ceiling":             `{"max_total_minor":15000.5}`,
+		"float-form ceiling":        `{"max_total_minor":15000.0}`,
+		"negative ceiling":          `{"max_total_minor":-5}`,
+		"zero ceiling":              `{"max_total_minor":0}`,
+		"ceiling above hard cap":    `{"max_total_minor":1000000001}`,
+		"zero quantity":             `{"max_quantity":0}`,
+		"quantity above max":        `{"max_quantity":1001}`,
+		"foreign currency":          `{"currency":"EUR"}`,
+		"lowercase currency":        `{"currency":"usd"}`,
+		"empty category":            `{"category":""}`,
+		"overlong category":         `{"category":"` + longCategory + `"}`,
+		"category with newline":     `{"category":"key\nboard"}`,
+		"too many preferences":      `{"qualitative_preferences":` + prefs9 + `}`,
+		"overlong preference":       `{"qualitative_preferences":["` + longPref + `"]}`,
+		"empty preference":          `{"qualitative_preferences":[""]}`,
+		"control char preference":   `{"qualitative_preferences":["quiet\u0007"]}`,
+		"too many assumptions":      `{"assumptions":` + assumptions6 + `}`,
+		"overlong assumption":       `{"assumptions":["` + longAssumption + `"]}`,
+		"malformed JSON":            `{`,
+		"array not object":          `[1,2,3]`,
+		"duplicate key conflicting": `{"max_total_minor":100,"max_total_minor":999999999}`,
+		"duplicate key same value":  `{"currency":"USD","currency":"USD"}`,
+		"duplicate unknown key":     `{"alpha":1,"alpha":2}`,
 	}
 	for name, response := range cases {
 		_, err := compileWith(t, response)
@@ -152,6 +155,31 @@ func TestCompileRejectsInvalidOutput(t *testing.T) {
 		if !errors.Is(err, ErrInvalidOutput) {
 			t.Errorf("%s: err = %v, want ErrInvalidOutput", name, err)
 		}
+	}
+}
+
+func TestCompileRejectsDuplicateTopLevelFields(t *testing.T) {
+	// encoding/json keeps the last occurrence of a duplicated key; the
+	// compiler must reject the duplicate outright so no conflicting value can
+	// ever be silently selected — including the case where the first value
+	// would have been the safe one.
+	conflicting := `{"currency":"USD","max_total_minor":100,"max_total_minor":999999999}`
+	_, err := compileWith(t, conflicting)
+	if !errors.Is(err, ErrInvalidOutput) {
+		t.Fatalf("conflicting duplicate accepted: %v", err)
+	}
+	if !strings.Contains(err.Error(), "duplicate") {
+		t.Fatalf("error does not name the structural rule: %v", err)
+	}
+
+	sameValue := `{"currency":"USD","currency":"USD"}`
+	if _, err := compileWith(t, sameValue); !errors.Is(err, ErrInvalidOutput) {
+		t.Fatalf("same-value duplicate accepted: %v", err)
+	}
+
+	// A single occurrence of every field still parses normally.
+	if _, err := compileWith(t, happyJSON); err != nil {
+		t.Fatalf("non-duplicated document rejected: %v", err)
 	}
 }
 

@@ -117,6 +117,14 @@ type modelDraft struct {
 // states; every other deviation is an error. Error details describe the
 // schema rule only — model content is never echoed into errors.
 func parseModelDraft(request, raw string) (Draft, error) {
+	// encoding/json keeps the LAST occurrence of a duplicated object key and
+	// silently drops the rest, so a reply like {"max_total_minor":15000,
+	// "max_total_minor":999999999} would decode as if only the second value
+	// existed. Conflicting duplicates must be rejected explicitly.
+	if dup, found := duplicateTopLevelKey(raw); found {
+		return Draft{}, invalidOutput(fmt.Sprintf("duplicate field %q is not allowed", truncateForError(dup)))
+	}
+
 	dec := json.NewDecoder(strings.NewReader(raw))
 	dec.DisallowUnknownFields()
 	var md modelDraft
@@ -193,6 +201,52 @@ func parseModelDraft(request, raw string) (Draft, error) {
 		UnresolvedFields: unresolved,
 		Assumptions:      assumptions,
 	}, nil
+}
+
+// duplicateTopLevelKey scans a JSON object's top-level members and returns
+// the first field name that occurs more than once. The scan is best-effort:
+// when the document cannot be tokenized, a main decode error will follow, so
+// this check stays quiet instead of guessing. Nested objects are out of
+// scope here — the draft schema has no nested objects.
+func duplicateTopLevelKey(raw string) (string, bool) {
+	dec := json.NewDecoder(strings.NewReader(raw))
+	tok, err := dec.Token()
+	if err != nil {
+		return "", false
+	}
+	if delim, ok := tok.(json.Delim); !ok || delim != '{' {
+		return "", false
+	}
+	seen := make(map[string]struct{})
+	for dec.More() {
+		keyTok, err := dec.Token()
+		if err != nil {
+			return "", false
+		}
+		key, ok := keyTok.(string)
+		if !ok {
+			return "", false
+		}
+		if _, dup := seen[key]; dup {
+			return key, true
+		}
+		seen[key] = struct{}{}
+		var discard json.RawMessage
+		if err := dec.Decode(&discard); err != nil {
+			return "", false
+		}
+	}
+	return "", false
+}
+
+// truncateForError bounds a model-authored string before it is echoed into
+// an error detail, so a hostile reply cannot flood logs with a huge key.
+func truncateForError(s string) string {
+	const max = 40
+	if len(s) <= max {
+		return s
+	}
+	return s[:max] + "..."
 }
 
 // classifyDecodeError maps JSON decoder failures to structural descriptions
