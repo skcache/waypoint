@@ -16,7 +16,7 @@ func (s stubChecker) Check(context.Context) string { return s.code }
 // TestHealthzOK exercises GET /healthz over a real HTTP server and asserts the
 // documented contract: 200, JSON content type, {"status":"ok"}.
 func TestHealthzOK(t *testing.T) {
-	srv := httptest.NewServer(NewHandler(nil))
+	srv := httptest.NewServer(NewHandler(nil, Deps{}))
 	defer srv.Close()
 
 	resp, err := http.Get(srv.URL + "/healthz")
@@ -45,7 +45,7 @@ func TestHealthzOK(t *testing.T) {
 
 // TestHealthzRejectsNonGET verifies the method-routed pattern only accepts GET.
 func TestHealthzRejectsNonGET(t *testing.T) {
-	srv := httptest.NewServer(NewHandler(nil))
+	srv := httptest.NewServer(NewHandler(nil, Deps{}))
 	defer srv.Close()
 
 	resp, err := http.Post(srv.URL+"/healthz", "application/json", nil)
@@ -62,7 +62,7 @@ func TestHealthzRejectsNonGET(t *testing.T) {
 // TestUnknownPathIs404 documents that unimplemented routes are absent rather
 // than stubbed.
 func TestUnknownPathIs404(t *testing.T) {
-	srv := httptest.NewServer(NewHandler(nil))
+	srv := httptest.NewServer(NewHandler(nil, Deps{}))
 	defer srv.Close()
 
 	resp, err := http.Get(srv.URL + "/api/v1/transactions/anything")
@@ -79,7 +79,7 @@ func TestUnknownPathIs404(t *testing.T) {
 // TestHealthzIsReadinessIndependent: liveness must stay truthful regardless of
 // dependency state — even an explicitly unreachable database.
 func TestHealthzIsReadinessIndependent(t *testing.T) {
-	srv := httptest.NewServer(NewHandler(stubChecker{code: "unreachable"}))
+	srv := httptest.NewServer(NewHandler(stubChecker{code: "unreachable"}, Deps{}))
 	defer srv.Close()
 
 	resp, err := http.Get(srv.URL + "/healthz")
@@ -120,7 +120,7 @@ func getReadyz(t *testing.T, handler http.Handler) (int, map[string]string) {
 
 // TestReadyzNotConfigured: no checker wired (no DATABASE_URL) -> 503.
 func TestReadyzNotConfigured(t *testing.T) {
-	code, checks := getReadyz(t, NewHandler(nil))
+	code, checks := getReadyz(t, NewHandler(nil, Deps{}))
 	if code != http.StatusServiceUnavailable {
 		t.Fatalf("status = %d, want %d", code, http.StatusServiceUnavailable)
 	}
@@ -131,7 +131,7 @@ func TestReadyzNotConfigured(t *testing.T) {
 
 // TestReadyzOK: every dependency usable -> 200 {"status":"ok"}.
 func TestReadyzOK(t *testing.T) {
-	code, checks := getReadyz(t, NewHandler(stubChecker{code: "ok"}))
+	code, checks := getReadyz(t, NewHandler(stubChecker{code: "ok"}, Deps{}))
 	if code != http.StatusOK {
 		t.Fatalf("status = %d, want %d", code, http.StatusOK)
 	}
@@ -145,7 +145,7 @@ func TestReadyzOK(t *testing.T) {
 
 // TestReadyzSchemaNotReady: migrations missing -> 503 with the reason code.
 func TestReadyzSchemaNotReady(t *testing.T) {
-	code, checks := getReadyz(t, NewHandler(stubChecker{code: "schema_not_ready"}))
+	code, checks := getReadyz(t, NewHandler(stubChecker{code: "schema_not_ready"}, Deps{}))
 	if code != http.StatusServiceUnavailable {
 		t.Fatalf("status = %d, want %d", code, http.StatusServiceUnavailable)
 	}
@@ -159,7 +159,7 @@ func TestReadyzSchemaNotReady(t *testing.T) {
 
 // TestReadyzDatabaseUnreachable: database down -> 503 with the reason code.
 func TestReadyzDatabaseUnreachable(t *testing.T) {
-	code, checks := getReadyz(t, NewHandler(stubChecker{code: "unreachable"}))
+	code, checks := getReadyz(t, NewHandler(stubChecker{code: "unreachable"}, Deps{}))
 	if code != http.StatusServiceUnavailable {
 		t.Fatalf("status = %d, want %d", code, http.StatusServiceUnavailable)
 	}

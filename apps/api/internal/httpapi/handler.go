@@ -1,8 +1,10 @@
 // Package httpapi wires the Waypoint HTTP surface.
 //
-// Implemented routes: GET /healthz (process liveness, dependency-free) and
-// GET /readyz (dependency readiness). The /api/v1 routes from the product
-// specification are added in the phases that implement their behavior.
+// Implemented routes: GET /healthz (process liveness, dependency-free),
+// GET /readyz (dependency readiness) and POST /api/v1/intents/draft
+// (non-authoritative intent draft compilation). Other /api/v1 routes from
+// the product specification are added in the phases that implement their
+// behavior.
 package httpapi
 
 import (
@@ -10,6 +12,8 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+
+	"github.com/skcache/waypoint/apps/api/internal/intent"
 )
 
 // ReadinessChecker reports whether the API's required dependencies are
@@ -21,19 +25,36 @@ type ReadinessChecker interface {
 	Check(ctx context.Context) string
 }
 
+// Deps carries the optional feature dependencies of the HTTP surface. Zero
+// values are safe: a missing dependency makes its feature report
+// NOT_CONFIGURED instead of pretending to work.
+type Deps struct {
+	// IntentCompiler compiles natural-language requests into non-authoritative
+	// drafts (PRD Phase 06). nil means POST /api/v1/intents/draft answers
+	// NOT_CONFIGURED.
+	IntentCompiler intent.Compiler
+	// AllowedOrigin, when non-empty, is the single browser origin allowed on
+	// write endpoints. Foreign origins are refused (fail closed); requests
+	// without an Origin header (server-to-server, CLI) pass until the demo
+	// session layer lands in Phase 07.
+	AllowedOrigin string
+}
+
 // NewHandler builds the root HTTP handler. A nil checker makes every
 // readiness probe report "not_configured".
-func NewHandler(ready ReadinessChecker) http.Handler {
-	h := &handler{ready: ready}
+func NewHandler(ready ReadinessChecker, deps Deps) http.Handler {
+	h := &handler{ready: ready, deps: deps}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", h.handleHealthz)
 	mux.HandleFunc("GET /readyz", h.handleReadyz)
+	mux.HandleFunc("POST /api/v1/intents/draft", h.handleIntentDraft)
 	return mux
 }
 
 type handler struct {
 	ready ReadinessChecker
+	deps  Deps
 }
 
 // healthResponse is the JSON body of GET /healthz.

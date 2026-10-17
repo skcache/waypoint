@@ -102,3 +102,103 @@ func TestLoadRejectsMalformedDatabaseURL(t *testing.T) {
 		}
 	}
 }
+
+// TestLoadLLMConfiguration covers the runtime-AI environment contract:
+// complete values load, partial values leave LLMConfigured false (the draft
+// endpoint then reports NOT_CONFIGURED), and malformed values are rejected
+// without echoing the key.
+func TestLoadLLMConfiguration(t *testing.T) {
+	full := map[string]string{
+		"LLM_API_BASE_URL": "https://api.example.com/v1",
+		"LLM_API_KEY":      "sk-config-test-SUPERSECRET-123456",
+		"LLM_MODEL":        "model-x",
+	}
+	cfg, err := Load(func(k string) string { return full[k] })
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if !cfg.LLMConfigured() {
+		t.Error("LLMConfigured() = false for a complete configuration")
+	}
+	if cfg.LLMAPIKey != full["LLM_API_KEY"] {
+		t.Error("API key was not preserved")
+	}
+
+	for _, missing := range []string{"LLM_API_BASE_URL", "LLM_API_KEY", "LLM_MODEL"} {
+		env := map[string]string{}
+		for k, v := range full {
+			if k != missing {
+				env[k] = v
+			}
+		}
+		cfg, err := Load(func(k string) string { return env[k] })
+		if err != nil {
+			t.Errorf("partial config (missing %s) failed Load: %v", missing, err)
+		}
+		if cfg.LLMConfigured() {
+			t.Errorf("LLMConfigured() = true with %s missing", missing)
+		}
+	}
+
+	bad := map[string]string{
+		"LLM_API_BASE_URL": "https://user:pass@api.example.com",
+		"LLM_API_KEY":      "sk-config-test-SUPERSECRET-123456",
+		"LLM_MODEL":        "model-x",
+	}
+	_, err = Load(func(k string) string { return bad[k] })
+	if err == nil {
+		t.Fatal("credential-bearing LLM base URL accepted")
+	}
+	if strings.Contains(err.Error(), "pass") || strings.Contains(err.Error(), bad["LLM_API_KEY"]) {
+		t.Fatalf("error leaks configuration values: %q", err.Error())
+	}
+
+	badModel := map[string]string{
+		"LLM_API_BASE_URL": "https://api.example.com",
+		"LLM_API_KEY":      "sk-config-test-SUPERSECRET-123456",
+		"LLM_MODEL":        "bad model",
+	}
+	_, err = Load(func(k string) string { return badModel[k] })
+	if err == nil {
+		t.Fatal("model name with a space accepted")
+	}
+	if strings.Contains(err.Error(), "bad model") || strings.Contains(err.Error(), badModel["LLM_API_KEY"]) {
+		t.Fatalf("error leaks configuration values: %q", err.Error())
+	}
+}
+
+func TestLoadWebOrigin(t *testing.T) {
+	cfg, err := Load(func(k string) string {
+		if k == "WEB_ORIGIN" {
+			return "http://localhost:3000"
+		}
+		return ""
+	})
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.WebOrigin != "http://localhost:3000" {
+		t.Errorf("WebOrigin = %q", cfg.WebOrigin)
+	}
+
+	for _, raw := range []string{
+		"http://localhost:3000/",        // trailing slash never appears in an Origin header
+		"http://localhost:3000/app",     // path
+		"http://user:pw@localhost:3000", // credentials
+		"ftp://localhost:3000",          // scheme
+		"not a url",
+	} {
+		_, err := Load(func(k string) string {
+			if k == "WEB_ORIGIN" {
+				return raw
+			}
+			return ""
+		})
+		if err == nil {
+			t.Errorf("WEB_ORIGIN=%q accepted", raw)
+		}
+		if err != nil && strings.Contains(err.Error(), "pw") {
+			t.Errorf("WEB_ORIGIN=%q: error leaks credentials: %q", raw, err.Error())
+		}
+	}
+}

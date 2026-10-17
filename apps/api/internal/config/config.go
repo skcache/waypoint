@@ -11,6 +11,9 @@ import (
 	"fmt"
 	"net/url"
 	"strconv"
+	"strings"
+
+	"github.com/skcache/waypoint/apps/api/internal/llm"
 )
 
 const (
@@ -27,6 +30,23 @@ type Config struct {
 	// DatabaseURL is the PostgreSQL DSN. Empty means "not configured":
 	// /healthz still works and /readyz reports not_configured.
 	DatabaseURL string
+	// WebOrigin is the single browser origin allowed on write endpoints.
+	// Empty disables the origin check (server-to-server use only).
+	WebOrigin string
+	// LLMBaseURL, LLMAPIKey and LLMModel configure the runtime AI adapter
+	// (intent draft compilation now; semantic verification later). All three
+	// must be present together — see LLMConfigured. The key is never logged
+	// or included in error messages.
+	LLMBaseURL string
+	LLMAPIKey  string
+	LLMModel   string
+}
+
+// LLMConfigured reports whether every runtime-AI value is present. A partial
+// configuration is not an error at startup: the features that need it report
+// NOT_CONFIGURED instead of pretending to work.
+func (c Config) LLMConfigured() bool {
+	return c.LLMBaseURL != "" && c.LLMAPIKey != "" && c.LLMModel != ""
 }
 
 // Load reads configuration from getenv (typically os.Getenv) and validates
@@ -52,6 +72,27 @@ func Load(getenv func(string) string) (Config, error) {
 		cfg.DatabaseURL = dsn
 	}
 
+	if origin := getenv("WEB_ORIGIN"); origin != "" {
+		if err := validateWebOrigin(origin); err != nil {
+			return Config{}, err
+		}
+		cfg.WebOrigin = origin
+	}
+
+	if base := getenv("LLM_API_BASE_URL"); base != "" {
+		if err := llm.ValidateBaseURL(base); err != nil {
+			return Config{}, err
+		}
+		cfg.LLMBaseURL = base
+	}
+	cfg.LLMAPIKey = getenv("LLM_API_KEY")
+	if model := getenv("LLM_MODEL"); model != "" {
+		if err := llm.ValidateModel(model); err != nil {
+			return Config{}, err
+		}
+		cfg.LLMModel = model
+	}
+
 	return cfg, nil
 }
 
@@ -73,6 +114,32 @@ func validateDatabaseURL(dsn string) error {
 	}
 	if u.Host == "" {
 		return fmt.Errorf("invalid DATABASE_URL (value redacted): missing host")
+	}
+	return nil
+}
+
+// validateWebOrigin checks the single allowed browser origin. It must be a
+// bare http(s) origin (scheme + host [+ port]) with no path, credentials,
+// query or fragment — exactly what a browser puts in an Origin header.
+func validateWebOrigin(origin string) error {
+	u, err := url.Parse(origin)
+	if err != nil {
+		return fmt.Errorf("invalid WEB_ORIGIN (value redacted): not a valid URL")
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return fmt.Errorf("invalid WEB_ORIGIN (value redacted): unsupported scheme %q; want http:// or https://", u.Scheme)
+	}
+	if u.Host == "" {
+		return fmt.Errorf("invalid WEB_ORIGIN (value redacted): missing host")
+	}
+	if u.User != nil {
+		return fmt.Errorf("invalid WEB_ORIGIN (value redacted): must not carry credentials")
+	}
+	if (u.Path != "" && u.Path != "/") || u.RawQuery != "" || u.Fragment != "" {
+		return fmt.Errorf("invalid WEB_ORIGIN (value redacted): must be a bare origin without path, query or fragment")
+	}
+	if strings.HasSuffix(origin, "/") {
+		return fmt.Errorf("invalid WEB_ORIGIN (value redacted): must not end with a slash")
 	}
 	return nil
 }

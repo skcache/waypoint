@@ -12,6 +12,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"syscall"
@@ -19,6 +20,8 @@ import (
 
 	"github.com/skcache/waypoint/apps/api/internal/config"
 	"github.com/skcache/waypoint/apps/api/internal/httpapi"
+	"github.com/skcache/waypoint/apps/api/internal/intent"
+	"github.com/skcache/waypoint/apps/api/internal/llm"
 	"github.com/skcache/waypoint/apps/api/internal/store/postgres"
 )
 
@@ -39,9 +42,11 @@ func run() error {
 	ready, closeDatabase := prepareReadiness(cfg)
 	defer closeDatabase()
 
+	deps := prepareDeps(cfg)
+
 	srv := &http.Server{
 		Addr:              cfg.Addr(),
-		Handler:           httpapi.NewHandler(ready),
+		Handler:           httpapi.NewHandler(ready, deps),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
@@ -92,4 +97,36 @@ func prepareReadiness(cfg config.Config) (httpapi.ReadinessChecker, func()) {
 		slog.Info("closing database connection pool")
 		store.Close()
 	}
+}
+
+// prepareDeps wires the HTTP feature dependencies from configuration. A
+// missing or unusable LLM configuration is not fatal: the process starts and
+// the draft endpoint fail-closes with NOT_CONFIGURED — never a fabricated
+// model result (PRD §5.4).
+func prepareDeps(cfg config.Config) httpapi.Deps {
+	deps := httpapi.Deps{AllowedOrigin: cfg.WebOrigin}
+
+	if !cfg.LLMConfigured() {
+		slog.Info("no LLM configuration; /api/v1/intents/draft will report NOT_CONFIGURED")
+		return deps
+	}
+
+	client, err := llm.New(llm.Config{
+		BaseURL: cfg.LLMBaseURL,
+		APIKey:  cfg.LLMAPIKey,
+		Model:   cfg.LLMModel,
+	})
+	if err != nil {
+		// Deliberately no error detail: it could echo configuration values.
+		slog.Warn("LLM configuration rejected; /api/v1/intents/draft will report NOT_CONFIGURED")
+		return deps
+	}
+
+	provider := ""
+	if u, err := url.Parse(cfg.LLMBaseURL); err == nil {
+		provider = u.Host
+	}
+	deps.IntentCompiler = intent.NewHostedCompiler(client, provider, cfg.LLMModel)
+	slog.Info("intent draft compiler configured", "provider", provider, "model", cfg.LLMModel)
+	return deps
 }
