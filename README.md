@@ -10,10 +10,12 @@ and records a correlated, auditable trace of every decision and outcome.
 Built for the [PayPal AI Hackathon 2026](https://paypalaihackathon.devpost.com/).
 
 > **Status: early prototype.** The repository currently contains a Go API
-> with liveness and database-readiness endpoints, the PostgreSQL schema with
-> versioned SQL migrations, a static Next.js page, a sandbox-only PayPal
-> feasibility spike (developer CLI — not wired to the product yet), and local
-> development tooling. There is no AI integration and no checkout UI yet.
+> with liveness, database-readiness and intent-draft endpoints, the
+> PostgreSQL schema with versioned SQL migrations, a static workbench
+> preview (Next.js), a sandbox-only PayPal feasibility spike verified
+> end-to-end, and local development tooling. The intent-draft compiler is
+> implemented and honestly reports `NOT_CONFIGURED` until model credentials
+> are provided; the semantic verifier and checkout wiring are not built yet.
 > Nothing here processes real money: the spike talks only to the PayPal
 > sandbox.
 
@@ -21,11 +23,11 @@ Built for the [PayPal AI Hackathon 2026](https://paypalaihackathon.devpost.com/)
 
 | Area | State |
 |---|---|
-| Go API (`apps/api`) | Scaffolded — `GET /healthz` implemented with tests |
-| Web app (`apps/web`) | Scaffolded — static status page (Next.js + TypeScript + Tailwind) |
+| Go API (`apps/api`) | **Implemented** — `GET /healthz`, `GET /readyz`, and `POST /api/v1/intents/draft` (strict-schema draft compiler; answers `NOT_CONFIGURED` without model credentials) |
+| Web app (`apps/web`) | Static workbench / checkout / trace preview (Next.js + TypeScript + Tailwind); not wired to the API yet |
 | PostgreSQL | **Implemented** — schema + versioned SQL migrations; `/readyz` reports database readiness |
 | PayPal sandbox (Orders v2) | **Feasibility spike verified end-to-end** — sandbox-only developer CLI; real OAuth, order creation, manual buyer approval, and a provider-confirmed `COMPLETED` capture of a USD 1.00 sandbox order |
-| Runtime AI (intent compiler, semantic verifier) | Planned — not implemented |
+| Runtime AI (intent compiler, semantic verifier) | Intent compiler **implemented** (`POST /api/v1/intents/draft`, non-authoritative drafts, strict JSON validation); semantic verifier planned — not implemented |
 | Transaction state machine, trace explorer, evaluation | Planned — not implemented |
 
 ## Planned capabilities
