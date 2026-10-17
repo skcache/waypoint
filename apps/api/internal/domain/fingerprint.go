@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"sort"
 )
 
 // Fingerprint is a SHA-256 digest (32 bytes).
@@ -71,6 +72,76 @@ func ComputeActionFingerprint(a AuthorizedAction) Fingerprint {
 		// Unreachable for this plain scalar struct; kept explicit rather than
 		// returning a fingerprint of nothing.
 		panic(fmt.Sprintf("domain: canonical action marshal failed: %v", err))
+	}
+	return sha256.Sum256(payload)
+}
+
+// contractScheme versions the canonical contract encoding, same rationale as
+// actionScheme: any change to the scheme is a deliberate version bump rather
+// than a silent change in hash meaning.
+const contractScheme = "waypoint.contract.v1"
+
+// ContractTerms is the deterministic content covered by the confirmed
+// contract hash (PRD §7.1): the normalized request, the hard spending limits
+// and the qualitative preferences a purchase is judged against.
+//
+// Deliberately NOT covered: confirmation/expiry/creation timestamps (they
+// change without the terms changing — expiry integrity is a database
+// concern), transient HTML (callers pass the already-normalized request
+// text), and the version number (the database owns the version sequence; the
+// version is bound into the action fingerprint via ContractVersion instead).
+type ContractTerms struct {
+	Principal       PrincipalID
+	OriginalRequest string
+	Currency        Currency
+	MaxTotal        MinorUnits
+	MaxQuantity     Quantity
+	Category        string
+	// Preferences is the qualitative mandate ("quiet", "no gaming RGB", …).
+	// Source order carries no meaning and is normalized away.
+	Preferences []string
+}
+
+// canonicalContract is the fixed-field-order encoding of ContractTerms.
+// Preferences are sorted (and nil normalized to empty) before encoding, so
+// any source ordering — including the nondeterministic iteration order of a
+// map — produces identical bytes.
+type canonicalContract struct {
+	Scheme          string   `json:"scheme"`
+	Principal       string   `json:"principal"`
+	OriginalRequest string   `json:"original_request"`
+	Currency        string   `json:"currency"`
+	MaxTotalMinor   int64    `json:"max_total_minor"`
+	MaxQuantity     int      `json:"max_quantity"`
+	Category        string   `json:"category"`
+	Preferences     []string `json:"qualitative_preferences"`
+}
+
+// ComputeContractHash derives the canonical hash of confirmed contract
+// terms. Identical terms produce an identical digest; any changed authorized
+// term — a limit, the currency, a preference — produces a different digest.
+// That is what lets the system treat re-confirmation of unchanged terms as
+// the same mandate while a changed mandate requires a new confirmed version
+// (exactly the versioning the database enforces).
+func ComputeContractHash(t ContractTerms) Fingerprint {
+	prefs := make([]string, len(t.Preferences))
+	copy(prefs, t.Preferences)
+	sort.Strings(prefs)
+	if prefs == nil {
+		prefs = []string{}
+	}
+	payload, err := json.Marshal(canonicalContract{
+		Scheme:          contractScheme,
+		Principal:       string(t.Principal),
+		OriginalRequest: t.OriginalRequest,
+		Currency:        string(t.Currency),
+		MaxTotalMinor:   int64(t.MaxTotal),
+		MaxQuantity:     int(t.MaxQuantity),
+		Category:        t.Category,
+		Preferences:     prefs,
+	})
+	if err != nil {
+		panic(fmt.Sprintf("domain: canonical contract marshal failed: %v", err))
 	}
 	return sha256.Sum256(payload)
 }

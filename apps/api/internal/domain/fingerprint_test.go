@@ -82,3 +82,90 @@ func TestNewFingerprintValidatesLength(t *testing.T) {
 		t.Fatal("fingerprint bytes not copied")
 	}
 }
+
+func baseContractTerms() ContractTerms {
+	return ContractTerms{
+		Principal:       testOwner,
+		OriginalRequest: "Buy one quiet keyboard for office work under $150",
+		Currency:        CurrencyUSD,
+		MaxTotal:        15000,
+		MaxQuantity:     1,
+		Category:        "keyboard",
+		Preferences:     []string{"quiet", "office use", "no gaming RGB"},
+	}
+}
+
+func TestContractHashIsDeterministic(t *testing.T) {
+	a := ComputeContractHash(baseContractTerms())
+	b := ComputeContractHash(baseContractTerms())
+	if a != b {
+		t.Fatalf("same terms produced different hashes: %s vs %s", a, b)
+	}
+	if a.IsZero() {
+		t.Fatal("contract hash must not be zero")
+	}
+	if len(a.String()) != len("sha256:")+64 {
+		t.Fatalf("String() = %q", a.String())
+	}
+	terms := baseContractTerms()
+	terms.Preferences = []string{"quiet", "office use", "no gaming RGB"}
+	if ComputeContractHash(terms) != a {
+		t.Fatal("equivalent rebuild produced a different hash")
+	}
+}
+
+func TestContractHashCoversEveryAuthorizedTerm(t *testing.T) {
+	base := ComputeContractHash(baseContractTerms())
+	mutations := map[string]func(*ContractTerms){
+		"principal":        func(tm *ContractTerms) { tm.Principal = testOther },
+		"original request": func(tm *ContractTerms) { tm.OriginalRequest = "buy a loud keyboard" },
+		"currency":         func(tm *ContractTerms) { tm.Currency = Currency("EUR") },
+		"max total":        func(tm *ContractTerms) { tm.MaxTotal = 15100 },
+		"max quantity":     func(tm *ContractTerms) { tm.MaxQuantity = 2 },
+		"category":         func(tm *ContractTerms) { tm.Category = "mouse" },
+		"preferences":      func(tm *ContractTerms) { tm.Preferences = append(tm.Preferences, "red") },
+	}
+	for name, mutate := range mutations {
+		t.Run(name, func(t *testing.T) {
+			terms := baseContractTerms()
+			mutate(&terms)
+			if ComputeContractHash(terms) == base {
+				t.Fatalf("changing %s did not change the contract hash", name)
+			}
+		})
+	}
+}
+
+func TestContractHashIgnoresPreferenceOrderingAndRepresentation(t *testing.T) {
+	canonical := ComputeContractHash(baseContractTerms())
+
+	// nil and empty preferences describe the same mandate.
+	nilPrefs := baseContractTerms()
+	nilPrefs.Preferences = nil
+	emptyPrefs := baseContractTerms()
+	emptyPrefs.Preferences = []string{}
+	if ComputeContractHash(nilPrefs) != ComputeContractHash(emptyPrefs) {
+		t.Fatal("nil and empty preferences must hash identically")
+	}
+
+	// Explicit reordering cannot matter.
+	reversed := baseContractTerms()
+	reversed.Preferences = []string{"no gaming RGB", "office use", "quiet"}
+	if ComputeContractHash(reversed) != canonical {
+		t.Fatal("reordered preferences changed the hash")
+	}
+
+	// The classic nondeterminism bug: preferences collected by ranging over a
+	// map (random iteration order). Every collected order must agree.
+	source := map[string]bool{"quiet": true, "office use": true, "no gaming RGB": true}
+	for i := 0; i < 20; i++ {
+		collected := baseContractTerms()
+		collected.Preferences = collected.Preferences[:0]
+		for k := range source {
+			collected.Preferences = append(collected.Preferences, k)
+		}
+		if ComputeContractHash(collected) != canonical {
+			t.Fatalf("map-iteration order leaked into the contract hash (iteration %d)", i)
+		}
+	}
+}
