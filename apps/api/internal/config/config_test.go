@@ -83,10 +83,10 @@ func TestLoadRejectsNonPostgresDatabaseURL(t *testing.T) {
 
 func TestLoadRejectsMalformedDatabaseURL(t *testing.T) {
 	for _, raw := range []string{
-		"postgres://",                    // missing host
-		"postgres://user:pw@/db",         // missing host
-		"://not-a-url",                   // not parseable
-		"postgres://user:pw@h/db\x7f",    // invalid control byte
+		"postgres://",                 // missing host
+		"postgres://user:pw@/db",      // missing host
+		"://not-a-url",                // not parseable
+		"postgres://user:pw@h/db\x7f", // invalid control byte
 	} {
 		_, err := Load(func(key string) string {
 			if key == "DATABASE_URL" {

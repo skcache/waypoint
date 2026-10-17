@@ -15,10 +15,10 @@ import (
 // Readiness status codes reported by Store.Check. They are machine-readable
 // and deliberately contain no connection details or credentials.
 const (
-	ReadinessOK              = "ok"
-	ReadinessUnreachable     = "unreachable"
-	ReadinessSchemaNotReady  = "schema_not_ready"
-	ReadinessNotConfigured   = "not_configured"
+	ReadinessOK             = "ok"
+	ReadinessUnreachable    = "unreachable"
+	ReadinessSchemaNotReady = "schema_not_ready"
+	ReadinessNotConfigured  = "not_configured"
 )
 
 // Pool bounds. V1 is a single modest API process; keep the pool small and
