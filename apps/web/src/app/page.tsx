@@ -23,7 +23,7 @@ const systems = [
     name: "Runtime AI",
     state: "Not configured",
     tone: "text-muted",
-    note: "Intent drafting and semantic verification arrive in later phases.",
+    note: "The intent-draft compiler is implemented on the API and reports NOT_CONFIGURED until model credentials are provided. This UI does not call it yet.",
   },
   {
     name: "PayPal checkout",
@@ -61,13 +61,13 @@ const decisions = [
   {
     state: "Deny",
     tone: "text-bad",
-    rule: "A hard-rule violation, or a qualitative contradiction with cited evidence.",
+    rule: "Available evidence establishes a violation: a hard-rule breach, or verifier evidence contradicting the confirmed terms.",
     effect: "Never calls the payment provider.",
   },
   {
     state: "Review",
     tone: "text-warn",
-    rule: "Missing evidence, model UNKNOWN, timeout, or ambiguity.",
+    rule: "The evidence cannot establish support or contradiction: missing or unreadable evidence, model UNKNOWN, timeout, or ambiguity.",
     effect: "Fails closed. Not payable until a human resolves it.",
   },
 ];
@@ -122,7 +122,7 @@ const scenarios = [
       ],
       [
         "PayPal",
-        "Nothing is recorded as failed or completed without evidence. A status check or an idempotent retry resolves the outcome.",
+        "Nothing is recorded as failed or completed without evidence. A bounded status check may resolve the outcome; if it cannot, the operation stays explicitly unresolved rather than guessed at, marked failed, or blindly retried.",
       ],
     ],
   },
@@ -134,9 +134,10 @@ export default function WorkbenchPage() {
       <header>
         <h1 className="text-xl font-semibold tracking-tight">Workbench</h1>
         <p className="mt-2 max-w-2xl text-sm leading-6 text-muted">
-          The intended flow, end to end: what the human confirmed, what the
-          agent proposed, what Waypoint decided, and what PayPal confirmed.
-          Nothing on this page runs; every value is a labeled sample.
+          The intended flow, end to end: the terms a human would confirm, the
+          purchase an agent proposes, the decision Waypoint records, and what
+          PayPal confirms. Nothing on this page runs; every value is a labeled
+          sample.
         </p>
       </header>
 
@@ -145,15 +146,16 @@ export default function WorkbenchPage() {
         className="grid gap-6 lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)]"
       >
         <h2 id="flow-heading" className="sr-only">
-          Confirmed mandate and agent proposal
+          Mandate draft and agent proposal
         </h2>
-        <Panel title="Request and confirmed mandate" label={<SampleLabel />}>
+        <Panel title="Request and mandate draft" label={<SampleLabel>Draft, not confirmed</SampleLabel>}>
           <p className="text-sm leading-6">
             &ldquo;Buy one quiet office keyboard, under $150.&rdquo;
           </p>
           <p className="mt-1 text-xs text-muted">
-            Human confirmation happens in a later phase. This draft is not
-            spendable.
+            Draft terms only. This is not a confirmed mandate and carries no
+            spending authority; human confirmation (a later phase) is what
+            makes the terms spendable.
           </p>
           <dl className="mt-4 grid gap-x-6 gap-y-2 text-sm sm:grid-cols-[minmax(0,9rem)_minmax(0,1fr)]">
             {mandate.map(([key, value]) => (
@@ -189,7 +191,9 @@ export default function WorkbenchPage() {
           Decision outcomes
         </h2>
         <p className="mt-2 max-w-2xl text-sm leading-6 text-muted">
-          Every proposal resolves to exactly one of these. The runtime that
+          Every proposal resolves to exactly one of these. Deny requires
+          evidence of a violation; when the evidence is insufficient the
+          outcome is review, never an automatic allow. The runtime that
           produces them live arrives in later phases.
         </p>
         <div className="mt-4 grid gap-4 md:grid-cols-3">
@@ -237,7 +241,7 @@ export default function WorkbenchPage() {
         </div>
       </section>
 
-      <Panel title="System status" label={<SampleLabel>As of Phase 05</SampleLabel>}>
+      <Panel title="System status" label={<SampleLabel>As of Phase 06</SampleLabel>}>
         <ul className="divide-y divide-line">
           {systems.map((system) => (
             <li

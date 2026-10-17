@@ -143,7 +143,8 @@ export default function TracePage() {
             <p className="text-sm font-medium text-warn">Reconciliation required</p>
             <p className="text-sm leading-6 text-muted">
               The provider outcome is unclear. The timeline shows the recorded
-              request ID and the follow-up checks instead of a guessed result.
+              request ID and the follow-up checks instead of a guessed result,
+              and the state resolves only when sufficient evidence arrives.
             </p>
           </li>
           <li className="grid gap-1 py-3 last:pb-0 sm:grid-cols-[minmax(0,12rem)_minmax(0,1fr)] sm:gap-6">

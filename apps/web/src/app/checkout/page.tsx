@@ -34,7 +34,7 @@ const lifecycle = [
   {
     state: "Reconciliation required",
     tone: "text-warn",
-    note: "The provider outcome is unclear. No blind retries; the operation keeps its identity.",
+    note: "The provider outcome is unclear. The operation keeps its identity and resolves only on sufficient provider evidence; no blind retries.",
   },
   {
     state: "Completed",
