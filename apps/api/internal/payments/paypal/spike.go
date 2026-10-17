@@ -327,6 +327,19 @@ func CreateSpikeOrder(ctx context.Context, api OrdersAPI, store RecordStore, req
 }
 
 // RetrieveSpikeOrder refreshes the local record from live provider state.
+//
+// The refresh is conservative by design:
+//
+//   - a CAPTURED_VERIFIED record is never downgraded — a later observation
+//     can add context but never rewrites verified capture evidence;
+//   - an unresolved (PAYMENT_OUTCOME_UNKNOWN) record resolves only through a
+//     fully verified provider-grounded capture resource (order identity,
+//     COMPLETED capture id, amount, currency). A plain APPROVED observation
+//     must NOT flip it back into a capture-eligible state, or a later
+//     attempt would mint a fresh request id for an operation that may
+//     already have executed;
+//   - the original capture request id survives every refresh, in every
+//     state, no matter what the provider reports.
 func RetrieveSpikeOrder(ctx context.Context, api OrdersAPI, store RecordStore, orderID string) (Record, error) {
 	rec, err := store.Load(orderID)
 	if err != nil {
@@ -339,27 +352,51 @@ func RetrieveSpikeOrder(ctx context.Context, api OrdersAPI, store RecordStore, o
 	if order.ID != rec.OrderID {
 		return Record{}, newValidationError("order identity mismatch: provider %q vs recorded %q", order.ID, rec.OrderID)
 	}
+
+	now := time.Now().UTC()
 	rec.ProviderStatus = order.Status
 	if order.Payer != nil && order.Payer.PayerID != "" {
 		rec.PayerID = order.Payer.PayerID
 	}
-	switch order.Status {
-	case OrderStatusCreated:
-		rec.State = StateAwaitingApproval
-	case OrderStatusApproved:
-		rec.State = StateReadyToCapture
-	case OrderStatusCompleted:
-		rec.State = StateCompletedOnProvider
-		for _, c := range order.Captures() {
-			if c.Status == CaptureStatusCompleted {
-				rec.CaptureID = c.ID
-				break
+
+	switch rec.State {
+	case StateCapturedVerified:
+		// Verified evidence is sticky: observe, never rewrite.
+	case StatePaymentUnknown:
+		if ev, verr := VerifyCaptureOutcome(order, rec); verr == nil {
+			rec.State = StateCapturedVerified
+			rec.CaptureID = ev.CaptureID
+			rec.Notes = append(rec.Notes, fmt.Sprintf("uncertain capture resolved by provider state at %s: capture %s COMPLETED %s %s",
+				now.Format(time.RFC3339), ev.CaptureID, ev.Currency, ev.AmountValue))
+		} else {
+			rec.Notes = append(rec.Notes, fmt.Sprintf("status refresh at %s observed %s; capture outcome remains unresolved, request id %s preserved",
+				now.Format(time.RFC3339), order.Status, rec.CaptureRequestID))
+		}
+	default:
+		if ev, verr := VerifyCaptureOutcome(order, rec); verr == nil {
+			// Provider-grounded recovery also applies outside the uncertain
+			// state: complete capture evidence is sufficient to certify.
+			rec.State = StateCapturedVerified
+			rec.CaptureID = ev.CaptureID
+			rec.Notes = append(rec.Notes, fmt.Sprintf("capture recovered from provider state at %s: capture %s COMPLETED %s %s",
+				now.Format(time.RFC3339), ev.CaptureID, ev.Currency, ev.AmountValue))
+		} else {
+			switch order.Status {
+			case OrderStatusCreated:
+				rec.State = StateAwaitingApproval
+			case OrderStatusApproved:
+				rec.State = StateReadyToCapture
+			case OrderStatusCompleted:
+				// Order status alone is never completion evidence.
+				rec.State = StateCompletedOnProvider
+				rec.Notes = append(rec.Notes, fmt.Sprintf("provider reports COMPLETED at %s without verifiable capture evidence; not certifying", now.Format(time.RFC3339)))
+			case OrderStatusVoided:
+				rec.State = StateVoided
 			}
 		}
-	case OrderStatusVoided:
-		rec.State = StateVoided
 	}
-	rec.UpdatedAt = time.Now().UTC()
+
+	rec.UpdatedAt = now
 	if err := store.Save(rec); err != nil {
 		return rec, err
 	}
@@ -396,8 +433,18 @@ func CaptureSpikeOrder(ctx context.Context, api OrdersAPI, store RecordStore, or
 		return CaptureEvidence{}, err
 	}
 
-	// A retry after an unknown outcome reuses the original request identity.
-	if rec.State == StatePaymentUnknown && rec.CaptureRequestID != "" {
+	// An unresolved capture keeps its original request identity, always — a
+	// fresh id for the same unresolved operation could capture twice. Note
+	// that request-id reuse is defense in depth, not the safety net: PayPal
+	// honors a stored id only for a bounded retention window the docs do not
+	// pin down. The real protection is the pre-capture GetOrder gate above:
+	// had the earlier attempt actually captured, the provider would report
+	// COMPLETED and this function would refuse (or status would have
+	// recovered the completion from provider evidence) instead of re-sending.
+	if rec.State == StatePaymentUnknown {
+		if rec.CaptureRequestID == "" {
+			return CaptureEvidence{}, newValidationError("order %s has an unresolved capture and no preserved request id; reconcile provider state manually before retrying", orderID)
+		}
 		requestID = rec.CaptureRequestID
 	}
 	if requestID == "" {
