@@ -8,6 +8,9 @@
 # Private, local-only planning and progress documents (never publish).
 # See docs/PRD.md — it must stay on this machine.
 /docs/
+# Spike records from cmd/paypal-spike, whose default record dir is relative
+# to the working directory (apps/api when run as documented).
+/apps/api/docs/
 
 # Environment files and secrets. `.env.example` is the only env file allowed
 # in the repository because it contains safe placeholder values.
