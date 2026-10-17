@@ -172,6 +172,12 @@ func (c *Client) call(ctx context.Context, method, path, requestID string, in, o
 		}
 		payload = b
 	}
+	// PayPal answers 415 UNSUPPORTED_MEDIA_TYPE to a POST that carries no
+	// parseable JSON payload at all (observed live on sandbox capture), so
+	// empty POST bodies become an explicit empty JSON object.
+	if payload == nil && method == http.MethodPost {
+		payload = []byte("{}")
+	}
 
 	for attempt := 0; attempt < 2; attempt++ {
 		tok, _, err := c.ensureToken(ctx)

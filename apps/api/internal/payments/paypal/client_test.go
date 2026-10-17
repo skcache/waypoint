@@ -28,11 +28,12 @@ const (
 )
 
 type recordedCall struct {
-	Method    string
-	Path      string
-	Auth      string
-	RequestID string
-	Body      string
+	Method      string
+	Path        string
+	Auth        string
+	RequestID   string
+	ContentType string
+	Body        string
 }
 
 type fakePayPal struct {
@@ -96,7 +97,8 @@ func (f *fakePayPal) route(w http.ResponseWriter, r *http.Request) {
 	f.calls = append(f.calls, recordedCall{
 		Method: r.Method, Path: r.URL.Path,
 		Auth: r.Header.Get("Authorization"), RequestID: r.Header.Get("PayPal-Request-Id"),
-		Body: string(body),
+		ContentType: r.Header.Get("Content-Type"),
+		Body:        string(body),
 	})
 	f.mu.Unlock()
 

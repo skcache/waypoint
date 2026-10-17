@@ -124,6 +124,9 @@ func TestCaptureFlowVerifiesOutcome(t *testing.T) {
 	if len(calls) != 1 || calls[0].RequestID != "req-cap-1" {
 		t.Fatalf("capture calls = %+v", calls)
 	}
+	if calls[0].ContentType != "application/json" || calls[0].Body != "{}" {
+		t.Fatalf("empty-body POST must still be JSON (415 trap): content-type=%q body=%q", calls[0].ContentType, calls[0].Body)
+	}
 	rec, err := store.Load("ORDERUNIT001")
 	if err != nil || rec.State != StateCapturedVerified || rec.CaptureID != "CAPTUREUNIT001" || rec.CaptureRequestID != "req-cap-1" {
 		t.Fatalf("record = %+v, %v", rec, err)
