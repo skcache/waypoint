@@ -665,8 +665,9 @@ func TestReconcileAfterRestartDemotesInFlightWithoutNewCapture(t *testing.T) {
 	approve(t, svc, order.ID)
 
 	// Simulate the crash window: the durable begin committed, but the
-	// outbound call and its classification never happened.
-	if _, err := store.InsertCaptureOp(context.Background(), order.ID, "req-crash-1", "fp-crash-1"); err != nil {
+	// outbound call and its classification never happened. TTL 0 records no
+	// lease — a crashed owner that never got a lease is treated as abandoned.
+	if _, err := store.InsertCaptureOp(context.Background(), order.ID, "req-crash-1", "fp-crash-1", "worker-crashed", 0); err != nil {
 		t.Fatalf("simulate crash-window capture begin: %v", err)
 	}
 	if got := detailFor(t, store, order.ID).Order.Status; got != merchant.StatusCaptureInFlight {
@@ -759,5 +760,173 @@ func TestSameIDRetryWindowBoundRefusesStaleRetry(t *testing.T) {
 				t.Fatalf("request id = %q, want %q", op.ProviderRequestID, requestID)
 			}
 		}
+	}
+}
+
+// The stored CAPTURE fingerprint must equal an independent digest over the
+// canonical outbound operation (scheme, local order, provider order, amount,
+// currency, request id) and must materially depend on amount and currency.
+func TestCaptureFingerprintMatchesCanonicalFinancialOperation(t *testing.T) {
+	store := newFixtureStore(t)
+	fake := &fakePayPal{
+		getFn: func(orderID string) (*paypal.Order, error) {
+			return approvedOrder(orderID, "USD", "12.34"), nil
+		},
+		captureFn: func(orderID, _ string) (*paypal.Order, error) {
+			return completedOrder(orderID, "CAP-TEST-FP", "USD", "12.34"), nil
+		},
+	}
+	svc := merchant.NewService(store, fake, merchant.FaultNone, "")
+	order := newOrder(t, store, svc, 1)
+	approve(t, svc, order.ID)
+	if _, err := svc.Capture(context.Background(), order.ID); err != nil {
+		t.Fatalf("capture: %v", err)
+	}
+
+	d := detailFor(t, store, order.ID)
+	var cap *merchant.Operation
+	for i := range d.Operations {
+		if d.Operations[i].Type == merchant.OpCapture {
+			cap = &d.Operations[i]
+		}
+	}
+	if cap == nil {
+		t.Fatal("capture operation missing")
+	}
+	providerOrderID := d.Order.ProviderOrderID
+	if want := canonicalFP("waypoint.merchant.capture.v1", order.ID, providerOrderID, "1234", "USD", cap.ProviderRequestID); cap.PayloadFingerprint != want {
+		t.Fatalf("stored capture fingerprint %s does not match the canonical digest %s", cap.PayloadFingerprint, want)
+	}
+	if cap.PayloadFingerprint == canonicalFP("waypoint.merchant.capture.v1", order.ID, providerOrderID, "1235", "USD", cap.ProviderRequestID) {
+		t.Fatal("capture fingerprint does not cover the amount")
+	}
+	if cap.PayloadFingerprint == canonicalFP("waypoint.merchant.capture.v1", order.ID, providerOrderID, "1234", "EUR", cap.ProviderRequestID) {
+		t.Fatal("capture fingerprint does not cover the currency")
+	}
+}
+
+// M2-P1 regression (sequential form): a recovery worker must NOT demote or
+// retry an attempt whose owner lease is still live — only an expired lease
+// (crashed owner) permits takeover, and takeover must keep the request id.
+func TestReconcileRefusesLiveLeaseAndTakesOverExpiredLease(t *testing.T) {
+	store := newFixtureStore(t)
+	fake := &fakePayPal{
+		getFn: func(orderID string) (*paypal.Order, error) {
+			return approvedOrder(orderID, "USD", "12.34"), nil
+		},
+		captureFn: func(orderID, _ string) (*paypal.Order, error) {
+			return completedOrder(orderID, "CAP-TEST-LEASE", "USD", "12.34"), nil
+		},
+	}
+	svc := merchant.NewService(store, fake, merchant.FaultNone, "")
+	order := newOrder(t, store, svc, 1)
+	approve(t, svc, order.ID)
+
+	// Worker A began a capture and is (conceptually) still running: the op is
+	// IN_FLIGHT with a live lease.
+	if _, err := store.InsertCaptureOp(context.Background(), order.ID, "req-lease-1", "fp-lease-1", "worker-A", 5*time.Minute); err != nil {
+		t.Fatalf("simulate worker A capture begin: %v", err)
+	}
+
+	// Worker B (a different service instance) must refuse to touch it.
+	svcB := merchant.NewService(store, fake, merchant.FaultNone, "")
+	if _, err := svcB.Reconcile(context.Background(), order.ID); err == nil || !strings.Contains(err.Error(), "actively owned") {
+		t.Fatalf("reconcile = %v, want refusal for a live lease", err)
+	}
+	if got := detailFor(t, store, order.ID).Order.Status; got != merchant.StatusCaptureInFlight {
+		t.Fatalf("status = %s; a live-lease refusal must not change state", got)
+	}
+	if _, err := svcB.Capture(context.Background(), order.ID); err == nil || !strings.Contains(err.Error(), "actively owned") {
+		t.Fatalf("capture = %v, want refusal for a live lease", err)
+	}
+	if len(fake.captureCalls) != 0 {
+		t.Fatalf("capture calls = %d; nothing may be sent while a live owner exists", len(fake.captureCalls))
+	}
+
+	// The owner has now demonstrably stopped: its lease expired.
+	ctx := context.Background()
+	if _, err := store.Pool().Exec(ctx, `
+		UPDATE merchant_operations SET lease_expires_at = now() - interval '1 second'
+		 WHERE order_id = $1::uuid AND operation_type = 'CAPTURE'`, order.ID); err != nil {
+		t.Fatalf("expire lease: %v", err)
+	}
+
+	updated, err := svcB.Reconcile(ctx, order.ID)
+	if err == nil {
+		t.Fatal("reconcile after lease expiry must still be unresolved (no capture evidence yet)")
+	}
+	if updated.Status != merchant.StatusCaptureOutcomeUnknown {
+		t.Fatalf("status = %s, want CAPTURE_OUTCOME_UNKNOWN after expired-lease demotion", updated.Status)
+	}
+
+	// Takeover sends the SAME request id, and the op now records worker B.
+	updated, err = svcB.Capture(ctx, order.ID)
+	if err != nil {
+		t.Fatalf("takeover capture: %v", err)
+	}
+	if updated.Status != merchant.StatusCapturedVerified {
+		t.Fatalf("status = %s, want CAPTURED_VERIFIED", updated.Status)
+	}
+	if len(fake.captureCalls) != 1 || fake.captureCalls[0] != "req-lease-1" {
+		t.Fatalf("capture calls = %v, want exactly one send reusing req-lease-1", fake.captureCalls)
+	}
+	for _, op := range detailFor(t, store, order.ID).Operations {
+		if op.Type == merchant.OpCapture && op.OwnerID != svcB.InstanceID() {
+			t.Fatalf("owner after takeover = %q, want %q", op.OwnerID, svcB.InstanceID())
+		}
+	}
+}
+
+// M2-P1 regression (concurrent form, deterministic): while worker A's capture
+// call is genuinely in flight (blocked inside the provider), worker B's
+// reconcile and capture attempts must both be refused and send nothing;
+// A then completes normally and seals the capture.
+func TestRecoveryWorkerCannotRaceActiveCapture(t *testing.T) {
+	store := newFixtureStore(t)
+	started := make(chan struct{})
+	release := make(chan struct{})
+	fake := &fakePayPal{
+		getFn: func(orderID string) (*paypal.Order, error) {
+			return approvedOrder(orderID, "USD", "12.34"), nil
+		},
+		captureFn: func(orderID, _ string) (*paypal.Order, error) {
+			close(started)
+			<-release
+			return completedOrder(orderID, "CAP-TEST-RACE", "USD", "12.34"), nil
+		},
+	}
+	svcA := merchant.NewService(store, fake, merchant.FaultNone, "")
+	order := newOrder(t, store, svcA, 1)
+	approve(t, svcA, order.ID)
+
+	type result struct {
+		order merchant.Order
+		err   error
+	}
+	done := make(chan result, 1)
+	go func() {
+		o, err := svcA.Capture(context.Background(), order.ID)
+		done <- result{o, err}
+	}()
+	<-started // A is now inside the provider call; its lease is live.
+
+	svcB := merchant.NewService(store, fake, merchant.FaultNone, "")
+	if _, err := svcB.Reconcile(context.Background(), order.ID); err == nil || !strings.Contains(err.Error(), "actively owned") {
+		t.Fatalf("reconcile during a live call = %v, want refusal", err)
+	}
+	if _, err := svcB.Capture(context.Background(), order.ID); err == nil || !strings.Contains(err.Error(), "actively owned") {
+		t.Fatalf("capture during a live call = %v, want refusal", err)
+	}
+	if len(fake.captureCalls) != 1 {
+		t.Fatalf("capture calls = %d; only worker A's call may exist", len(fake.captureCalls))
+	}
+
+	close(release)
+	res := <-done
+	if res.err != nil {
+		t.Fatalf("worker A capture: %v", res.err)
+	}
+	if res.order.Status != merchant.StatusCapturedVerified {
+		t.Fatalf("status = %s, want CAPTURED_VERIFIED", res.order.Status)
 	}
 }

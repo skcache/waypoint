@@ -2,11 +2,22 @@ package merchant_test
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"strings"
 	"testing"
 
 	"github.com/skcache/waypoint/apps/api/internal/merchant"
 )
+
+// canonicalFP is an INDEPENDENT reimplementation of the fixture's payload
+// fingerprint contract (sha256 over 0x1f-joined parts). The tests below pin
+// the exact canonical part lists so a change to what the stored fingerprint
+// covers is a conscious, reviewed change — not silent drift.
+func canonicalFP(parts ...string) string {
+	h := sha256.Sum256([]byte(strings.Join(parts, "\x1f")))
+	return hex.EncodeToString(h[:])
+}
 
 // rawExec runs one statement expected to fail, and returns the error text.
 func rawExecErr(t *testing.T, store *merchant.Store, sql string, args ...any) string {
@@ -110,11 +121,13 @@ func TestMerchantSchemaGuards(t *testing.T) {
 	})
 }
 
-// The payload fingerprint must cover the exact canonical financial operation.
-// Two orders differing only in quantity (and therefore amount) must never
-// share a fingerprint; the same product at the same quantity must derive one
-// deterministically from its content (amount and currency included).
-func TestCreateFingerprintCoversAmountAndCurrency(t *testing.T) {
+// The payload fingerprint must represent the exact canonical outbound
+// financial operation. Rather than only asserting that values differ, these
+// checks pin the canonical part list: the stored fingerprint equals an
+// independently recomputed digest over (scheme, product, quantity, total,
+// currency, request id) — and materially depends on amount and currency,
+// since swapping either changes the digest.
+func TestCreateFingerprintMatchesCanonicalFinancialOperation(t *testing.T) {
 	store := newFixtureStore(t)
 	ctx := context.Background()
 
@@ -122,18 +135,28 @@ func TestCreateFingerprintCoversAmountAndCurrency(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create qty 1: %v", err)
 	}
+	if want := canonicalFP("waypoint.merchant.create.v1", "maple-mug", "1", "1234", "USD", "fp-req-1"); op1.PayloadFingerprint != want {
+		t.Fatalf("stored fingerprint %s does not match the canonical financial operation digest %s", op1.PayloadFingerprint, want)
+	}
+	// Amount isolation: the same operation with any other total must digest
+	// differently — proving the amount is materially covered.
+	if op1.PayloadFingerprint == canonicalFP("waypoint.merchant.create.v1", "maple-mug", "1", "1235", "USD", "fp-req-1") {
+		t.Fatal("fingerprint does not cover the amount: changing only the total left the digest unchanged")
+	}
+	// Currency isolation.
+	if op1.PayloadFingerprint == canonicalFP("waypoint.merchant.create.v1", "maple-mug", "1", "1234", "EUR", "fp-req-1") {
+		t.Fatal("fingerprint does not cover the currency: changing only the currency left the digest unchanged")
+	}
+
+	// A different quantity changes only the amount-bearing parts and must
+	// still digest as the exact canonical operation for that order.
 	_, op2, err := store.CreateLocalOrder(ctx, testTrace, "maple-mug", 2, "fp-req-2")
 	if err != nil {
 		t.Fatalf("create qty 2: %v", err)
 	}
-	if len(op1.PayloadFingerprint) != 64 || len(op2.PayloadFingerprint) != 64 {
-		t.Fatalf("fingerprints must be sha256 hex: %q, %q", op1.PayloadFingerprint, op2.PayloadFingerprint)
+	if want := canonicalFP("waypoint.merchant.create.v1", "maple-mug", "2", "2468", "USD", "fp-req-2"); op2.PayloadFingerprint != want {
+		t.Fatalf("stored fingerprint %s does not match the canonical digest %s for the qty-2 order", op2.PayloadFingerprint, want)
 	}
-	if op1.PayloadFingerprint == op2.PayloadFingerprint {
-		t.Fatal("fingerprints collide across different amounts; the fingerprint must cover the total and currency")
-	}
-	// The stored order total must be the same value the fingerprint covers:
-	// recompute for qty 1 and check the recorded total matches the catalog.
 	if one.TotalMinor != mugPrice {
 		t.Fatalf("total = %d, want %d", one.TotalMinor, mugPrice)
 	}

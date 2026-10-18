@@ -29,6 +29,11 @@ const maxCaptureAttempts = 3
 // capture, so the operation becomes manual reconciliation instead.
 const defaultSameIDRetryWindow = 6 * time.Hour
 
+// defaultCaptureLeaseTTL bounds how long a worker owns an in-flight capture
+// attempt without renewal. It comfortably exceeds the provider HTTP timeout
+// (30s) so a live, merely-slow call is never mistaken for an abandoned one.
+const defaultCaptureLeaseTTL = 90 * time.Second
+
 // OrdersAPI is the provider surface the fixture depends on. The concrete
 // implementation is the sandbox-only paypal.Client; tests substitute a
 // TEST-ONLY fake. Nothing in this package accepts a non-sandbox provider.
@@ -46,6 +51,8 @@ type Service struct {
 	fault             string
 	incidentDir       string
 	sameIDRetryWindow time.Duration
+	instanceID        string
+	leaseTTL          time.Duration
 }
 
 // NewService wires the fixture. fault selects the seeded defect (FaultNone or
@@ -55,7 +62,24 @@ func NewService(store *Store, api OrdersAPI, fault, incidentDir string) *Service
 	if fault == "" {
 		fault = FaultNone
 	}
-	return &Service{store: store, api: api, fault: fault, incidentDir: incidentDir, sameIDRetryWindow: defaultSameIDRetryWindow}
+	return &Service{
+		store:             store,
+		api:               api,
+		fault:             fault,
+		incidentDir:       incidentDir,
+		sameIDRetryWindow: defaultSameIDRetryWindow,
+		instanceID:        newInstanceID(),
+		leaseTTL:          defaultCaptureLeaseTTL,
+	}
+}
+
+// newInstanceID identifies this process as the owner of capture attempts.
+func newInstanceID() string {
+	id, err := paypal.NewRequestID()
+	if err != nil {
+		return "merchant-unknown"
+	}
+	return "merchant-" + id[:8]
 }
 
 // SetSameIDRetryWindow overrides the same-id retry window (operator/test
@@ -65,6 +89,17 @@ func (s *Service) SetSameIDRetryWindow(d time.Duration) {
 		s.sameIDRetryWindow = d
 	}
 }
+
+// SetCaptureLeaseTTL overrides the capture ownership lease TTL (test knob;
+// the default comfortably exceeds the provider HTTP timeout).
+func (s *Service) SetCaptureLeaseTTL(d time.Duration) {
+	if d > 0 {
+		s.leaseTTL = d
+	}
+}
+
+// InstanceID reports this service instance's worker id (tests, diagnostics).
+func (s *Service) InstanceID() string { return s.instanceID }
 
 // Fault reports the configured fault mode (shown in the UI banner).
 func (s *Service) Fault() string { return s.fault }
@@ -437,15 +472,20 @@ func (s *Service) Capture(ctx context.Context, orderID string) (Order, error) {
 // beginCaptureAttempt selects or creates the durable capture operation. A
 // new attempt gets a fresh operation; a retry of an unresolved attempt reuses
 // the ORIGINAL operation row and request id (never a fresh identity), bounded
-// by both the attempt limit and the same-id retry window.
+// by both the attempt limit and the same-id retry window, and fenced by the
+// ownership lease: a retry may only proceed when the current owner is
+// demonstrably gone (UNKNOWN state, or IN_FLIGHT with an expired lease).
 func (s *Service) beginCaptureAttempt(ctx context.Context, order Order) (Operation, error) {
 	active, err := s.store.ActiveCapture(ctx, order.ID)
 	if err != nil {
 		return Operation{}, err
 	}
 	if active != nil {
-		if active.Status == OpStatusInFlight {
-			return Operation{}, fmt.Errorf("%w: a capture attempt is already in flight for order %s (reconcile before retrying)", ErrConflict, order.ID)
+		if active.Status == OpStatusInFlight && leaseIsLive(active) {
+			// Another worker is actively mutating with this very request id.
+			// Racing it is forbidden: no takeover, no new attempt.
+			return Operation{}, fmt.Errorf("%w: capture attempt for order %s is actively owned (worker %s, lease until %s); refusing to race it",
+				ErrConflict, order.ID, active.OwnerID, active.LeaseExpiresAt.UTC().Format(time.RFC3339))
 		}
 		if active.AttemptCount >= maxCaptureAttempts {
 			detail, _ := json.Marshal(map[string]any{"attempts": active.AttemptCount, "provider_request_id": active.ProviderRequestID})
@@ -467,7 +507,7 @@ func (s *Service) beginCaptureAttempt(ctx context.Context, order Order) (Operati
 			return Operation{}, fmt.Errorf("%w: same-id retry window (%s) exceeded for order %s; manual reconciliation required (request id %s preserved)",
 				ErrConflict, s.sameIDRetryWindow, order.ID, active.ProviderRequestID)
 		}
-		if err := s.store.BeginCaptureRetry(ctx, order.ID, active.ID); err != nil {
+		if err := s.store.BeginCaptureRetry(ctx, order.ID, active.ID, s.instanceID, s.leaseTTL); err != nil {
 			return Operation{}, err
 		}
 		return *active, nil
@@ -481,7 +521,13 @@ func (s *Service) beginCaptureAttempt(ctx context.Context, order Order) (Operati
 	// provider order identity, amount, currency, and the stable request id.
 	fp := payloadFingerprint("waypoint.merchant.capture.v1", order.ID, order.ProviderOrderID,
 		strconv.FormatInt(order.TotalMinor, 10), order.Currency, requestID)
-	return s.store.InsertCaptureOp(ctx, order.ID, requestID, fp)
+	return s.store.InsertCaptureOp(ctx, order.ID, requestID, fp, s.instanceID, s.leaseTTL)
+}
+
+// leaseIsLive reports whether an IN_FLIGHT operation is still owned by a
+// possibly-running worker: a lease exists and has not expired.
+func leaseIsLive(op *Operation) bool {
+	return op.LeaseExpiresAt != nil && op.LeaseExpiresAt.After(time.Now())
 }
 
 // Reconcile folds read-only provider state into local state for an unresolved
@@ -533,11 +579,20 @@ func (s *Service) Reconcile(ctx context.Context, orderID string) (Order, error) 
 		return s.store.MarkCaptureVerifiedRecovered(ctx, orderID, active.ID, captureID, detail)
 	}
 
-	// No matching COMPLETED capture. Record exactly what was observed — and
-	// claim nothing about the mutation's effect.
+	// No matching COMPLETED capture. Before demoting an IN_FLIGHT attempt,
+	// enforce the ownership rule: a LIVE lease means another worker may be
+	// mid-mutation right now — demoting it (or anything downstream that would
+	// start a retry) would race a genuinely active payment operation.
+	if active.Status == OpStatusInFlight && leaseIsLive(active) {
+		return Order{}, fmt.Errorf("%w: capture outcome for order %s is unresolved and the attempt is actively owned (worker %s, lease until %s); refusing to demote or race a live mutation — retry after the lease expires or resolve manually",
+			ErrConflict, orderID, active.OwnerID, active.LeaseExpiresAt.UTC().Format(time.RFC3339))
+	}
+
+	// Record exactly what was observed — and claim nothing about the
+	// mutation's effect.
 	note := "provider shows no matching COMPLETED capture; outcome remains unresolved (a status read cannot prove the outbound capture had no effect)"
 	if active.Status == OpStatusInFlight {
-		note = "attempt was IN_FLIGHT (process restart); read-only check found no matching COMPLETED capture; demoted to unresolved with the request id preserved"
+		note = "attempt was IN_FLIGHT with an expired lease (crashed/restarted owner); read-only check found no matching COMPLETED capture; demoted to unresolved with the request id preserved"
 	}
 	detail, _ := json.Marshal(map[string]any{
 		"provider_status":     res.Status,

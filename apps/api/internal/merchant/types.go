@@ -104,6 +104,8 @@ type Operation struct {
 	ProviderOrderID    string     `json:"provider_order_id,omitempty"`
 	ProviderCaptureID  string     `json:"provider_capture_id,omitempty"`
 	AttemptCount       int        `json:"attempt_count"`
+	OwnerID            string     `json:"owner_id,omitempty"`
+	LeaseExpiresAt     *time.Time `json:"lease_expires_at,omitempty"`
 	FirstAttemptedAt   time.Time  `json:"first_attempted_at"`
 	LastCheckedAt      *time.Time `json:"last_checked_at,omitempty"`
 	CreatedAt          time.Time  `json:"created_at"`

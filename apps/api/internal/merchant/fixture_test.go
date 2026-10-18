@@ -23,13 +23,35 @@ import (
 // integration tests on purpose: both suites drop and rebuild their schema,
 // and two packages doing that to one database in parallel (go test ./...)
 // would corrupt each other's runs. The database is created on demand.
+// This is the LOCAL development default (matching docker-compose); override
+// with TEST_DATABASE_URL, or rely on DATABASE_URL derivation below.
 const defaultTestDSN = "postgres://waypoint:waypoint@localhost:5433/waypoint_merchant_test?sslmode=disable"
 
 var dbNamePattern = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
 
+// deriveTestDSN swaps the database name in a base DSN, keeping host, port,
+// credentials and options — so `go test` works with only DATABASE_URL set
+// (make targets load .env automatically) while no credential is ever
+// committed to Git.
+func deriveTestDSN(base, dbName string) (string, bool) {
+	u, err := url.Parse(base)
+	if err != nil {
+		return "", false
+	}
+	u.Path = "/" + dbName
+	return u.String(), true
+}
+
 func testDSN(t *testing.T) string {
 	t.Helper()
 	dsn := os.Getenv("TEST_DATABASE_URL")
+	if dsn == "" {
+		if base := os.Getenv("DATABASE_URL"); base != "" {
+			if derived, ok := deriveTestDSN(base, "waypoint_merchant_test"); ok {
+				dsn = derived
+			}
+		}
+	}
 	if dsn == "" {
 		dsn = defaultTestDSN
 	}

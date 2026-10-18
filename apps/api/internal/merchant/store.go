@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -53,6 +54,16 @@ func (s *Store) Close() {
 // Pool exposes the underlying pool (readiness checks, tests).
 func (s *Store) Pool() *pgxpool.Pool { return s.pool }
 
+// leaseExpiry converts a lease TTL into an absolute expiry; TTLs <= 0 record
+// no lease (NULL), which recovery treats as abandoned.
+func leaseExpiry(ttl time.Duration) *time.Time {
+	if ttl <= 0 {
+		return nil
+	}
+	t := time.Now().Add(ttl)
+	return &t
+}
+
 const orderColumns = `id::text, trace_id::text, product_id, quantity, total_minor, currency,
 	status, coalesce(provider_order_id, ''),
 	coalesce(approval_url, ''), created_at, updated_at`
@@ -66,13 +77,14 @@ func scanOrder(row pgx.Row) (Order, error) {
 
 const operationColumns = `id::text, order_id::text, operation_type, provider_request_id,
 	payload_fingerprint, status, coalesce(provider_order_id, ''),
-	coalesce(provider_capture_id, ''), attempt_count, first_attempted_at,
-	last_checked_at, created_at, updated_at`
+	coalesce(provider_capture_id, ''), attempt_count, owner_id, lease_expires_at,
+	first_attempted_at, last_checked_at, created_at, updated_at`
 
 func scanOperation(row pgx.Row) (Operation, error) {
 	var op Operation
 	err := row.Scan(&op.ID, &op.OrderID, &op.Type, &op.ProviderRequestID, &op.PayloadFingerprint,
 		&op.Status, &op.ProviderOrderID, &op.ProviderCaptureID, &op.AttemptCount,
+		&op.OwnerID, &op.LeaseExpiresAt,
 		&op.FirstAttemptedAt, &op.LastCheckedAt, &op.CreatedAt, &op.UpdatedAt)
 	return op, err
 }
@@ -363,11 +375,13 @@ func (s *Store) ActiveCapture(ctx context.Context, orderID string) (*Operation, 
 
 // InsertCaptureOp durably begins a capture: in one transaction it flips the
 // order to CAPTURE_IN_FLIGHT and inserts the CAPTURE operation with its
-// stable request id, BEFORE any outbound capture call. If another capture
+// stable request id, BEFORE any outbound capture call. The owner id and lease
+// record which worker owns the attempt and until when — recovery workers may
+// only demote or take it over once the lease has expired. If another capture
 // operation is already alive, the partial unique index rejects the insert
 // (`merchant_operations_one_active_capture`) — concurrent attempts cannot
 // both claim the right to call the provider.
-func (s *Store) InsertCaptureOp(ctx context.Context, orderID, requestID, payloadFingerprint string) (Operation, error) {
+func (s *Store) InsertCaptureOp(ctx context.Context, orderID, requestID, payloadFingerprint, ownerID string, leaseTTL time.Duration) (Operation, error) {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return Operation{}, err
@@ -393,10 +407,10 @@ func (s *Store) InsertCaptureOp(ctx context.Context, orderID, requestID, payload
 	}
 
 	op, err := scanOperation(tx.QueryRow(ctx, `
-		INSERT INTO merchant_operations (order_id, operation_type, provider_request_id, payload_fingerprint, status)
-		VALUES ($1::uuid, $2, $3, $4, $5)
+		INSERT INTO merchant_operations (order_id, operation_type, provider_request_id, payload_fingerprint, status, owner_id, lease_expires_at)
+		VALUES ($1::uuid, $2, $3, $4, $5, $6, $7)
 		RETURNING `+operationColumns,
-		orderID, OpCapture, requestID, payloadFingerprint, OpStatusInFlight))
+		orderID, OpCapture, requestID, payloadFingerprint, OpStatusInFlight, ownerID, leaseExpiry(leaseTTL)))
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
@@ -457,10 +471,18 @@ func (s *Store) TouchLastChecked(ctx context.Context, operationID string) error 
 }
 
 // BeginCaptureRetry durably re-enters the in-flight state for an existing
-// unresolved capture operation, reusing its preserved request id. The order
-// must currently be APPROVED (nothing captured before), CAPTURE_OUTCOME_UNKNOWN
-// or RECONCILIATION_REQUIRED; the operation must be UNKNOWN.
-func (s *Store) BeginCaptureRetry(ctx context.Context, orderID, operationID string) error {
+// unresolved capture operation, reusing its preserved request id. Two cases
+// are permitted, both fenced by the lease:
+//
+//   - the operation is UNKNOWN (a previous attempt ended unresolved): the
+//     retry claims ownership with a fresh lease;
+//   - the operation is IN_FLIGHT but its lease has expired (or was never
+//     set): the crashed owner has demonstrably stopped, so the retry TAKES
+//     OVER the same operation — new owner, new lease, SAME request id.
+//
+// An IN_FLIGHT operation with a LIVE lease is refused: another worker may be
+// mid-mutation and must not be raced.
+func (s *Store) BeginCaptureRetry(ctx context.Context, orderID, operationID, ownerID string, leaseTTL time.Duration) error {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return err
@@ -469,14 +491,17 @@ func (s *Store) BeginCaptureRetry(ctx context.Context, orderID, operationID stri
 
 	tag, err := tx.Exec(ctx, `
 		UPDATE merchant_operations
-		   SET attempt_count = attempt_count + 1, last_checked_at = now(), updated_at = now()
-		 WHERE id = $1::uuid AND operation_type = 'CAPTURE' AND status = 'UNKNOWN'`,
-		operationID)
+		   SET attempt_count = attempt_count + 1, owner_id = $2, lease_expires_at = $3,
+		       last_checked_at = now(), updated_at = now()
+		 WHERE id = $1::uuid AND operation_type = 'CAPTURE'
+		   AND (status = 'UNKNOWN'
+		        OR (status = 'IN_FLIGHT' AND (lease_expires_at IS NULL OR lease_expires_at < now())))`,
+		operationID, ownerID, leaseExpiry(leaseTTL))
 	if err != nil {
 		return err
 	}
 	if tag.RowsAffected() != 1 {
-		return fmt.Errorf("%w: capture operation %s is not in an unresolved state", ErrConflict, operationID)
+		return fmt.Errorf("%w: capture operation %s is not retryable (unresolved, or in flight with an expired lease)", ErrConflict, operationID)
 	}
 
 	tag, err = tx.Exec(ctx, `
