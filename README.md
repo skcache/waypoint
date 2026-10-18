@@ -6,24 +6,28 @@ independently verifies that the repairs preserve correct financial state.
 
 Built for the [PayPal AI Hackathon 2026](https://paypalaihackathon.devpost.com/).
 
-> **Status: early V2 prototype (milestone M1 in progress).** The repository contains:
+> **Status: early V2 prototype (milestones M1–M2 implemented).** The repository contains:
 > a runnable **merchant checkout fixture** (Go + PostgreSQL) that performs real PayPal
 > **Sandbox** orders with a durable operation journal and a deliberately injectable
-> provider-request defect; the Go API with PostgreSQL migrations; and the previous static
-> three-route web preview, which will be replaced by the V2 incident console in a later
-> milestone. The AI investigator, repair agent, and independent financial oracle are
-> **not built yet**. Nothing here processes real money; all provider traffic is sandbox.
+> provider-request defect; an independent **deterministic financial-correctness oracle**
+> with a fault harness and knowingly-unsafe patch seeds it rejects; the Go API with
+> PostgreSQL migrations; and the previous static three-route web preview, which will be
+> replaced by the V2 incident console in a later milestone. The AI investigator and
+> repair agent are **not built yet**. Nothing here processes real money; all provider
+> traffic is sandbox.
 
 ## Current status
 
 | Area | State |
 |---|---|
-| Merchant checkout fixture (`apps/api/cmd/merchant`) | **Implemented (M1)** — server-owned amounts, durable operation identity committed before outbound calls, real PayPal Sandbox order creation, buyer-approval redirect flow, server-side capture with provider-evidence gating, redacted incident artifacts, `MERCHANT_FAULT=F1` reproducible provider-request failure |
+| Merchant checkout fixture (`apps/api/cmd/merchant`) | **Implemented (M1)** — server-owned amounts, durable operation identity committed before outbound calls, real PayPal Sandbox order creation, buyer-approval redirect flow, server-side capture with provider-evidence gating, redacted incident artifacts, `MERCHANT_FAULT=F1` reproducible provider-request failure; binds to `127.0.0.1` only |
+| Financial oracle (`apps/api/internal/oracle`) | **Implemented (M2)** — deterministic I1–I12 invariant engine over the durable journal and trusted provider observations; verdicts `VERIFIED_FOR_TESTED_SCENARIOS` / `UNSAFE` / `INCONCLUSIVE`; NOT_APPLICABLE for unexercised invariants; redacted proof bundles |
+| Fault harness + unsafe seeds (`apps/api/internal/replay`) | **Implemented (M2)** — scripted deterministic provider (tier F), scenarios for lost response, duplicate delivery, concurrency, restart, stale reads; two knowingly-unsafe seed patches (fresh-identity reissue; wrong-amount acceptance) rejected by the oracle with counterexamples |
 | Go API (`apps/api`) | `GET /healthz`, `GET /readyz`, and the legacy V1 `POST /api/v1/intents/draft` endpoint (kept running; the V1 product direction is retired) |
-| PostgreSQL | **Implemented** — versioned migrations `0001`–`0004` (fixture tables in `0004`); `/readyz` reports database readiness |
-| PayPal Sandbox (Orders v2) | **Verified** — real sandbox order creation and a provider-rejected malformed request observed end-to-end (see below); the developer-only feasibility spike CLI is retained under `cmd/paypal-spike` |
+| PostgreSQL | **Implemented** — versioned migrations `0001`–`0005` (fixture tables in `0004`, capture-ownership lease in `0005`); `/readyz` reports database readiness |
+| PayPal Sandbox (Orders v2) | **Verified** — real sandbox order creation, genuine buyer approval, provider-confirmed capture (`COMPLETED`), and a provider-rejected malformed request observed end-to-end; the developer-only feasibility spike CLI is retained under `cmd/paypal-spike` |
 | Web app (`apps/web`) | Static V1 preview pages; will be rebuilt around real incident data |
-| AI repair loop, financial oracle, evaluation | Planned — not implemented |
+| AI investigator + repair agent, full evaluation | Planned — not implemented (milestone M3+) |
 
 ## Merchant fixture (the M1 vertical slice)
 
@@ -72,10 +76,40 @@ refused until the provider actually reports `APPROVED`.
 
 ### Observed provider evidence (2026-10-17, sandbox)
 
-- Valid path: order created, status `BUYER_APPROVAL_PENDING` (capture requires manual
-  sandbox-buyer approval; evidence is recorded locally and never fabricated).
+- Valid path: real sandbox order created, buyer approval observed as `APPROVED`
+  (payer confirmed), then a provider-confirmed capture
+  (`COMPLETED`, exact amount/currency, capture id recorded locally). Evidence is
+  recorded locally and never fabricated.
 - Fault path (F1): real provider rejection `422 UNPROCESSABLE_ENTITY` /
   `DECIMAL_PRECISION` for the malformed six-decimal amount.
+
+## Financial oracle (the M2 vertical slice)
+
+`apps/api/internal/oracle` is an independently authored, deterministic invariant
+engine. It judges **only** durable evidence — the PostgreSQL journal read with its
+own SQL, plus provider observations recorded by the harness (or a real provider) —
+and returns `VERIFIED_FOR_TESTED_SCENARIOS`, `UNSAFE`, or `INCONCLUSIVE` per run,
+with every I1–I12 invariant listed (unexercised ones are `NOT_APPLICABLE`, never
+fabricated passes). The AI component is never the authority on correctness, and a
+scope-guard test asserts the oracle's dependency graph stays outside candidate-patch
+scope.
+
+The M2 fault harness (`apps/api/internal/replay`) runs deterministic scenarios
+against a scripted provider (tier F, local injection): lost capture response,
+duplicate delivery with idempotent request ids, concurrent deliveries, process
+restart, live-owner lease refusal, and stale reads. Two **knowingly unsafe seed
+patches** ship with it — one reissues a capture under a fresh identity after an
+ambiguous outcome, one accepts a wrong-amount provider echo — and the oracle
+rejects both with concrete counterexamples.
+
+```bash
+make db-up                                # PostgreSQL
+cd apps/api
+go run ./cmd/oracle -out /tmp/bundles -revision "$(git rev-parse --short HEAD)"
+# => 8 scenarios | verified=5 unsafe=2 inconclusive=1 | unexpected=0
+# redacted proof bundles land in /tmp/bundles (see
+# internal/oracle/testdata/sample-bundles/ for committed samples)
+```
 
 ## Local development
 
@@ -96,9 +130,9 @@ make lint               # go vet + gofmt check, ESLint
 make build-web          # production build of the web app
 ```
 
-The database-backed suites (`internal/store/postgres`, `internal/merchant`) run against
-real PostgreSQL in **separate databases** (suffix `_test` enforced; the merchant suite
-creates `waypoint_merchant_test` on demand). There are no in-memory substitutes.
+The database-backed suites (`internal/store/postgres`, `internal/merchant`,
+`internal/oracle`) run against real PostgreSQL in **separate databases** (suffix
+`_test` enforced; created on demand). There are no in-memory substitutes.
 
 ## PayPal sandbox feasibility spike (developer-only)
 
