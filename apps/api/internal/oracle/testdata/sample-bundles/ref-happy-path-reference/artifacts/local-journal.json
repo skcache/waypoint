@@ -1,0 +1,101 @@
+{
+  "events": [
+    {
+      "ID": 1,
+      "OrderID": "44c3b9e8-a002-45c3-bf85-c7bfdce0c991",
+      "Source": "API",
+      "EventType": "ORDER_CREATED",
+      "Tier": "R",
+      "Detail": "{\"currency\": \"USD\", \"quantity\": 1, \"product_id\": \"maple-mug\", \"total_minor\": 1234, \"product_name\": \"Maple Ceramic Mug\", \"provider_request_id\": \"fe695a83-9c71-45a3-befd-bb2fefb2a475\"}",
+      "CreatedAt": "2026-10-18T11:31:43.019616-07:00"
+    },
+    {
+      "ID": 2,
+      "OrderID": "44c3b9e8-a002-45c3-bf85-c7bfdce0c991",
+      "Source": "PAYPAL",
+      "EventType": "PROVIDER_ORDER_CREATED",
+      "Tier": "R",
+      "Detail": "{\"provider_order_id\": \"ORD-SCRIPT-0001\", \"approval_url_present\": false}",
+      "CreatedAt": "2026-10-18T11:31:43.024397-07:00"
+    },
+    {
+      "ID": 3,
+      "OrderID": "44c3b9e8-a002-45c3-bf85-c7bfdce0c991",
+      "Source": "PAYPAL",
+      "EventType": "PROVIDER_ORDER_OBSERVED",
+      "Tier": "R",
+      "Detail": "{\"payer_id\": \"\", \"provider_status\": \"APPROVED\"}",
+      "CreatedAt": "2026-10-18T11:31:43.028833-07:00"
+    },
+    {
+      "ID": 4,
+      "OrderID": "44c3b9e8-a002-45c3-bf85-c7bfdce0c991",
+      "Source": "API",
+      "EventType": "CAPTURE_ATTEMPT_STARTED",
+      "Tier": "R",
+      "Detail": "{\"provider_order_id\": \"ORD-SCRIPT-0001\", \"provider_request_id\": \"de975488-7b22-43bc-a836-c987b39d2e68\"}",
+      "CreatedAt": "2026-10-18T11:31:43.03196-07:00"
+    },
+    {
+      "ID": 5,
+      "OrderID": "44c3b9e8-a002-45c3-bf85-c7bfdce0c991",
+      "Source": "PAYPAL",
+      "EventType": "PROVIDER_CAPTURE_CONFIRMED",
+      "Tier": "R",
+      "Detail": "{\"currency\": \"USD\", \"capture_id\": \"CAP-SCRIPT-0001\", \"amount_minor\": 1234, \"provider_status\": \"COMPLETED\", \"provider_request_id\": \"de975488-7b22-43bc-a836-c987b39d2e68\"}",
+      "CreatedAt": "2026-10-18T11:31:43.034431-07:00"
+    },
+    {
+      "ID": 6,
+      "OrderID": "44c3b9e8-a002-45c3-bf85-c7bfdce0c991",
+      "Source": "PAYPAL",
+      "EventType": "PROVIDER_ORDER_OBSERVED",
+      "Tier": "R",
+      "Detail": "{\"payer_id\": \"\", \"provider_status\": \"APPROVED\"}",
+      "CreatedAt": "2026-10-18T11:31:43.037841-07:00"
+    }
+  ],
+  "operations": [
+    {
+      "ID": "b0a7d28d-c7b8-4ec1-add5-3162c62fc06a",
+      "OrderID": "44c3b9e8-a002-45c3-bf85-c7bfdce0c991",
+      "Type": "CREATE_ORDER",
+      "ProviderRequestID": "fe695a83-9c71-45a3-befd-bb2fefb2a475",
+      "PayloadFingerprint": "0d61dab2141dd720638be219754e0f74b9995e317ffce24e6613ec73bf27f278",
+      "Status": "SUCCEEDED",
+      "ProviderOrderID": "ORD-SCRIPT-0001",
+      "ProviderCaptureID": "",
+      "AttemptCount": 1,
+      "OwnerID": "",
+      "CreatedAt": "2026-10-18T11:31:43.019616-07:00",
+      "UpdatedAt": "2026-10-18T11:31:43.024397-07:00"
+    },
+    {
+      "ID": "85b36d61-4a15-4f07-b912-b8a44c6962b8",
+      "OrderID": "44c3b9e8-a002-45c3-bf85-c7bfdce0c991",
+      "Type": "CAPTURE",
+      "ProviderRequestID": "de975488-7b22-43bc-a836-c987b39d2e68",
+      "PayloadFingerprint": "9915595c4462412d9098afb53faeebba6c95055678c47990ae71c191818078d8",
+      "Status": "SUCCEEDED",
+      "ProviderOrderID": "",
+      "ProviderCaptureID": "CAP-SCRIPT-0001",
+      "AttemptCount": 1,
+      "OwnerID": "merchant-ef97c16b",
+      "CreatedAt": "2026-10-18T11:31:43.03196-07:00",
+      "UpdatedAt": "2026-10-18T11:31:43.034431-07:00"
+    }
+  ],
+  "orders": [
+    {
+      "ID": "44c3b9e8-a002-45c3-bf85-c7bfdce0c991",
+      "ProductID": "maple-mug",
+      "Quantity": 1,
+      "TotalMinor": 1234,
+      "Currency": "USD",
+      "Status": "CAPTURED_VERIFIED",
+      "ProviderOrderID": "ORD-SCRIPT-0001",
+      "CreatedAt": "2026-10-18T11:31:43.019616-07:00",
+      "UpdatedAt": "2026-10-18T11:31:43.034431-07:00"
+    }
+  ]
+}

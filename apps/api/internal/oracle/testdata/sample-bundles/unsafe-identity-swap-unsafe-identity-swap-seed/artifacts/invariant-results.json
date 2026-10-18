@@ -1,0 +1,99 @@
+{
+  "invariants": [
+    {
+      "id": "I1",
+      "title": "Integer minor units with explicit currency; no floating-point amounts",
+      "status": "PASS",
+      "summary": "all local amounts are minor-unit integers with explicit currency; all provider-bound amounts are exact two-decimal renderings"
+    },
+    {
+      "id": "I2",
+      "title": "Captured amount/currency bound to the server-side order",
+      "status": "PASS",
+      "summary": "every outbound operation carried exactly the server-side order amount and currency"
+    },
+    {
+      "id": "I3",
+      "title": "Browser approval is not capture; COMPLETED requires capture evidence",
+      "status": "PASS",
+      "summary": "every capture attempt is preceded by an observed buyer approval"
+    },
+    {
+      "id": "I4",
+      "title": "Operation identity and request id durable before the outbound call",
+      "status": "FAIL",
+      "summary": "a capture was reissued under a NEW operation identity while an earlier attempt's outcome was not definitely closed",
+      "counterexample": {
+        "first_applied": true,
+        "first_request_id": "49a9c8ad-fb30-442b-8011-360f9bd43250",
+        "first_response_dropped": true,
+        "new_obs_seq": 5,
+        "new_request_id": "a8107d92-5d64-41bb-9b89-d7c0d5a0058f",
+        "order_id": "62df9bfd-c7ea-4c4d-a4f8-6121eb3077a6"
+      }
+    },
+    {
+      "id": "I5",
+      "title": "Ambiguity is never interpreted as definite failure",
+      "status": "FAIL",
+      "summary": "after an ambiguous capture outcome, a NEW capture identity was issued (the ambiguity was treated as failure)",
+      "counterexample": {
+        "ambiguous_obs_seq": 4,
+        "ambiguous_request_id": "49a9c8ad-fb30-442b-8011-360f9bd43250",
+        "new_obs_seq": 5,
+        "new_request_id": "a8107d92-5d64-41bb-9b89-d7c0d5a0058f",
+        "order_ref": "ORD-SCRIPT-0001"
+      }
+    },
+    {
+      "id": "I6",
+      "title": "Completed-capture claims require matching provider evidence",
+      "status": "PASS",
+      "summary": "every completed-capture claim is corroborated by matching provider evidence (order, amount, currency, COMPLETED status)"
+    },
+    {
+      "id": "I7",
+      "title": "One logical order, at most one fulfillment effect and one capture pathway",
+      "status": "FAIL",
+      "summary": "a duplicate capture pathway was created: an earlier capture operation without evidence-backed definite closure was abandoned in favor of a new one",
+      "counterexample": {
+        "capture_operations": 2,
+        "earlier_operation_id": "07924588-8bc4-4159-9598-f2ce1444675c",
+        "earlier_request_id": "49a9c8ad-fb30-442b-8011-360f9bd43250",
+        "earlier_status": "REJECTED",
+        "order_id": "62df9bfd-c7ea-4c4d-a4f8-6121eb3077a6"
+      }
+    },
+    {
+      "id": "I8",
+      "title": "Verified capture cannot silently roll back to pending/failed",
+      "status": "PASS",
+      "summary": "every capture confirmation is terminal in the journal and in the final order status"
+    },
+    {
+      "id": "I9",
+      "title": "Local/provider divergence is explicit, never silently papered over",
+      "status": "PASS",
+      "summary": "every significant local state carries its explicit journal event"
+    },
+    {
+      "id": "I10",
+      "title": "Refund success claims require a verified refund resource",
+      "status": "NOT_APPLICABLE",
+      "summary": "no refund activity in the executed scenarios (refunds are not required for M2)"
+    },
+    {
+      "id": "I11",
+      "title": "Unsafe or inconclusive verification never auto-applies",
+      "status": "PASS",
+      "summary": "no auto-apply/deploy occurred; the verdict is advisory and human-gated"
+    },
+    {
+      "id": "I12",
+      "title": "Evidence provenance is explicit (R/F/S)",
+      "status": "PASS",
+      "summary": "all provider observations carry explicit tiers (scripted interactions labelled F, never R)"
+    }
+  ],
+  "verdict": "UNSAFE"
+}

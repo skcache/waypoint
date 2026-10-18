@@ -1,0 +1,101 @@
+{
+  "events": [
+    {
+      "ID": 1,
+      "OrderID": "ef180af9-74e8-45f4-916c-7848fb2dbb50",
+      "Source": "API",
+      "EventType": "ORDER_CREATED",
+      "Tier": "R",
+      "Detail": "{\"currency\": \"USD\", \"quantity\": 1, \"product_id\": \"maple-mug\", \"total_minor\": 1234, \"product_name\": \"Maple Ceramic Mug\", \"provider_request_id\": \"2af99f66-409f-4d21-a997-c33428e3ecac\"}",
+      "CreatedAt": "2026-10-18T11:31:43.209271-07:00"
+    },
+    {
+      "ID": 2,
+      "OrderID": "ef180af9-74e8-45f4-916c-7848fb2dbb50",
+      "Source": "PAYPAL",
+      "EventType": "PROVIDER_ORDER_CREATED",
+      "Tier": "R",
+      "Detail": "{\"provider_order_id\": \"ORD-SCRIPT-0001\", \"approval_url_present\": false}",
+      "CreatedAt": "2026-10-18T11:31:43.211388-07:00"
+    },
+    {
+      "ID": 3,
+      "OrderID": "ef180af9-74e8-45f4-916c-7848fb2dbb50",
+      "Source": "PAYPAL",
+      "EventType": "PROVIDER_ORDER_OBSERVED",
+      "Tier": "R",
+      "Detail": "{\"payer_id\": \"\", \"provider_status\": \"APPROVED\"}",
+      "CreatedAt": "2026-10-18T11:31:43.214162-07:00"
+    },
+    {
+      "ID": 4,
+      "OrderID": "ef180af9-74e8-45f4-916c-7848fb2dbb50",
+      "Source": "API",
+      "EventType": "CAPTURE_ATTEMPT_STARTED",
+      "Tier": "R",
+      "Detail": "{\"provider_order_id\": \"ORD-SCRIPT-0001\", \"provider_request_id\": \"f7e61927-213f-4900-ba33-3ca554d8d5d4\"}",
+      "CreatedAt": "2026-10-18T11:31:43.216304-07:00"
+    },
+    {
+      "ID": 5,
+      "OrderID": "ef180af9-74e8-45f4-916c-7848fb2dbb50",
+      "Source": "PAYPAL",
+      "EventType": "CAPTURE_OUTCOME_UNKNOWN",
+      "Tier": "R",
+      "Detail": "{\"operation_type\": \"CAPTURE\", \"verification_error\": \"capture response carries no COMPLETED capture with matching amount and currency\", \"provider_request_id\": \"f7e61927-213f-4900-ba33-3ca554d8d5d4\"}",
+      "CreatedAt": "2026-10-18T11:31:43.218066-07:00"
+    },
+    {
+      "ID": 6,
+      "OrderID": "ef180af9-74e8-45f4-916c-7848fb2dbb50",
+      "Source": "PAYPAL",
+      "EventType": "PROVIDER_CAPTURE_CONFIRMED",
+      "Tier": "R",
+      "Detail": "{\"capture_id\": \"CAP-SCRIPT-0001\", \"resolved_by\": \"unsafe-seed-amount-not-validated\"}",
+      "CreatedAt": "2026-10-18T11:31:43.220891-07:00"
+    }
+  ],
+  "operations": [
+    {
+      "ID": "f241a72b-66cd-434d-afcb-895da24ade16",
+      "OrderID": "ef180af9-74e8-45f4-916c-7848fb2dbb50",
+      "Type": "CREATE_ORDER",
+      "ProviderRequestID": "2af99f66-409f-4d21-a997-c33428e3ecac",
+      "PayloadFingerprint": "95ca7080d5d9c4ccc156f46d22596442ea368cbf0b07727c13f2a61f33b63ba2",
+      "Status": "SUCCEEDED",
+      "ProviderOrderID": "ORD-SCRIPT-0001",
+      "ProviderCaptureID": "",
+      "AttemptCount": 1,
+      "OwnerID": "",
+      "CreatedAt": "2026-10-18T11:31:43.209271-07:00",
+      "UpdatedAt": "2026-10-18T11:31:43.211388-07:00"
+    },
+    {
+      "ID": "e5fead65-f041-4755-b640-ac0db6c03c96",
+      "OrderID": "ef180af9-74e8-45f4-916c-7848fb2dbb50",
+      "Type": "CAPTURE",
+      "ProviderRequestID": "f7e61927-213f-4900-ba33-3ca554d8d5d4",
+      "PayloadFingerprint": "47c913a8eafb5655f5b3ea352e398b7acce077998a278222e2991ddc96a188e4",
+      "Status": "SUCCEEDED",
+      "ProviderOrderID": "",
+      "ProviderCaptureID": "CAP-SCRIPT-0001",
+      "AttemptCount": 1,
+      "OwnerID": "merchant-8154f5f2",
+      "CreatedAt": "2026-10-18T11:31:43.216304-07:00",
+      "UpdatedAt": "2026-10-18T11:31:43.220273-07:00"
+    }
+  ],
+  "orders": [
+    {
+      "ID": "ef180af9-74e8-45f4-916c-7848fb2dbb50",
+      "ProductID": "maple-mug",
+      "Quantity": 1,
+      "TotalMinor": 1234,
+      "Currency": "USD",
+      "Status": "CAPTURED_VERIFIED",
+      "ProviderOrderID": "ORD-SCRIPT-0001",
+      "CreatedAt": "2026-10-18T11:31:43.209271-07:00",
+      "UpdatedAt": "2026-10-18T11:31:43.220579-07:00"
+    }
+  ]
+}
