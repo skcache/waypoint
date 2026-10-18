@@ -9,6 +9,9 @@
 //	make dev-merchant            # serves on :8090 (see .env for credentials)
 //	cd apps/api && go run ./cmd/merchant --reset   # clear fixture state
 //
+// The fixture binds to 127.0.0.1 only: it serves unauthenticated mutation
+// endpoints (checkout, capture) and must never be reachable from the network.
+//
 // The fixture never simulates payments: without PayPal credentials every
 // checkout answers NOT_CONFIGURED, and no code path fabricates an approval or
 // a capture.
@@ -22,6 +25,7 @@ import (
 	"fmt"
 	"html/template"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -36,6 +40,17 @@ import (
 )
 
 const defaultPort = 8090
+
+// loopbackHost is the only interface the fixture ever binds. The mutation
+// endpoints are unauthenticated; a network-reachable fixture would be a
+// public exposure path. Do not make this configurable without adding
+// authentication and request authorization first.
+const loopbackHost = "127.0.0.1"
+
+// listenAddr returns the fixture bind address (loopback only — see above).
+func listenAddr(port int) string {
+	return net.JoinHostPort(loopbackHost, strconv.Itoa(port))
+}
 
 func main() {
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
@@ -109,6 +124,7 @@ func run() error {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /", app.handleCatalog)
 	mux.HandleFunc("POST /checkout", app.handleCheckout)
+	mux.HandleFunc("GET /orders/{$}", app.handleOrderList)
 	mux.HandleFunc("GET /orders/{id}", app.handleOrderPage)
 	mux.HandleFunc("POST /orders/{id}/capture", app.handleCapture)
 	mux.HandleFunc("POST /orders/{id}/refresh", app.handleRefresh)
@@ -117,7 +133,7 @@ func run() error {
 	mux.HandleFunc("GET /api/orders/{id}/incident", app.handleIncidentJSON)
 	mux.HandleFunc("GET /healthz", app.handleHealthz)
 
-	srv := &http.Server{Addr: fmt.Sprintf(":%d", port), Handler: mux, ReadHeaderTimeout: 5 * time.Second}
+	srv := &http.Server{Addr: listenAddr(port), Handler: mux, ReadHeaderTimeout: 5 * time.Second}
 	slog.Info("merchant checkout fixture listening",
 		"addr", srv.Addr, "fault", fault,
 		"paypal_configured", app.paypal != nil,
@@ -233,6 +249,19 @@ func (s *server) handleCheckout(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) handleOrderPage(w http.ResponseWriter, r *http.Request) {
 	s.renderOrderWithNotice(w, r.PathValue("id"), "", nil)
+}
+
+func (s *server) handleOrderList(w http.ResponseWriter, r *http.Request) {
+	orders, err := s.store.ListOrders(r.Context(), 50)
+	if err != nil {
+		s.renderError(w, http.StatusInternalServerError, "The order list could not be loaded.", err)
+		return
+	}
+	s.render(w, http.StatusOK, ordersTmpl, map[string]any{
+		"Orders":     orders,
+		"Fault":      s.svc.Fault(),
+		"Configured": s.paypal != nil,
+	})
 }
 
 func (s *server) handleRefresh(w http.ResponseWriter, r *http.Request) {

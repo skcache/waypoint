@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/skcache/waypoint/apps/api/internal/payments/paypal"
 )
@@ -18,6 +19,15 @@ import (
 // operation. The request id is never replaced; after the limit the order
 // escalates to manual reconciliation instead of looping.
 const maxCaptureAttempts = 3
+
+// defaultSameIDRetryWindow bounds how long after the first attempt a same-id
+// retry is still considered safe. Same-id retry relies on the provider
+// returning the ORIGINAL result for a repeated request id; that guarantee is
+// documented as time-bounded (create-order request ids are retained for 6
+// hours by default, up to 72 hours by arrangement — capture follows the same
+// request-id discipline). Past this window a retry could be treated as a NEW
+// capture, so the operation becomes manual reconciliation instead.
+const defaultSameIDRetryWindow = 6 * time.Hour
 
 // OrdersAPI is the provider surface the fixture depends on. The concrete
 // implementation is the sandbox-only paypal.Client; tests substitute a
@@ -31,10 +41,11 @@ type OrdersAPI interface {
 // Service orchestrates the fixture checkout against the provider while the
 // local PostgreSQL journal remains the durable source of operation identity.
 type Service struct {
-	store       *Store
-	api         OrdersAPI
-	fault       string
-	incidentDir string
+	store             *Store
+	api               OrdersAPI
+	fault             string
+	incidentDir       string
+	sameIDRetryWindow time.Duration
 }
 
 // NewService wires the fixture. fault selects the seeded defect (FaultNone or
@@ -44,7 +55,15 @@ func NewService(store *Store, api OrdersAPI, fault, incidentDir string) *Service
 	if fault == "" {
 		fault = FaultNone
 	}
-	return &Service{store: store, api: api, fault: fault, incidentDir: incidentDir}
+	return &Service{store: store, api: api, fault: fault, incidentDir: incidentDir, sameIDRetryWindow: defaultSameIDRetryWindow}
+}
+
+// SetSameIDRetryWindow overrides the same-id retry window (operator/test
+// knob; the default follows documented provider request-id retention).
+func (s *Service) SetSameIDRetryWindow(d time.Duration) {
+	if d > 0 {
+		s.sameIDRetryWindow = d
+	}
 }
 
 // Fault reports the configured fault mode (shown in the UI banner).
@@ -135,9 +154,8 @@ func (s *Service) Checkout(ctx context.Context, traceID, productID string, quant
 	if err != nil {
 		return Order{}, fmt.Errorf("merchant: generate request id: %w", err)
 	}
-	fp := payloadFingerprint("waypoint.merchant.create.v1", productID, strconv.Itoa(quantity), requestID)
 
-	order, op, err := s.store.CreateLocalOrder(ctx, traceID, productID, quantity, requestID, fp)
+	order, op, err := s.store.CreateLocalOrder(ctx, traceID, productID, quantity, requestID)
 	if err != nil {
 		return Order{}, err
 	}
@@ -367,7 +385,7 @@ func (s *Service) Capture(ctx context.Context, orderID string) (Order, error) {
 	}
 
 	// Step 3: durable operation begin (or bounded retry of the existing one).
-	op, err := s.beginCaptureAttempt(ctx, orderID)
+	op, err := s.beginCaptureAttempt(ctx, order)
 	if err != nil {
 		return Order{}, err
 	}
@@ -418,24 +436,38 @@ func (s *Service) Capture(ctx context.Context, orderID string) (Order, error) {
 
 // beginCaptureAttempt selects or creates the durable capture operation. A
 // new attempt gets a fresh operation; a retry of an unresolved attempt reuses
-// the ORIGINAL operation row and request id (never a fresh identity).
-func (s *Service) beginCaptureAttempt(ctx context.Context, orderID string) (Operation, error) {
-	active, err := s.store.ActiveCapture(ctx, orderID)
+// the ORIGINAL operation row and request id (never a fresh identity), bounded
+// by both the attempt limit and the same-id retry window.
+func (s *Service) beginCaptureAttempt(ctx context.Context, order Order) (Operation, error) {
+	active, err := s.store.ActiveCapture(ctx, order.ID)
 	if err != nil {
 		return Operation{}, err
 	}
 	if active != nil {
 		if active.Status == OpStatusInFlight {
-			return Operation{}, fmt.Errorf("%w: a capture attempt is already in flight for order %s", ErrConflict, orderID)
+			return Operation{}, fmt.Errorf("%w: a capture attempt is already in flight for order %s (reconcile before retrying)", ErrConflict, order.ID)
 		}
 		if active.AttemptCount >= maxCaptureAttempts {
 			detail, _ := json.Marshal(map[string]any{"attempts": active.AttemptCount, "provider_request_id": active.ProviderRequestID})
-			if err := s.store.MarkReconciliationRequired(ctx, orderID, detail); err != nil {
+			if err := s.store.MarkReconciliationRequired(ctx, order.ID, detail); err != nil {
 				return Operation{}, err
 			}
-			return Operation{}, fmt.Errorf("%w: attempt limit reached for order %s; reconcile before retrying", ErrConflict, orderID)
+			return Operation{}, fmt.Errorf("%w: attempt limit reached for order %s; reconcile before retrying", ErrConflict, order.ID)
 		}
-		if err := s.store.BeginCaptureRetry(ctx, orderID, active.ID); err != nil {
+		if time.Since(active.FirstAttemptedAt) > s.sameIDRetryWindow {
+			detail, _ := json.Marshal(map[string]any{
+				"first_attempted_at":  active.FirstAttemptedAt.UTC().Format(time.RFC3339),
+				"window":              s.sameIDRetryWindow.String(),
+				"provider_request_id": active.ProviderRequestID,
+				"note":                "same-id retry window exceeded; a repeated request id may no longer be guaranteed to return the original result",
+			})
+			if err := s.store.MarkReconciliationRequired(ctx, order.ID, detail); err != nil {
+				return Operation{}, err
+			}
+			return Operation{}, fmt.Errorf("%w: same-id retry window (%s) exceeded for order %s; manual reconciliation required (request id %s preserved)",
+				ErrConflict, s.sameIDRetryWindow, order.ID, active.ProviderRequestID)
+		}
+		if err := s.store.BeginCaptureRetry(ctx, order.ID, active.ID); err != nil {
 			return Operation{}, err
 		}
 		return *active, nil
@@ -445,13 +477,27 @@ func (s *Service) beginCaptureAttempt(ctx context.Context, orderID string) (Oper
 	if err != nil {
 		return Operation{}, err
 	}
-	fp := payloadFingerprint("waypoint.merchant.capture.v1", orderID, requestID)
-	return s.store.InsertCaptureOp(ctx, orderID, requestID, fp)
+	// The fingerprint covers the exact canonical financial operation:
+	// provider order identity, amount, currency, and the stable request id.
+	fp := payloadFingerprint("waypoint.merchant.capture.v1", order.ID, order.ProviderOrderID,
+		strconv.FormatInt(order.TotalMinor, 10), order.Currency, requestID)
+	return s.store.InsertCaptureOp(ctx, order.ID, requestID, fp)
 }
 
-// Reconcile resolves an unresolved capture attempt using read-only provider
-// state. It never issues a new capture: the only mutation-capable path is a
-// retry that reuses the preserved request id via Capture.
+// Reconcile folds read-only provider state into local state for an unresolved
+// capture: an ambiguous outcome, or an attempt left IN_FLIGHT by a crash
+// (after a restart nothing can genuinely be in flight, so a read-only check
+// is safe). It NEVER sends a capture — the only mutation-capable path is a
+// bounded same-id retry via Capture.
+//
+// Safety rule (the reason this method is conservative): a provider order
+// observed merely as APPROVED after an ambiguous outbound mutation is NOT
+// evidence that the mutation had no financial effect — the earlier capture
+// could still be processing provider-side, or the read could lag the write.
+// APPROVED therefore never resolves the operation; it stays UNKNOWN. The only
+// resolution to CAPTURED_VERIFIED is provider-confirmed matching capture
+// evidence. Everything else remains unresolved (same request id preserved)
+// for bounded same-id retry, then manual reconciliation.
 func (s *Service) Reconcile(ctx context.Context, orderID string) (Order, error) {
 	order, err := s.localOrder(ctx, orderID)
 	if err != nil {
@@ -466,9 +512,6 @@ func (s *Service) Reconcile(ctx context.Context, orderID string) (Order, error) 
 	}
 	if active == nil {
 		return Order{}, fmt.Errorf("%w: order %s has no unresolved capture to reconcile", ErrConflict, orderID)
-	}
-	if active.Status == OpStatusInFlight {
-		return Order{}, fmt.Errorf("%w: capture attempt for order %s is still in flight", ErrConflict, orderID)
 	}
 
 	res, err := s.api.GetOrder(ctx, order.ProviderOrderID)
@@ -490,29 +533,48 @@ func (s *Service) Reconcile(ctx context.Context, orderID string) (Order, error) 
 		return s.store.MarkCaptureVerifiedRecovered(ctx, orderID, active.ID, captureID, detail)
 	}
 
-	if res.Status == paypal.OrderStatusApproved {
-		// The provider definitively reports no capture effect and the order
-		// is still capture-eligible: the unresolved attempt had no effect.
-		detail, _ := json.Marshal(map[string]any{
-			"resolved":            "no capture on provider; order remains APPROVED",
-			"provider_request_id": active.ProviderRequestID,
-		})
-		return s.store.MarkCaptureRejected(ctx, orderID, active.ID, detail, TierReal)
+	// No matching COMPLETED capture. Record exactly what was observed — and
+	// claim nothing about the mutation's effect.
+	note := "provider shows no matching COMPLETED capture; outcome remains unresolved (a status read cannot prove the outbound capture had no effect)"
+	if active.Status == OpStatusInFlight {
+		note = "attempt was IN_FLIGHT (process restart); read-only check found no matching COMPLETED capture; demoted to unresolved with the request id preserved"
 	}
-
 	detail, _ := json.Marshal(map[string]any{
 		"provider_status":     res.Status,
-		"note":                "insufficient evidence to resolve the capture outcome",
+		"capture_statuses":    captureStatuses(res),
+		"note":                note,
 		"provider_request_id": active.ProviderRequestID,
 	})
-	if err := s.store.MarkReconciliationRequired(ctx, orderID, detail); err != nil {
-		return Order{}, err
+	if active.Status == OpStatusInFlight {
+		if _, err := s.store.MarkCaptureUnknown(ctx, orderID, active.ID, detail, TierReal); err != nil {
+			return Order{}, err
+		}
+	} else {
+		if err := s.store.AppendEvent(ctx, orderID, "PAYPAL", "RECONCILIATION_INCONCLUSIVE", detail, TierReal); err != nil {
+			return Order{}, err
+		}
+		if err := s.store.TouchLastChecked(ctx, active.ID); err != nil {
+			return Order{}, err
+		}
 	}
 	updated, err := s.localOrder(ctx, orderID)
 	if err != nil {
 		return Order{}, err
 	}
-	return updated, fmt.Errorf("%w: capture outcome for order %s remains unresolved (provider status %s)", ErrConflict, orderID, res.Status)
+	return updated, fmt.Errorf("%w: capture outcome for order %s remains unresolved (provider status %s; request id %s preserved for bounded same-id retry, then manual reconciliation)",
+		ErrConflict, orderID, res.Status, active.ProviderRequestID)
+}
+
+// captureStatuses lists the capture resource statuses present on a provider
+// order, for the reconciliation record (never raw payloads).
+func captureStatuses(res *paypal.Order) []string {
+	var out []string
+	for _, c := range res.Captures() {
+		if c.Status != "" {
+			out = append(out, c.Status)
+		}
+	}
+	return out
 }
 
 // sealRecoveredCapture certifies a capture proven by provider state, with or

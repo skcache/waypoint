@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -120,8 +121,10 @@ func (s *Store) Products(ctx context.Context) ([]Product, error) {
 // CreateLocalOrder persists, in ONE transaction: the order, the CREATE_ORDER
 // operation with its stable request id and payload fingerprint (status
 // IN_FLIGHT), and the first journal event. This transaction commits BEFORE
-// any provider call — that ordering is the I4 guarantee.
-func (s *Store) CreateLocalOrder(ctx context.Context, traceID, productID string, quantity int, requestID, payloadFingerprint string) (Order, Operation, error) {
+// any provider call — that ordering is the I4 guarantee. The fingerprint is
+// built here because only this layer knows the server-computed total and
+// currency that the canonical financial operation must cover.
+func (s *Store) CreateLocalOrder(ctx context.Context, traceID, productID string, quantity int, requestID string) (Order, Operation, error) {
 	if quantity < 1 || quantity > 10 {
 		return Order{}, Operation{}, fmt.Errorf("%w: quantity %d outside 1..10", ErrConflict, quantity)
 	}
@@ -158,11 +161,13 @@ func (s *Store) CreateLocalOrder(ctx context.Context, traceID, productID string,
 		return Order{}, Operation{}, fmt.Errorf("merchant: insert order: %w", err)
 	}
 
+	fp := payloadFingerprint("waypoint.merchant.create.v1", productID, strconv.Itoa(quantity),
+		strconv.FormatInt(total, 10), currency, requestID)
 	op, err := scanOperation(tx.QueryRow(ctx, `
 		INSERT INTO merchant_operations (order_id, operation_type, provider_request_id, payload_fingerprint, status)
 		VALUES ($1::uuid, $2, $3, $4, $5)
 		RETURNING `+operationColumns,
-		order.ID, OpCreateOrder, requestID, payloadFingerprint, OpStatusInFlight))
+		order.ID, OpCreateOrder, requestID, fp, OpStatusInFlight))
 	if err != nil {
 		return Order{}, Operation{}, fmt.Errorf("merchant: insert create operation: %w", err)
 	}
@@ -437,6 +442,16 @@ func (s *Store) TouchCaptureAttempt(ctx context.Context, operationID string) err
 	_, err := s.pool.Exec(ctx, `
 		UPDATE merchant_operations
 		   SET attempt_count = attempt_count + 1, last_checked_at = now(), updated_at = now()
+		 WHERE id = $1::uuid`, operationID)
+	return err
+}
+
+// TouchLastChecked marks an operation as freshly inspected without counting
+// an attempt: read-only reconciliation must not consume the bounded same-id
+// retry budget.
+func (s *Store) TouchLastChecked(ctx context.Context, operationID string) error {
+	_, err := s.pool.Exec(ctx, `
+		UPDATE merchant_operations SET last_checked_at = now(), updated_at = now()
 		 WHERE id = $1::uuid`, operationID)
 	return err
 }

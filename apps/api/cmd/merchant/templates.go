@@ -83,8 +83,30 @@ NOT_CONFIGURED and attempt nothing.</div>
   </form>
 </div>
 {{end}}
-<p class="muted" style="margin-top:20px;">Orders: <a href="/orders/">recent orders are listed per order link</a> —
+<p class="muted" style="margin-top:20px;"><a href="/orders/">Recent orders</a> —
 after creating one you will land on its status page, where buyer approval in PayPal Sandbox is required before any capture.</p>
+</main></body></html>`))
+
+var ordersTmpl = template.Must(template.New("orders").Funcs(templateFuncs).Parse(pageStyle + `
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Maple Supply Co. — orders</title></head><body><main>
+<h1>Orders</h1>
+<p class="muted">Fixture checkout orders, newest first. Each order page carries the durable
+operation journal and the provider evidence trail. <a href="/">Back to catalog</a></p>
+{{if .Fault}}<div class="fault"><strong>Fault {{.Fault}} active</strong> — checkouts are fault-injected.</div>{{end}}
+<h2>Recent orders</h2>
+{{if not .Orders}}<div class="card muted">No orders yet. Create one from the catalog.</div>{{end}}
+{{range .Orders}}
+<div class="card">
+  <div class="row" style="justify-content: space-between;">
+    <a class="mono" href="/orders/{{.ID}}">{{.ID}}</a>
+    <span class="status {{tone .Status}}">{{.Status}}</span>
+  </div>
+  <div class="muted" style="margin-top:4px;">{{.ProductID}} · qty {{.Quantity}} ·
+    <span class="mono">${{usd .TotalMinor}} {{.Currency}}</span></div>
+</div>
+{{end}}
 </main></body></html>`))
 
 var orderTmpl = template.Must(template.New("order").Funcs(templateFuncs).Parse(pageStyle + `

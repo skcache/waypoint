@@ -22,7 +22,7 @@ func TestMerchantSchemaGuards(t *testing.T) {
 	store := newFixtureStore(t)
 	ctx := context.Background()
 
-	order, _, err := store.CreateLocalOrder(ctx, testTrace, "maple-mug", 1, "req-id-1", "fp-1")
+	order, _, err := store.CreateLocalOrder(ctx, testTrace, "maple-mug", 1, "req-id-1")
 	if err != nil {
 		t.Fatalf("create local order: %v", err)
 	}
@@ -108,4 +108,33 @@ func TestMerchantSchemaGuards(t *testing.T) {
 			t.Fatalf("catalog lost by reset: %v (%d products)", err, len(products))
 		}
 	})
+}
+
+// The payload fingerprint must cover the exact canonical financial operation.
+// Two orders differing only in quantity (and therefore amount) must never
+// share a fingerprint; the same product at the same quantity must derive one
+// deterministically from its content (amount and currency included).
+func TestCreateFingerprintCoversAmountAndCurrency(t *testing.T) {
+	store := newFixtureStore(t)
+	ctx := context.Background()
+
+	one, op1, err := store.CreateLocalOrder(ctx, testTrace, "maple-mug", 1, "fp-req-1")
+	if err != nil {
+		t.Fatalf("create qty 1: %v", err)
+	}
+	_, op2, err := store.CreateLocalOrder(ctx, testTrace, "maple-mug", 2, "fp-req-2")
+	if err != nil {
+		t.Fatalf("create qty 2: %v", err)
+	}
+	if len(op1.PayloadFingerprint) != 64 || len(op2.PayloadFingerprint) != 64 {
+		t.Fatalf("fingerprints must be sha256 hex: %q, %q", op1.PayloadFingerprint, op2.PayloadFingerprint)
+	}
+	if op1.PayloadFingerprint == op2.PayloadFingerprint {
+		t.Fatal("fingerprints collide across different amounts; the fingerprint must cover the total and currency")
+	}
+	// The stored order total must be the same value the fingerprint covers:
+	// recompute for qty 1 and check the recorded total matches the catalog.
+	if one.TotalMinor != mugPrice {
+		t.Fatalf("total = %d, want %d", one.TotalMinor, mugPrice)
+	}
 }

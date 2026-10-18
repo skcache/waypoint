@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/skcache/waypoint/apps/api/internal/merchant"
 	"github.com/skcache/waypoint/apps/api/internal/payments/paypal"
@@ -459,7 +460,32 @@ func TestRecoverySealsExistingProviderCaptureWithoutRecapturing(t *testing.T) {
 	}
 }
 
-func TestReconcileResolvesNoEffectAttemptBackToApproved(t *testing.T) {
+// ambiguousCapture drives an order to the ambiguous-capture state using a
+// provider that fails the ONE capture call with a 503, then returns up to the
+// caller to decide what the provider reports on subsequent reads.
+func ambiguousCapture(t *testing.T, store *merchant.Store, fake *fakePayPal) (merchant.Order, string) {
+	t.Helper()
+	svc := merchant.NewService(store, fake, merchant.FaultNone, "")
+	order := newOrder(t, store, svc, 1)
+	approve(t, svc, order.ID)
+	if _, err := svc.Capture(context.Background(), order.ID); err == nil {
+		t.Fatal("ambiguous capture unexpectedly succeeded")
+	}
+	d := detailFor(t, store, order.ID)
+	for _, op := range d.Operations {
+		if op.Type == merchant.OpCapture {
+			return order, op.ProviderRequestID
+		}
+	}
+	t.Fatal("capture operation missing after ambiguous outcome")
+	return merchant.Order{}, ""
+}
+
+// A provider order merely observed as APPROVED after an ambiguous capture is
+// NOT evidence that the outbound mutation had no effect. The operation must
+// stay unresolved with its request id preserved — never REJECTED, never
+// released back to APPROVED (which would mint a fresh capture identity).
+func TestReconcileKeepsUnknownWhenProviderShowsApprovedNoCapture(t *testing.T) {
 	store := newFixtureStore(t)
 	fake := &fakePayPal{
 		getFn: func(orderID string) (*paypal.Order, error) {
@@ -469,26 +495,269 @@ func TestReconcileResolvesNoEffectAttemptBackToApproved(t *testing.T) {
 			return nil, &paypal.APIError{StatusCode: 503, Name: "SERVICE_UNAVAILABLE"}
 		},
 	}
+	order, requestID := ambiguousCapture(t, store, fake)
 	svc := merchant.NewService(store, fake, merchant.FaultNone, "")
-	order := newOrder(t, store, svc, 1)
-	approve(t, svc, order.ID)
-	if _, err := svc.Capture(context.Background(), order.ID); err == nil {
-		t.Fatal("ambiguous capture unexpectedly succeeded")
-	}
 
-	// The provider definitively shows no capture and a still-eligible order:
-	// the unresolved attempt had no effect.
 	updated, err := svc.Reconcile(context.Background(), order.ID)
-	if err != nil {
-		t.Fatalf("reconcile: %v", err)
+	if err == nil {
+		t.Fatal("reconcile returned success after a single APPROVED observation; APPROVED must never resolve an ambiguous capture")
 	}
-	if updated.Status != merchant.StatusApproved {
-		t.Fatalf("status = %s, want APPROVED", updated.Status)
+	if updated.Status != merchant.StatusCaptureOutcomeUnknown {
+		t.Fatalf("order status = %s, want CAPTURE_OUTCOME_UNKNOWN", updated.Status)
 	}
 	d := detailFor(t, store, order.ID)
 	for _, op := range d.Operations {
-		if op.Type == merchant.OpCapture && op.Status != merchant.OpStatusRejected {
-			t.Fatalf("capture op = %+v, want REJECTED", op)
+		if op.Type != merchant.OpCapture {
+			continue
+		}
+		if op.Status != merchant.OpStatusUnknown {
+			t.Fatalf("capture op status = %s, want UNKNOWN (unresolved)", op.Status)
+		}
+		if op.ProviderRequestID != requestID {
+			t.Fatalf("request id changed from %s to %s", requestID, op.ProviderRequestID)
+		}
+	}
+	foundInconclusive := false
+	for _, e := range d.Events {
+		if e.EventType == "RECONCILIATION_INCONCLUSIVE" {
+			foundInconclusive = true
+		}
+	}
+	if !foundInconclusive {
+		t.Fatal("journal must record RECONCILIATION_INCONCLUSIVE for the read that proved nothing")
+	}
+}
+
+// A PENDING capture is not completion. Reconciliation must not seal it as
+// verified and must not fail the order; it stays unresolved.
+func TestReconcilePendingCaptureStaysUnresolved(t *testing.T) {
+	store := newFixtureStore(t)
+	fake := &fakePayPal{
+		getFn: func(orderID string) (*paypal.Order, error) {
+			return approvedOrder(orderID, "USD", "12.34"), nil
+		},
+		captureFn: func(_ string, _ string) (*paypal.Order, error) {
+			return nil, &paypal.APIError{StatusCode: 503, Name: "SERVICE_UNAVAILABLE"}
+		},
+	}
+	order, requestID := ambiguousCapture(t, store, fake)
+	svc := merchant.NewService(store, fake, merchant.FaultNone, "")
+
+	// Only NOW does the provider reveal a capture resource — in PENDING state.
+	fake.getFn = func(orderID string) (*paypal.Order, error) {
+		return &paypal.Order{
+			ID:     orderID,
+			Status: paypal.OrderStatusCompleted,
+			PurchaseUnits: []paypal.PurchaseUnit{{
+				Amount: paypal.Money{CurrencyCode: "USD", Value: "12.34"},
+				Payments: paypal.PaymentCollection{Captures: []paypal.Capture{{
+					ID: "CAP-PENDING-1", Status: "PENDING",
+					Amount: paypal.Money{CurrencyCode: "USD", Value: "12.34"},
+				}}},
+			}},
+		}, nil
+	}
+
+	updated, err := svc.Reconcile(context.Background(), order.ID)
+	if err == nil {
+		t.Fatal("reconcile accepted a PENDING capture as resolution; only COMPLETED evidence may verify")
+	}
+	if updated.Status == merchant.StatusCapturedVerified {
+		t.Fatal("a PENDING capture must never seal CAPTURED_VERIFIED")
+	}
+	d := detailFor(t, store, order.ID)
+	foundPending := false
+	for _, e := range d.Events {
+		if e.EventType != "RECONCILIATION_INCONCLUSIVE" {
+			continue
+		}
+		var det map[string]any
+		if err := json.Unmarshal(e.Detail, &det); err == nil {
+			if statuses, ok := det["capture_statuses"].([]any); ok {
+				for _, s := range statuses {
+					if s == "PENDING" {
+						foundPending = true
+					}
+				}
+			}
+		}
+	}
+	if !foundPending {
+		t.Fatal("journal must record the observed PENDING capture status")
+	}
+	for _, op := range d.Operations {
+		if op.Type == merchant.OpCapture && op.ProviderRequestID != requestID {
+			t.Fatalf("request id changed from %s to %s", requestID, op.ProviderRequestID)
+		}
+	}
+}
+
+// REGRESSION: an ambiguous capture followed by an APPROVED provider
+// observation (no capture) must NOT mint a new capture identity. The only
+// permitted mutation path is a same-id retry; the request id is permanent.
+func TestAmbiguousCaptureCannotMintNewIdentity(t *testing.T) {
+	store := newFixtureStore(t)
+	captureAttempts := 0
+	fake := &fakePayPal{
+		getFn: func(orderID string) (*paypal.Order, error) {
+			return approvedOrder(orderID, "USD", "12.34"), nil
+		},
+		captureFn: func(orderID, _ string) (*paypal.Order, error) {
+			captureAttempts++
+			if captureAttempts == 1 {
+				return nil, &paypal.APIError{StatusCode: 503, Name: "SERVICE_UNAVAILABLE"}
+			}
+			return completedOrder(orderID, "CAP-TEST-SAME-ID", "USD", "12.34"), nil
+		},
+	}
+	order, requestID := ambiguousCapture(t, store, fake)
+	svc := merchant.NewService(store, fake, merchant.FaultNone, "")
+
+	// Read-only reconciliation proves nothing and must not release the op.
+	if _, err := svc.Reconcile(context.Background(), order.ID); err == nil {
+		t.Fatal("reconcile unexpectedly resolved the ambiguous capture")
+	}
+
+	// Retrying now must reuse the ORIGINAL request id — never a new one.
+	updated, err := svc.Capture(context.Background(), order.ID)
+	if err != nil {
+		t.Fatalf("same-id retry capture: %v", err)
+	}
+	if updated.Status != merchant.StatusCapturedVerified {
+		t.Fatalf("status = %s, want CAPTURED_VERIFIED after same-id retry", updated.Status)
+	}
+	if len(fake.captureCalls) != 2 {
+		t.Fatalf("capture calls = %d, want 2", len(fake.captureCalls))
+	}
+	if fake.captureCalls[0] != fake.captureCalls[1] {
+		t.Fatalf("capture identity changed across retry: %q then %q (a fresh identity must never be minted)", fake.captureCalls[0], fake.captureCalls[1])
+	}
+	if fake.captureCalls[1] != requestID {
+		t.Fatalf("retry used %q, want the preserved request id %q", fake.captureCalls[1], requestID)
+	}
+	captureOps := 0
+	for _, op := range detailFor(t, store, order.ID).Operations {
+		if op.Type == merchant.OpCapture {
+			captureOps++
+			if op.ProviderRequestID != requestID {
+				t.Fatalf("capture op carries %q, want %q", op.ProviderRequestID, requestID)
+			}
+		}
+	}
+	if captureOps != 1 {
+		t.Fatalf("capture operations = %d; exactly one durable identity may exist", captureOps)
+	}
+}
+
+// A crash can leave a capture attempt IN_FLIGHT (the durable begin committed,
+// the provider call never observed). After restart, read-only reconciliation
+// must demote the stale attempt to unresolved WITHOUT sending any capture,
+// and later provider evidence must be sealable the same way.
+func TestReconcileAfterRestartDemotesInFlightWithoutNewCapture(t *testing.T) {
+	store := newFixtureStore(t)
+	fake := &fakePayPal{
+		getFn: func(orderID string) (*paypal.Order, error) {
+			return approvedOrder(orderID, "USD", "12.34"), nil
+		},
+	}
+	svc := merchant.NewService(store, fake, merchant.FaultNone, "")
+	order := newOrder(t, store, svc, 1)
+	approve(t, svc, order.ID)
+
+	// Simulate the crash window: the durable begin committed, but the
+	// outbound call and its classification never happened.
+	if _, err := store.InsertCaptureOp(context.Background(), order.ID, "req-crash-1", "fp-crash-1"); err != nil {
+		t.Fatalf("simulate crash-window capture begin: %v", err)
+	}
+	if got := detailFor(t, store, order.ID).Order.Status; got != merchant.StatusCaptureInFlight {
+		t.Fatalf("precondition: order status = %s, want CAPTURE_IN_FLIGHT", got)
+	}
+
+	updated, err := svc.Reconcile(context.Background(), order.ID)
+	if err == nil {
+		t.Fatal("reconcile of a stale IN_FLIGHT attempt with no capture evidence must stay unresolved")
+	}
+	if updated.Status != merchant.StatusCaptureOutcomeUnknown {
+		t.Fatalf("status = %s, want CAPTURE_OUTCOME_UNKNOWN after restart demotion", updated.Status)
+	}
+	if len(fake.captureCalls) != 0 {
+		t.Fatalf("reconciliation sent %d capture calls; it must send none", len(fake.captureCalls))
+	}
+	d := detailFor(t, store, order.ID)
+	for _, op := range d.Operations {
+		if op.Type != merchant.OpCapture {
+			continue
+		}
+		if op.Status != merchant.OpStatusUnknown {
+			t.Fatalf("op status = %s, want UNKNOWN", op.Status)
+		}
+		if op.ProviderRequestID != "req-crash-1" {
+			t.Fatalf("request id = %q, want the preserved req-crash-1", op.ProviderRequestID)
+		}
+	}
+
+	// The provider later reveals the original capture completed.
+	fake.getFn = func(orderID string) (*paypal.Order, error) {
+		return completedOrder(orderID, "CAP-TEST-CRASH-RECOVERED", "USD", "12.34"), nil
+	}
+	updated, err = svc.Reconcile(context.Background(), order.ID)
+	if err != nil {
+		t.Fatalf("reconcile with completed evidence: %v", err)
+	}
+	if updated.Status != merchant.StatusCapturedVerified {
+		t.Fatalf("status = %s, want CAPTURED_VERIFIED", updated.Status)
+	}
+	if len(fake.captureCalls) != 0 {
+		t.Fatalf("recovery sent %d capture calls; it must send none", len(fake.captureCalls))
+	}
+}
+
+// Same-id retry relies on the provider returning the ORIGINAL result for a
+// repeated request id; that guarantee is time-bounded. Past the window the
+// order escalates to manual reconciliation and nothing is sent.
+func TestSameIDRetryWindowBoundRefusesStaleRetry(t *testing.T) {
+	store := newFixtureStore(t)
+	fake := &fakePayPal{
+		getFn: func(orderID string) (*paypal.Order, error) {
+			return approvedOrder(orderID, "USD", "12.34"), nil
+		},
+		captureFn: func(_ string, _ string) (*paypal.Order, error) {
+			return nil, &paypal.APIError{StatusCode: 503, Name: "SERVICE_UNAVAILABLE"}
+		},
+	}
+	order, requestID := ambiguousCapture(t, store, fake)
+	svc := merchant.NewService(store, fake, merchant.FaultNone, "")
+	svc.SetSameIDRetryWindow(time.Hour)
+
+	ctx := context.Background()
+	if _, err := store.Pool().Exec(ctx, `
+		UPDATE merchant_operations SET first_attempted_at = now() - interval '7 days'
+		 WHERE order_id = $1::uuid AND operation_type = 'CAPTURE'`, order.ID); err != nil {
+		t.Fatalf("backdate first attempt: %v", err)
+	}
+
+	_, err := svc.Capture(ctx, order.ID)
+	if err == nil {
+		t.Fatal("retry outside the same-id window must be refused")
+	}
+	if !strings.Contains(err.Error(), "window") {
+		t.Fatalf("error = %q, want the same-id retry window refusal", err)
+	}
+	if len(fake.captureCalls) != 1 {
+		t.Fatalf("capture calls = %d; a stale retry must send nothing", len(fake.captureCalls))
+	}
+	d := detailFor(t, store, order.ID)
+	if d.Order.Status != merchant.StatusReconciliationRequired {
+		t.Fatalf("status = %s, want RECONCILIATION_REQUIRED", d.Order.Status)
+	}
+	for _, op := range d.Operations {
+		if op.Type == merchant.OpCapture {
+			if op.Status != merchant.OpStatusUnknown {
+				t.Fatalf("op status = %s, want UNKNOWN (identity preserved)", op.Status)
+			}
+			if op.ProviderRequestID != requestID {
+				t.Fatalf("request id = %q, want %q", op.ProviderRequestID, requestID)
+			}
 		}
 	}
 }
