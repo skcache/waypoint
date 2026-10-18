@@ -11,7 +11,7 @@ include .env
 export
 endif
 
-.PHONY: help dev-api dev-web db-up db-down db-migrate db-reset test test-api test-integration lint lint-api lint-web build-api build-web clean
+.PHONY: help dev-api dev-web dev-merchant merchant-reset db-up db-down db-migrate db-reset test test-api test-integration lint lint-api lint-web build-api build-web clean
 
 help: ## List available targets
 	@grep -h -E '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "}; {printf "  %-12s %s\n", $$1, $$2}'
@@ -21,6 +21,13 @@ dev-api: ## Run the Go API on http://localhost:8080
 
 dev-web: ## Run the Next.js web app on http://localhost:3000
 	cd $(WEB_DIR) && npm run dev
+
+dev-merchant: ## Run the V2 merchant checkout fixture on http://localhost:8090
+	cd $(API_DIR) && DATABASE_URL="$${DATABASE_URL:-postgres://waypoint:waypoint@localhost:5433/waypoint?sslmode=disable}" \
+		MERCHANT_INCIDENT_DIR="$(CURDIR)/docs/incidents" go run ./cmd/merchant
+
+merchant-reset: ## Clear merchant fixture orders/operations/events (keeps the catalog)
+	cd $(API_DIR) && DATABASE_URL="$${DATABASE_URL:-postgres://waypoint:waypoint@localhost:5433/waypoint?sslmode=disable}" go run ./cmd/merchant --reset
 
 db-up: ## Start local PostgreSQL (docker compose)
 	docker compose up -d db
