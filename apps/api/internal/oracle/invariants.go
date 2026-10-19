@@ -206,71 +206,79 @@ func checkI2(ev *Evidence) InvariantResult {
 	return result(StatusPass, "every outbound operation carried exactly the server-side order amount and currency")
 }
 
-// I3: no capture may precede an observed buyer approval, and a capture claim
-// ("verified") requires actual capture evidence — approval alone is not money.
+// I3: approval evidence must belong to the SAME order being captured, and a
+// capture claim ("verified") requires actual capture evidence — approval
+// alone is not money. Each order's approval chronology is checked
+// independently: order B's APPROVED read can never authorize order A's
+// capture.
 func checkI3(ev *Evidence) InvariantResult {
-	anyCapture := false
-	for _, obs := range ev.Provider {
-		if obs.Method == "capture" {
-			anyCapture = true
-			break
-		}
-	}
-	if !anyCapture {
-		for _, op := range ev.Operations {
-			if op.Type == "CAPTURE" {
-				anyCapture = true
-				break
+	checked := 0
+	for _, o := range ev.Orders {
+		firstCaptureSeq := 0
+		for _, obs := range ev.Provider {
+			if obs.Method != "capture" || obs.OrderRef == "" || obs.OrderRef != o.ProviderOrderID {
+				continue
+			}
+			if firstCaptureSeq == 0 || obs.Seq < firstCaptureSeq {
+				firstCaptureSeq = obs.Seq
 			}
 		}
-	}
-	if !anyCapture {
-		return result(StatusNotApplicable, "no capture activity in evidence")
-	}
-	firstCaptureSeq := 1 << 30
-	approvalSeen := false
-	for _, obs := range ev.Provider {
-		if obs.Method == "capture" && obs.Seq < firstCaptureSeq {
-			firstCaptureSeq = obs.Seq
+		hasCaptureOp := len(ev.captureOps(o.ID)) > 0
+		if firstCaptureSeq == 0 && !hasCaptureOp {
+			continue // no capture activity for this order
 		}
-		if obs.Method == "read" && obs.OrderStatus == "APPROVED" && obs.Seq < firstCaptureSeq {
-			approvalSeen = true
+		checked++
+
+		approvedSeen := false
+		for _, obs := range ev.Provider {
+			if obs.Method == "read" && obs.OrderRef == o.ProviderOrderID && obs.OrderStatus == "APPROVED" {
+				if firstCaptureSeq == 0 || obs.Seq < firstCaptureSeq {
+					approvedSeen = true
+				}
+			}
 		}
-	}
-	if !approvalSeen {
-		// Fall back to the durable journal: an APPROVED observation event must
-		// precede the first capture attempt event.
-		approvedEventSeen := false
-		for _, e := range ev.Events {
-			switch e.EventType {
-			case "PROVIDER_ORDER_OBSERVED":
-				var d struct {
-					ProviderStatus string `json:"provider_status"`
+		if !approvedSeen {
+			// Journal fallback: an APPROVED observation event FOR THIS ORDER
+			// must precede this order's first capture attempt.
+			approvedEventSeen := false
+			for _, e := range ev.Events {
+				if e.OrderID != o.ID {
+					continue
 				}
-				if json.Unmarshal([]byte(e.Detail), &d) == nil && d.ProviderStatus == "APPROVED" {
-					approvedEventSeen = true
-				}
-			case "CAPTURE_ATTEMPT_STARTED":
-				if !approvedEventSeen {
-					return InvariantResult{
-						Status:         StatusFail,
-						Summary:        "a capture attempt began with no prior observed buyer approval",
-						Counterexample: map[string]any{"event_id": e.ID, "event_type": e.EventType},
+				switch e.EventType {
+				case "PROVIDER_ORDER_OBSERVED":
+					var d struct {
+						ProviderStatus string `json:"provider_status"`
+					}
+					if json.Unmarshal([]byte(e.Detail), &d) == nil && d.ProviderStatus == "APPROVED" {
+						approvedEventSeen = true
+					}
+				case "CAPTURE_ATTEMPT_STARTED", "CAPTURE_RETRY_STARTED":
+					if !approvedEventSeen {
+						return InvariantResult{
+							Status:         StatusFail,
+							Summary:        fmt.Sprintf("order %s began capturing with no observed buyer approval for THIS order", o.ID),
+							Counterexample: map[string]any{"order_id": o.ID, "event_id": e.ID, "event_type": e.EventType},
+						}
 					}
 				}
 			}
+			approvedSeen = approvedEventSeen
 		}
-		if !approvedEventSeen {
+		if !approvedSeen {
 			return InvariantResult{
-				Status:         StatusFail,
-				Summary:        "capture activity exists but no buyer-approval observation was recorded",
-				Counterexample: map[string]any{"first_capture_obs_seq": firstCaptureSeq},
+				Status:  StatusFail,
+				Summary: fmt.Sprintf("order %s has capture activity but no buyer-approval observation belonging to it", o.ID),
+				Counterexample: map[string]any{
+					"order_id": o.ID, "provider_order_id": o.ProviderOrderID, "first_capture_obs_seq": firstCaptureSeq,
+				},
 			}
 		}
 	}
-	// A verified claim sourced only from APPROVED (never from capture
-	// evidence) is checked by I6; here we confirm approval gating only.
-	return result(StatusPass, "every capture attempt is preceded by an observed buyer approval")
+	if checked == 0 {
+		return result(StatusNotApplicable, "no capture activity in evidence")
+	}
+	return result(StatusPass, "every capture attempt is preceded by an observed buyer approval belonging to the same order")
 }
 
 // I4: for every outbound mutation, the operation identity and request id were
@@ -363,9 +371,11 @@ func checkI5(ev *Evidence) InvariantResult {
 		if obs.Method != "capture" || !obs.ResponseDropped {
 			continue
 		}
-		// (a) no later capture mutation may use a different request id
+		// (a) no later capture mutation for the SAME ORDER may use a
+		// different request id (other orders' activity is irrelevant here).
 		for _, later := range ev.Provider {
-			if later.Method == "capture" && later.Seq > obs.Seq && later.RequestID != obs.RequestID {
+			if later.Method == "capture" && later.OrderRef == obs.OrderRef &&
+				later.Seq > obs.Seq && later.RequestID != obs.RequestID {
 				return InvariantResult{
 					Status:  StatusFail,
 					Summary: "after an ambiguous capture outcome, a NEW capture identity was issued (the ambiguity was treated as failure)",
@@ -464,31 +474,75 @@ func checkI6(ev *Evidence) InvariantResult {
 }
 
 // classifyClaimAgainstEvidence judges ONE claimed order against its provider
-// observations. ok=true means the claim is corroborated; ok=false returns the
-// INCONCLUSIVE or FAIL result to record.
+// observations, binding the claim to the exact identity the merchant recorded:
+// the SUCCEEDED capture operation's provider capture id.
+//
+//   - local claim without a capture identity → INCONCLUSIVE (cannot bind);
+//   - provider evidence missing entirely → INCONCLUSIVE;
+//   - provider evidence whose capture id / status / amount / currency
+//     contradicts the claim → FAIL (a matching observation never hides a
+//     materially contradictory one);
+//   - matching identity AND financial evidence → corroborated (ok=true).
 func classifyClaimAgainstEvidence(ev *Evidence, o LocalOrder) (InvariantResult, bool) {
+	claimID := ""
+	for _, op := range ev.captureOps(o.ID) {
+		if op.Status == "SUCCEEDED" && op.ProviderCaptureID != "" {
+			claimID = op.ProviderCaptureID
+			break
+		}
+	}
+	if claimID == "" {
+		return InvariantResult{
+			Status:  StatusInconclusive,
+			Summary: fmt.Sprintf("order %s claims a completed capture but carries no capture identity to bind against provider evidence", o.ID),
+			Counterexample: map[string]any{
+				"order_id": o.ID, "claim": "CAPTURED_VERIFIED", "local_capture_id": "missing",
+			},
+		}, false
+	}
+
 	obsList := ev.capturesForOrderRef(o.ProviderOrderID)
 	if len(obsList) == 0 {
 		return InvariantResult{
 			Status:  StatusInconclusive,
 			Summary: fmt.Sprintf("order %s claims a completed capture, but no provider capture evidence is available", o.ID),
 			Counterexample: map[string]any{
-				"order_id": o.ID, "claim": "CAPTURED_VERIFIED", "provider_evidence": "missing",
+				"order_id": o.ID, "claim": claimID, "provider_evidence": "missing",
 			},
 		}, false
 	}
+
+	matched := false
 	for _, obs := range obsList {
 		if !obs.Applied {
-			continue
+			continue // idempotent replays and refusals are I7's domain
 		}
-		if obs.CaptureStatus != "" && obs.CaptureStatus != "COMPLETED" {
+		if obs.CaptureID != claimID {
 			return InvariantResult{
-				Status:  StatusInconclusive,
-				Summary: fmt.Sprintf("order %s claims completion but the provider only shows capture status %q", o.ID, obs.CaptureStatus),
+				Status:  StatusFail,
+				Summary: fmt.Sprintf("order %s claims capture %s, but the provider produced capture %s — contradictory identity evidence", o.ID, claimID, obs.CaptureID),
 				Evidence: []string{
 					fmt.Sprintf("obs#%d", obs.Seq),
 				},
-				Counterexample: map[string]any{"order_id": o.ID, "observed_capture_status": obs.CaptureStatus},
+				Counterexample: map[string]any{
+					"order_id": o.ID, "claimed_capture_id": claimID,
+					"provider_capture_id": obs.CaptureID, "obs_seq": obs.Seq,
+				},
+			}, false
+		}
+		if obs.CaptureStatus != "COMPLETED" {
+			if obs.CaptureStatus == "" {
+				continue // no terminal status observed on this entry; non-material here
+			}
+			return InvariantResult{
+				Status:  StatusFail,
+				Summary: fmt.Sprintf("order %s claims capture %s as completed, but the provider shows status %q for it", o.ID, claimID, obs.CaptureStatus),
+				Evidence: []string{
+					fmt.Sprintf("obs#%d", obs.Seq),
+				},
+				Counterexample: map[string]any{
+					"order_id": o.ID, "claimed_capture_id": claimID, "observed_capture_status": obs.CaptureStatus,
+				},
 			}, false
 		}
 		amountOK := false
@@ -497,23 +551,32 @@ func classifyClaimAgainstEvidence(ev *Evidence, o LocalOrder) (InvariantResult, 
 				amountOK = true
 			}
 		}
-		if obs.CaptureStatus == "COMPLETED" && obs.CaptureID != "" && amountOK {
-			return InvariantResult{}, true
+		if !amountOK {
+			return InvariantResult{
+				Status:  StatusFail,
+				Summary: fmt.Sprintf("order %s claims capture %s for %s %s, but the provider evidence shows %q %q", o.ID, claimID, amountString(o.TotalMinor), o.Currency, obs.CaptureAmount, obs.CaptureCurrency),
+				Evidence: []string{
+					fmt.Sprintf("obs#%d", obs.Seq),
+				},
+				Counterexample: map[string]any{
+					"order_id": o.ID, "claimed_capture_id": claimID,
+					"claim":    fmt.Sprintf("%s %s", amountString(o.TotalMinor), o.Currency),
+					"provider": fmt.Sprintf("capture_id=%q status=%q amount=%q %q", obs.CaptureID, obs.CaptureStatus, obs.CaptureAmount, obs.CaptureCurrency),
+				},
+			}, false
 		}
+		matched = true
 	}
-	worst := obsList[0]
-	return InvariantResult{
-		Status:  StatusFail,
-		Summary: fmt.Sprintf("order %s claims a completed capture that the provider evidence does not corroborate (amount/status mismatch)", o.ID),
-		Evidence: []string{
-			fmt.Sprintf("obs#%d", worst.Seq),
-		},
-		Counterexample: map[string]any{
-			"order_id": o.ID,
-			"claim":    fmt.Sprintf("%s %s", amountString(o.TotalMinor), o.Currency),
-			"provider": fmt.Sprintf("capture_id=%q status=%q amount=%q %q", worst.CaptureID, worst.CaptureStatus, worst.CaptureAmount, worst.CaptureCurrency),
-		},
-	}, false
+	if !matched {
+		return InvariantResult{
+			Status:  StatusInconclusive,
+			Summary: fmt.Sprintf("order %s claims capture %s, but no applied provider observation carries that identity", o.ID, claimID),
+			Counterexample: map[string]any{
+				"order_id": o.ID, "claimed_capture_id": claimID,
+			},
+		}, false
+	}
+	return InvariantResult{}, true
 }
 
 // I7: one logical order produces at most ONE applied capture mutation effect,
@@ -701,8 +764,10 @@ func checkI10(ev *Evidence) InvariantResult {
 	return result(StatusNotApplicable, "no refund activity in the executed scenarios (refunds are not required for M2)")
 }
 
-// I11: nothing was automatically applied — an unsafe or inconclusive verdict
-// never modifies a production merchant, and the run record says so explicitly.
+// I11: no auto-apply happened. Deliberately scoped to M2 reality: this
+// milestone exposes NO patch-application mechanism at all, so the check can
+// only confirm that no such action occurred — it does not (and must not)
+// claim to enforce restrictions on a future apply pipeline.
 func checkI11(ev *Evidence) InvariantResult {
 	for k, v := range ev.Facts {
 		if strings.HasPrefix(k, "auto_") && v != "" && v != "false" && v != "0" {
@@ -713,13 +778,15 @@ func checkI11(ev *Evidence) InvariantResult {
 			}
 		}
 	}
-	return result(StatusPass, "no auto-apply/deploy occurred; the verdict is advisory and human-gated")
+	return result(StatusPass, "M2 performs no apply/deploy step and exposes no patch-application mechanism; the verdict is an advisory output only (automatic-apply prevention for a future pipeline is out of M2 scope)")
 }
 
-// I12: every evidence item carries an explicit provenance tier, and scripted
-// fixture interactions may never be labelled as real PayPal evidence.
+// I12: evidence provenance is explicit for BOTH provider observations and the
+// durable journal, and scripted fixture interactions may never be labelled as
+// real PayPal evidence.
 func checkI12(ev *Evidence) InvariantResult {
 	applicable := false
+	scripted := false
 	for _, obs := range ev.Provider {
 		applicable = true
 		if obs.Tier == "" {
@@ -729,21 +796,47 @@ func checkI12(ev *Evidence) InvariantResult {
 				Counterexample: map[string]any{"obs_seq": obs.Seq, "order_ref": obs.OrderRef},
 			}
 		}
-		if strings.Contains(obs.Source, "scripted") && obs.Tier == TierReal {
-			return InvariantResult{
-				Status:         StatusFail,
-				Summary:        "a scripted fixture interaction is labelled as real provider evidence",
-				Counterexample: map[string]any{"obs_seq": obs.Seq, "source": obs.Source, "tier": obs.Tier},
+		if strings.Contains(obs.Source, "scripted") {
+			scripted = true
+			if obs.Tier == TierReal {
+				return InvariantResult{
+					Status:         StatusFail,
+					Summary:        "a scripted fixture interaction is labelled as real provider evidence",
+					Counterexample: map[string]any{"obs_seq": obs.Seq, "source": obs.Source, "tier": obs.Tier},
+				}
 			}
 		}
 	}
+
+	// The durable journal carries provenance too. Provider-derived events
+	// (source PAYPAL) written while a scripted provider was wired must be
+	// tagged F at their origin; genuine Sandbox observations keep R.
+	for _, e := range ev.Events {
+		if e.Tier == "" {
+			return InvariantResult{
+				Status:         StatusFail,
+				Summary:        "a journal event carries no provenance tier",
+				Counterexample: map[string]any{"event_id": e.ID, "event_type": e.EventType, "source": e.Source},
+			}
+		}
+		if e.Source == "PAYPAL" && scripted && e.Tier == TierReal {
+			return InvariantResult{
+				Status:  StatusFail,
+				Summary: "a provider-derived journal event is labelled as real provider evidence in a scripted run",
+				Counterexample: map[string]any{
+					"event_id": e.ID, "event_type": e.EventType, "source": e.Source, "tier": e.Tier,
+				},
+			}
+		}
+	}
+
 	if !applicable {
 		return result(StatusNotApplicable, "no provider observations in evidence")
 	}
 	if ev.Scenario.EvidenceTier == "" {
 		return InvariantResult{Status: StatusFail, Summary: "scenario declares no evidence tier"}
 	}
-	return result(StatusPass, "all provider observations carry explicit tiers (scripted interactions labelled F, never R)")
+	return result(StatusPass, "provenance is explicit across provider observations and the journal; scripted interactions are labelled F, never R")
 }
 
 // ---------------------------------------------------------------------------

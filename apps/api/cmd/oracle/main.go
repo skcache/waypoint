@@ -26,27 +26,24 @@ func main() {
 	outDir := flag.String("out", "", "directory for proof bundles (required)")
 	dsn := flag.String("dsn", os.Getenv("TEST_DATABASE_URL"), "PostgreSQL test DSN (database name must end in _test)")
 	only := flag.String("scenario", "all", "scenario id to run, or 'all'")
-	revision := flag.String("revision", envOr("WAYPOINT_REVISION", "local-dev"), "code revision recorded in the bundles")
 	flag.Parse()
 
 	if *outDir == "" {
-		fmt.Fprintln(os.Stderr, "usage: oracle -out <bundle-dir> [-scenario id] [-dsn dsn] [-revision sha]")
+		fmt.Fprintln(os.Stderr, "usage: oracle -out <bundle-dir> [-scenario id] [-dsn dsn]")
 		os.Exit(2)
 	}
-	if err := run(*outDir, *dsn, *only, *revision); err != nil {
+	// The evaluated revision is DETECTED (Go build VCS stamp, then git), never
+	// supplied by the caller: a bundle must not be able to claim a revision
+	// the run did not actually execute.
+	revision, revisionSource := oracle.DetectRevision()
+	fmt.Printf("evaluated revision: %s (source: %s)\n", revision, revisionSource)
+	if err := run(*outDir, *dsn, *only, revision, revisionSource); err != nil {
 		fmt.Fprintln(os.Stderr, "oracle:", err)
 		os.Exit(1)
 	}
 }
 
-func envOr(key, fallback string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
-	}
-	return fallback
-}
-
-func run(outDir, dsn, only, revision string) error {
+func run(outDir, dsn, only, revision, revisionSource string) error {
 	ctx := context.Background()
 	h, err := replay.OpenHarness(ctx, dsn)
 	if err != nil {
@@ -89,7 +86,7 @@ func run(outDir, dsn, only, revision string) error {
 			return err
 		}
 		result := oracle.Evaluate(&ev)
-		bundle := oracle.BuildBundle(result, &ev, revision)
+		bundle := oracle.BuildBundle(result, &ev, revision, revisionSource)
 		dir := fmt.Sprintf("%s/%s-%s", outDir, sc.ID, cand)
 		if _, err := oracle.WriteBundle(dir, bundle, &ev); err != nil {
 			return err

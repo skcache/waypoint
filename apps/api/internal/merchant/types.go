@@ -106,10 +106,14 @@ type Operation struct {
 	AttemptCount       int        `json:"attempt_count"`
 	OwnerID            string     `json:"owner_id,omitempty"`
 	LeaseExpiresAt     *time.Time `json:"lease_expires_at,omitempty"`
-	FirstAttemptedAt   time.Time  `json:"first_attempted_at"`
-	LastCheckedAt      *time.Time `json:"last_checked_at,omitempty"`
-	CreatedAt          time.Time  `json:"created_at"`
-	UpdatedAt          time.Time  `json:"updated_at"`
+	// Fence is the ownership generation: incremented on every claim/takeover.
+	// Worker transitions carry the fence they inspected so a stale writer's
+	// update matches zero rows and is refused.
+	Fence            int64      `json:"fence"`
+	FirstAttemptedAt time.Time  `json:"first_attempted_at"`
+	LastCheckedAt    *time.Time `json:"last_checked_at,omitempty"`
+	CreatedAt        time.Time  `json:"created_at"`
+	UpdatedAt        time.Time  `json:"updated_at"`
 }
 
 // Event is one append-only journal entry with an explicit evidence tier.

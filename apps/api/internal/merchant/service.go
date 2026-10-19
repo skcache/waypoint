@@ -53,6 +53,11 @@ type Service struct {
 	sameIDRetryWindow time.Duration
 	instanceID        string
 	leaseTTL          time.Duration
+	// providerTier labels the provenance of provider-derived journal events.
+	// The real Sandbox client is tier R; when a scripted fixture provider is
+	// wired (the replay harness), the tier is F so the journal never claims
+	// real PayPal evidence for simulated interactions.
+	providerTier string
 }
 
 // NewService wires the fixture. fault selects the seeded defect (FaultNone or
@@ -70,6 +75,7 @@ func NewService(store *Store, api OrdersAPI, fault, incidentDir string) *Service
 		sameIDRetryWindow: defaultSameIDRetryWindow,
 		instanceID:        newInstanceID(),
 		leaseTTL:          defaultCaptureLeaseTTL,
+		providerTier:      TierReal,
 	}
 }
 
@@ -101,15 +107,28 @@ func (s *Service) SetCaptureLeaseTTL(d time.Duration) {
 // InstanceID reports this service instance's worker id (tests, diagnostics).
 func (s *Service) InstanceID() string { return s.instanceID }
 
+// SetProviderEvidenceTier declares the provenance of the wired provider:
+// TierReal for the real Sandbox client (default), TierFault when a scripted
+// fixture provider is used. Provider-derived journal events carry this tier.
+func (s *Service) SetProviderEvidenceTier(tier string) {
+	switch tier {
+	case TierReal, TierFault, TierSample:
+		s.providerTier = tier
+	}
+}
+
 // Fault reports the configured fault mode (shown in the UI banner).
 func (s *Service) Fault() string { return s.fault }
 
-// evidenceTier labels evidence produced while a fault is active: the provider
-// response is real, but the scenario is fault-injected (tier F), never
-// presented as a clean real-world run.
+// evidenceTier labels evidence produced under this service: tier F whenever
+// EITHER a fault is injected OR the wired provider is a scripted fixture;
+// tier R only for genuine Sandbox provider interactions with no fault active.
 func (s *Service) evidenceTier() string {
-	if s.fault != FaultNone {
+	if s.fault != FaultNone || s.providerTier == TierFault {
 		return TierFault
+	}
+	if s.providerTier == TierSample {
+		return TierSample
 	}
 	return TierReal
 }
@@ -241,7 +260,7 @@ func (s *Service) finishCreate(ctx context.Context, order Order, op Operation, r
 		}
 	}
 
-	updated, err := s.store.MarkCreateSucceeded(ctx, order.ID, result.ID, result.ApprovalURL())
+	updated, err := s.store.MarkCreateSucceeded(ctx, order.ID, result.ID, result.ApprovalURL(), s.evidenceTier())
 	if err != nil {
 		return Order{}, err
 	}
@@ -300,7 +319,7 @@ func (s *Service) onCreateError(ctx context.Context, order Order, op Operation, 
 	detail := failureDetail(op, cause)
 
 	if paypal.AmbiguousOutcome(cause) {
-		if err := s.store.MarkCreateUnknown(ctx, order.ID, detail); err != nil {
+		if err := s.store.MarkCreateUnknown(ctx, order.ID, detail, s.evidenceTier()); err != nil {
 			return Order{}, err
 		}
 		slog.Warn("merchant checkout: provider create outcome unknown (operation preserved)",
@@ -321,7 +340,7 @@ func (s *Service) onCreateError(ctx context.Context, order Order, op Operation, 
 
 func (s *Service) onCreateUnknown(ctx context.Context, order Order, op Operation, reason string) (Order, error) {
 	detail := failureDetail(op, errors.New(reason))
-	if err := s.store.MarkCreateUnknown(ctx, order.ID, detail); err != nil {
+	if err := s.store.MarkCreateUnknown(ctx, order.ID, detail, s.evidenceTier()); err != nil {
 		return Order{}, err
 	}
 	return Order{}, fmt.Errorf("provider create outcome is unknown for order %s: %s", order.ID, reason)
@@ -347,7 +366,7 @@ func (s *Service) Observe(ctx context.Context, orderID string) (Order, error) {
 	if res.Payer != nil {
 		payerID = res.Payer.PayerID
 	}
-	return s.store.ObserveOrderStatus(ctx, orderID, res.Status, payerID)
+	return s.store.ObserveOrderStatus(ctx, orderID, res.Status, payerID, s.evidenceTier())
 }
 
 // Capture performs the server-side capture for an order whose buyer approval
@@ -429,12 +448,12 @@ func (s *Service) Capture(ctx context.Context, orderID string) (Order, error) {
 	if err != nil {
 		detail := failureDetail(op, err)
 		if paypal.AmbiguousOutcome(err) {
-			if _, mErr := s.store.MarkCaptureUnknown(ctx, orderID, op.ID, detail, TierReal); mErr != nil {
+			if _, mErr := s.store.MarkCaptureUnknown(ctx, orderID, op.ID, op.Fence, detail, s.evidenceTier()); mErr != nil {
 				return Order{}, mErr
 			}
 			return Order{}, &UnknownCaptureError{OrderID: orderID, ProviderRequestID: op.ProviderRequestID, Cause: err}
 		}
-		updated, mErr := s.store.MarkCaptureRejected(ctx, orderID, op.ID, detail, s.evidenceTier())
+		updated, mErr := s.store.MarkCaptureRejected(ctx, orderID, op.ID, op.Fence, detail, s.evidenceTier())
 		if mErr != nil {
 			return Order{}, mErr
 		}
@@ -448,7 +467,7 @@ func (s *Service) Capture(ctx context.Context, orderID string) (Order, error) {
 			"provider_request_id": op.ProviderRequestID,
 			"verification_error":  verr.Error(),
 		})
-		if _, mErr := s.store.MarkCaptureUnknown(ctx, orderID, op.ID, detail, TierReal); mErr != nil {
+		if _, mErr := s.store.MarkCaptureUnknown(ctx, orderID, op.ID, op.Fence, detail, s.evidenceTier()); mErr != nil {
 			return Order{}, mErr
 		}
 		return Order{}, &UnknownCaptureError{OrderID: orderID, ProviderRequestID: op.ProviderRequestID, Cause: verr}
@@ -461,7 +480,7 @@ func (s *Service) Capture(ctx context.Context, orderID string) (Order, error) {
 		"currency":            order.Currency,
 		"provider_request_id": op.ProviderRequestID,
 	})
-	updated, err := s.store.MarkCaptureVerified(ctx, orderID, op.ID, captureID, detail)
+	updated, err := s.store.MarkCaptureVerified(ctx, orderID, op.ID, op.Fence, captureID, detail, s.evidenceTier())
 	if err != nil {
 		return Order{}, err
 	}
@@ -507,10 +526,11 @@ func (s *Service) beginCaptureAttempt(ctx context.Context, order Order) (Operati
 			return Operation{}, fmt.Errorf("%w: same-id retry window (%s) exceeded for order %s; manual reconciliation required (request id %s preserved)",
 				ErrConflict, s.sameIDRetryWindow, order.ID, active.ProviderRequestID)
 		}
-		if err := s.store.BeginCaptureRetry(ctx, order.ID, active.ID, s.instanceID, s.leaseTTL); err != nil {
+		claimed, err := s.store.BeginCaptureRetry(ctx, order.ID, active.ID, s.instanceID, s.leaseTTL)
+		if err != nil {
 			return Operation{}, err
 		}
-		return *active, nil
+		return claimed, nil
 	}
 
 	requestID, err := paypal.NewRequestID()
@@ -576,7 +596,7 @@ func (s *Service) Reconcile(ctx context.Context, orderID string) (Order, error) 
 			"resolved_by":         "reconciliation",
 			"provider_request_id": active.ProviderRequestID,
 		})
-		return s.store.MarkCaptureVerifiedRecovered(ctx, orderID, active.ID, captureID, detail)
+		return s.store.MarkCaptureVerifiedRecovered(ctx, orderID, active.ID, active.Fence, captureID, detail, s.evidenceTier())
 	}
 
 	// No matching COMPLETED capture. Before demoting an IN_FLIGHT attempt,
@@ -601,11 +621,11 @@ func (s *Service) Reconcile(ctx context.Context, orderID string) (Order, error) 
 		"provider_request_id": active.ProviderRequestID,
 	})
 	if active.Status == OpStatusInFlight {
-		if _, err := s.store.MarkCaptureUnknown(ctx, orderID, active.ID, detail, TierReal); err != nil {
+		if _, err := s.store.MarkCaptureUnknown(ctx, orderID, active.ID, active.Fence, detail, s.evidenceTier()); err != nil {
 			return Order{}, err
 		}
 	} else {
-		if err := s.store.AppendEvent(ctx, orderID, "PAYPAL", "RECONCILIATION_INCONCLUSIVE", detail, TierReal); err != nil {
+		if err := s.store.AppendEvent(ctx, orderID, "PAYPAL", "RECONCILIATION_INCONCLUSIVE", detail, s.evidenceTier()); err != nil {
 			return Order{}, err
 		}
 		if err := s.store.TouchLastChecked(ctx, active.ID); err != nil {
@@ -635,15 +655,15 @@ func captureStatuses(res *paypal.Order) []string {
 // sealRecoveredCapture certifies a capture proven by provider state, with or
 // without a local unresolved operation.
 func (s *Service) sealRecoveredCapture(ctx context.Context, orderID, captureID string) (Order, error) {
-	opID := ""
+	opID, fence := "", int64(0)
 	if active, err := s.store.ActiveCapture(ctx, orderID); err == nil && active != nil {
-		opID = active.ID
+		opID, fence = active.ID, active.Fence
 	}
 	detail, _ := json.Marshal(map[string]any{
 		"capture_id":  captureID,
 		"resolved_by": "provider evidence",
 	})
-	return s.store.MarkCaptureVerifiedRecovered(ctx, orderID, opID, captureID, detail)
+	return s.store.MarkCaptureVerifiedRecovered(ctx, orderID, opID, fence, captureID, detail, s.evidenceTier())
 }
 
 func (s *Service) localOrder(ctx context.Context, orderID string) (Order, error) {

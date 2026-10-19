@@ -21,17 +21,20 @@ import (
 )
 
 // UnsafeDriver wraps the real reference service for every operation EXCEPT
-// capture, where the seed's defect lives.
+// capture, where the seed's defect lives. The tier names the provenance of
+// provider-derived journal events this driver writes (F under the scripted
+// fixture harness; never R for simulated interactions).
 type UnsafeDriver struct {
 	flavor string
+	tier   string
 	svc    *merchant.Service
 	store  *merchant.Store
 	api    merchant.OrdersAPI
 }
 
 // NewUnsafeDriver builds a seed driver for the given flavor.
-func NewUnsafeDriver(flavor string, svc *merchant.Service, store *merchant.Store, api merchant.OrdersAPI) *UnsafeDriver {
-	return &UnsafeDriver{flavor: flavor, svc: svc, store: store, api: api}
+func NewUnsafeDriver(flavor, tier string, svc *merchant.Service, store *merchant.Store, api merchant.OrdersAPI) *UnsafeDriver {
+	return &UnsafeDriver{flavor: flavor, tier: tier, svc: svc, store: store, api: api}
 }
 
 func (d *UnsafeDriver) Checkout(ctx context.Context, traceID, productID string, quantity int) (merchant.Order, error) {
@@ -129,7 +132,7 @@ func (d *UnsafeDriver) captureIdentitySwap(ctx context.Context, orderID string) 
 		return merchant.Order{}, err
 	}
 	if err := d.store.AppendEvent(ctx, orderID, "PAYPAL", "PROVIDER_CAPTURE_CONFIRMED",
-		[]byte(fmt.Sprintf(`{"capture_id":%q,"resolved_by":"unsafe-seed","provider_request_id":%q}`, captureID, newRequestID)), merchant.TierReal); err != nil {
+		[]byte(fmt.Sprintf(`{"capture_id":%q,"resolved_by":"unsafe-seed","provider_request_id":%q}`, captureID, newRequestID)), d.tier); err != nil {
 		return merchant.Order{}, err
 	}
 	return d.orderNow(ctx, orderID)
@@ -172,7 +175,7 @@ func (d *UnsafeDriver) captureAcceptMismatch(ctx context.Context, orderID string
 		return merchant.Order{}, err
 	}
 	if err := d.store.AppendEvent(ctx, orderID, "PAYPAL", "PROVIDER_CAPTURE_CONFIRMED",
-		[]byte(fmt.Sprintf(`{"capture_id":%q,"resolved_by":"unsafe-seed-amount-not-validated"}`, captureID)), merchant.TierReal); err != nil {
+		[]byte(fmt.Sprintf(`{"capture_id":%q,"resolved_by":"unsafe-seed-amount-not-validated"}`, captureID)), d.tier); err != nil {
 		return merchant.Order{}, err
 	}
 	return d.orderNow(ctx, orderID)

@@ -930,3 +930,119 @@ func TestRecoveryWorkerCannotRaceActiveCapture(t *testing.T) {
 		t.Fatalf("status = %s, want CAPTURED_VERIFIED", res.order.Status)
 	}
 }
+
+// M2 review correction (fencing): a reconciler that inspected an EXPIRED
+// lease must not be able to demote the operation once another worker has
+// taken it over and is actively capturing. A lease timestamp alone is not a
+// fencing token — the demotion must be conditioned on the fencing generation
+// the reconciler actually inspected. Deterministic interleaving: every step
+// is ordered by channels, no sleeps.
+func TestStaleReconcilerCannotDemoteAfterTakeover(t *testing.T) {
+	store := newFixtureStore(t)
+	ctx := context.Background()
+
+	startedA := make(chan struct{})
+	releaseA := make(chan struct{})
+	startedB := make(chan struct{})
+	releaseB := make(chan struct{})
+
+	var mu sync.Mutex
+	getCalls := 0
+	fake := &fakePayPal{
+		getFn: func(orderID string) (*paypal.Order, error) {
+			mu.Lock()
+			getCalls++
+			n := getCalls
+			mu.Unlock()
+			// Call 1 is the approval observation. Call 2 is worker A's
+			// reconciliation read: block it mid-flight.
+			if n == 2 {
+				close(startedA)
+				<-releaseA
+			}
+			return approvedOrder(orderID, "USD", "12.34"), nil
+		},
+		captureFn: func(orderID, _ string) (*paypal.Order, error) {
+			close(startedB)
+			<-releaseB
+			return completedOrder(orderID, "CAP-TEST-FENCE", "USD", "12.34"), nil
+		},
+	}
+
+	svcA := merchant.NewService(store, fake, merchant.FaultNone, "")
+	order := newOrder(t, store, svcA, 1)
+	approve(t, svcA, order.ID)
+
+	// Worker A began a capture, its process died, and its lease has expired;
+	// the operation row (generation 1) is preserved.
+	if _, err := store.InsertCaptureOp(ctx, order.ID, "req-fence-1", "fp-fence-1", "worker-A", 5*time.Minute); err != nil {
+		t.Fatalf("insert worker A capture begin: %v", err)
+	}
+	if _, err := store.Pool().Exec(ctx, `
+		UPDATE merchant_operations SET lease_expires_at = now() - interval '1 second'
+		 WHERE order_id = $1::uuid AND operation_type = 'CAPTURE'`, order.ID); err != nil {
+		t.Fatalf("expire lease: %v", err)
+	}
+
+	// A starts reconciling; its provider read blocks while it holds a stale
+	// view of the operation (expired lease, generation 1).
+	doneA := make(chan error, 1)
+	go func() {
+		_, err := svcA.Reconcile(ctx, order.ID)
+		doneA <- err
+	}()
+	<-startedA
+
+	// B reconciles (demotes the abandoned attempt) and takes over the SAME
+	// operation identity, beginning a live capture under a fresh lease.
+	svcB := merchant.NewService(store, fake, merchant.FaultNone, "")
+	if _, err := svcB.Reconcile(ctx, order.ID); err == nil {
+		t.Fatal("B's reconcile must report the outcome as still unresolved")
+	}
+	doneB := make(chan error, 1)
+	go func() {
+		_, err := svcB.Capture(ctx, order.ID)
+		doneB <- err
+	}()
+	<-startedB // B is inside the provider call; its lease is live.
+
+	// Release A: its stale demotion must be refused and must not touch B's
+	// operation.
+	close(releaseA)
+	errA := <-doneA
+	if errA == nil {
+		t.Fatal("stale reconciler must not succeed after a takeover")
+	}
+
+	d := detailFor(t, store, order.ID)
+	if d.Order.Status != merchant.StatusCaptureInFlight {
+		t.Fatalf("order status = %s after stale reconcile (A err: %v); want CAPTURE_IN_FLIGHT (B's active attempt untouched)", d.Order.Status, errA)
+	}
+	for _, op := range d.Operations {
+		if op.Type != merchant.OpCapture {
+			continue
+		}
+		if op.Status != merchant.OpStatusInFlight {
+			t.Fatalf("op status = %s (fence=%d owner=%q; A err: %v); B's attempt was overwritten", op.Status, op.Fence, op.OwnerID, errA)
+		}
+		if op.ProviderRequestID != "req-fence-1" {
+			t.Fatalf("request id = %q, want the preserved req-fence-1", op.ProviderRequestID)
+		}
+		if op.OwnerID != svcB.InstanceID() {
+			t.Fatalf("owner = %q, want worker B (%s); a stale worker must not reclaim ownership", op.OwnerID, svcB.InstanceID())
+		}
+	}
+
+	// B completes normally with the same request id.
+	close(releaseB)
+	if err := <-doneB; err != nil {
+		t.Fatalf("B capture: %v", err)
+	}
+	updated := detailFor(t, store, order.ID).Order
+	if updated.Status != merchant.StatusCapturedVerified {
+		t.Fatalf("final status = %s, want CAPTURED_VERIFIED", updated.Status)
+	}
+	if len(fake.captureCalls) != 1 || fake.captureCalls[0] != "req-fence-1" {
+		t.Fatalf("capture calls = %v, want exactly one send reusing req-fence-1", fake.captureCalls)
+	}
+}

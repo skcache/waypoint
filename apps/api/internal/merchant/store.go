@@ -77,14 +77,14 @@ func scanOrder(row pgx.Row) (Order, error) {
 
 const operationColumns = `id::text, order_id::text, operation_type, provider_request_id,
 	payload_fingerprint, status, coalesce(provider_order_id, ''),
-	coalesce(provider_capture_id, ''), attempt_count, owner_id, lease_expires_at,
+	coalesce(provider_capture_id, ''), attempt_count, owner_id, lease_expires_at, fence,
 	first_attempted_at, last_checked_at, created_at, updated_at`
 
 func scanOperation(row pgx.Row) (Operation, error) {
 	var op Operation
 	err := row.Scan(&op.ID, &op.OrderID, &op.Type, &op.ProviderRequestID, &op.PayloadFingerprint,
 		&op.Status, &op.ProviderOrderID, &op.ProviderCaptureID, &op.AttemptCount,
-		&op.OwnerID, &op.LeaseExpiresAt,
+		&op.OwnerID, &op.LeaseExpiresAt, &op.Fence,
 		&op.FirstAttemptedAt, &op.LastCheckedAt, &op.CreatedAt, &op.UpdatedAt)
 	return op, err
 }
@@ -205,7 +205,7 @@ func (s *Store) CreateLocalOrder(ctx context.Context, traceID, productID string,
 // MarkCreateSucceeded records a provider-accepted create. Accepted from
 // IN_FLIGHT (first call) or UNKNOWN (idempotent resolution with the same
 // request id).
-func (s *Store) MarkCreateSucceeded(ctx context.Context, orderID, providerOrderID, approvalURL string) (Order, error) {
+func (s *Store) MarkCreateSucceeded(ctx context.Context, orderID, providerOrderID, approvalURL, tier string) (Order, error) {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return Order{}, err
@@ -237,7 +237,7 @@ func (s *Store) MarkCreateSucceeded(ctx context.Context, orderID, providerOrderI
 	if _, err := tx.Exec(ctx, `
 		INSERT INTO merchant_events (order_id, trace_id, source, event_type, detail, tier)
 		VALUES ($1::uuid, $2::uuid, 'PAYPAL', 'PROVIDER_ORDER_CREATED', $3, $4)`,
-		orderID, order.TraceID, detail, TierReal); err != nil {
+		orderID, order.TraceID, detail, tier); err != nil {
 		return Order{}, err
 	}
 
@@ -290,7 +290,7 @@ func (s *Store) MarkCreateRejected(ctx context.Context, orderID string, detail j
 // MarkCreateUnknown records an ambiguous create outcome. The order stays
 // ORDER_CREATED and the operation stays unresolved — never failed — until a
 // same-request-id resolution or reconciliation establishes the truth.
-func (s *Store) MarkCreateUnknown(ctx context.Context, orderID string, detail json.RawMessage) error {
+func (s *Store) MarkCreateUnknown(ctx context.Context, orderID string, detail json.RawMessage, tier string) error {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return err
@@ -309,7 +309,7 @@ func (s *Store) MarkCreateUnknown(ctx context.Context, orderID string, detail js
 	if _, err := tx.Exec(ctx, `
 		INSERT INTO merchant_events (order_id, trace_id, source, event_type, detail, tier)
 		VALUES ($1::uuid, $2::uuid, 'PAYPAL', 'PROVIDER_CREATE_UNKNOWN', $3, $4)`,
-		orderID, traceID, detail, TierReal); err != nil {
+		orderID, traceID, detail, tier); err != nil {
 		return err
 	}
 	return tx.Commit(ctx)
@@ -319,7 +319,7 @@ func (s *Store) MarkCreateUnknown(ctx context.Context, orderID string, detail js
 // ever moves an order forward toward APPROVED and never touches capture
 // outcomes — verified evidence stays sticky, and an APPROVED observation can
 // never resurrect a capture-eligible state after a capture attempt.
-func (s *Store) ObserveOrderStatus(ctx context.Context, orderID, providerStatus, payerID string) (Order, error) {
+func (s *Store) ObserveOrderStatus(ctx context.Context, orderID, providerStatus, payerID, tier string) (Order, error) {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return Order{}, err
@@ -348,7 +348,7 @@ func (s *Store) ObserveOrderStatus(ctx context.Context, orderID, providerStatus,
 	if _, err := tx.Exec(ctx, `
 		INSERT INTO merchant_events (order_id, trace_id, source, event_type, detail, tier)
 		VALUES ($1::uuid, $2::uuid, 'PAYPAL', 'PROVIDER_ORDER_OBSERVED', $3, $4)`,
-		orderID, order.TraceID, detail, TierReal); err != nil {
+		orderID, order.TraceID, detail, tier); err != nil {
 		return Order{}, err
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -471,82 +471,94 @@ func (s *Store) TouchLastChecked(ctx context.Context, operationID string) error 
 }
 
 // BeginCaptureRetry durably re-enters the in-flight state for an existing
-// unresolved capture operation, reusing its preserved request id. Two cases
-// are permitted, both fenced by the lease:
+// unresolved capture operation, reusing its preserved request id and bumping
+// the ownership FENCE. Two cases are permitted, both fenced:
 //
-//   - the operation is UNKNOWN (a previous attempt ended unresolved): the
-//     retry claims ownership with a fresh lease;
+//   - the operation is UNKNOWN (a previous attempt ended unresolved);
 //   - the operation is IN_FLIGHT but its lease has expired (or was never
 //     set): the crashed owner has demonstrably stopped, so the retry TAKES
-//     OVER the same operation — new owner, new lease, SAME request id.
+//     OVER the same operation — new owner, new lease, new generation, SAME
+//     request id.
 //
 // An IN_FLIGHT operation with a LIVE lease is refused: another worker may be
-// mid-mutation and must not be raced.
-func (s *Store) BeginCaptureRetry(ctx context.Context, orderID, operationID, ownerID string, leaseTTL time.Duration) error {
+// mid-mutation and must not be raced. The returned operation carries the
+// post-claim fence, which every subsequent transition must present.
+func (s *Store) BeginCaptureRetry(ctx context.Context, orderID, operationID, ownerID string, leaseTTL time.Duration) (Operation, error) {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
-		return err
+		return Operation{}, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	tag, err := tx.Exec(ctx, `
+	op, err := scanOperation(tx.QueryRow(ctx, `
 		UPDATE merchant_operations
-		   SET attempt_count = attempt_count + 1, owner_id = $2, lease_expires_at = $3,
-		       last_checked_at = now(), updated_at = now()
+		   SET status = 'IN_FLIGHT', attempt_count = attempt_count + 1,
+		       owner_id = $2, lease_expires_at = $3,
+		       fence = fence + 1, last_checked_at = now(), updated_at = now()
 		 WHERE id = $1::uuid AND operation_type = 'CAPTURE'
 		   AND (status = 'UNKNOWN'
-		        OR (status = 'IN_FLIGHT' AND (lease_expires_at IS NULL OR lease_expires_at < now())))`,
-		operationID, ownerID, leaseExpiry(leaseTTL))
-	if err != nil {
-		return err
+		        OR (status = 'IN_FLIGHT' AND (lease_expires_at IS NULL OR lease_expires_at < now())))
+		RETURNING `+operationColumns,
+		operationID, ownerID, leaseExpiry(leaseTTL)))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Operation{}, fmt.Errorf("%w: capture operation %s is not retryable (unresolved, or in flight with an expired lease)", ErrConflict, operationID)
 	}
-	if tag.RowsAffected() != 1 {
-		return fmt.Errorf("%w: capture operation %s is not retryable (unresolved, or in flight with an expired lease)", ErrConflict, operationID)
+	if err != nil {
+		return Operation{}, err
 	}
 
-	tag, err = tx.Exec(ctx, `
+	tag, err := tx.Exec(ctx, `
 		UPDATE merchant_orders
 		   SET status = $2, updated_at = now()
 		 WHERE id = $1::uuid AND status IN ('APPROVED', 'CAPTURE_OUTCOME_UNKNOWN', 'RECONCILIATION_REQUIRED')`,
 		orderID, StatusCaptureInFlight)
 	if err != nil {
-		return err
+		return Operation{}, err
 	}
 	if tag.RowsAffected() != 1 {
-		return fmt.Errorf("%w: order %s cannot re-enter capture (status changed)", ErrConflict, orderID)
+		return Operation{}, fmt.Errorf("%w: order %s cannot re-enter capture (status changed)", ErrConflict, orderID)
 	}
 
 	var requestID string
 	if err := tx.QueryRow(ctx, `SELECT provider_request_id FROM merchant_operations WHERE id = $1::uuid`, operationID).Scan(&requestID); err != nil {
-		return err
+		return Operation{}, err
 	}
-	detail, _ := json.Marshal(map[string]any{"provider_request_id": requestID, "note": "retry reuses the original request id"})
+	detail, _ := json.Marshal(map[string]any{"provider_request_id": requestID, "note": "retry reuses the original request id", "fence": op.Fence})
 	if _, err := tx.Exec(ctx, `
 		INSERT INTO merchant_events (order_id, trace_id, source, event_type, detail, tier)
 		SELECT id, trace_id, 'API', 'CAPTURE_RETRY_STARTED', $2, $3 FROM merchant_orders WHERE id = $1::uuid`,
 		orderID, detail, TierReal); err != nil {
-		return err
+		return Operation{}, err
 	}
-	return tx.Commit(ctx)
+	if err := tx.Commit(ctx); err != nil {
+		return Operation{}, err
+	}
+	return op, nil
 }
 
 // MarkCaptureVerified seals a provider-confirmed capture. Only states that
 // are unresolved-or-in-flight may reach CAPTURED_VERIFIED; the update is
-// guarded by the current order status so a stale observation can never
-// rewrite an already-verified outcome.
-func (s *Store) MarkCaptureVerified(ctx context.Context, orderID, operationID, captureID string, detail json.RawMessage) (Order, error) {
+// guarded by the order status AND by the fencing generation the worker
+// inspected, so a stale observation (or a stale worker after a takeover) can
+// never rewrite an operation that moved beneath it.
+func (s *Store) MarkCaptureVerified(ctx context.Context, orderID, operationID string, expectedFence int64, captureID string, detail json.RawMessage, tier string) (Order, error) {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return Order{}, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	if _, err := tx.Exec(ctx, `
+	tag, err := tx.Exec(ctx, `
 		UPDATE merchant_operations
 		   SET status = 'SUCCEEDED', provider_capture_id = $2, last_checked_at = now(), updated_at = now()
-		 WHERE id = $1::uuid AND operation_type = 'CAPTURE' AND status IN ('IN_FLIGHT', 'UNKNOWN')`,
-		operationID, captureID); err != nil {
+		 WHERE id = $1::uuid AND operation_type = 'CAPTURE'
+		   AND status IN ('IN_FLIGHT', 'UNKNOWN') AND fence = $3`,
+		operationID, captureID, expectedFence)
+	if err != nil {
 		return Order{}, err
+	}
+	if tag.RowsAffected() != 1 {
+		return Order{}, fmt.Errorf("%w: capture operation %s moved under this worker (ownership generation changed); refusing a stale write", ErrConflict, operationID)
 	}
 
 	order, err := scanOrder(tx.QueryRow(ctx, `
@@ -564,7 +576,7 @@ func (s *Store) MarkCaptureVerified(ctx context.Context, orderID, operationID, c
 	if _, err := tx.Exec(ctx, `
 		INSERT INTO merchant_events (order_id, trace_id, source, event_type, detail, tier)
 		VALUES ($1::uuid, $2::uuid, 'PAYPAL', 'PROVIDER_CAPTURE_CONFIRMED', $3, $4)`,
-		orderID, order.TraceID, detail, TierReal); err != nil {
+		orderID, order.TraceID, detail, tier); err != nil {
 		return Order{}, err
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -575,16 +587,18 @@ func (s *Store) MarkCaptureVerified(ctx context.Context, orderID, operationID, c
 
 // MarkCaptureUnknown records an unresolved capture. The order keeps its
 // unknown status and the operation keeps its request id; nothing is failed.
-func (s *Store) MarkCaptureUnknown(ctx context.Context, orderID, operationID string, detail json.RawMessage, tier string) (Order, error) {
-	return s.captureTransition(ctx, orderID, operationID, "UNKNOWN", StatusCaptureOutcomeUnknown, "CAPTURE_OUTCOME_UNKNOWN", detail, tier)
+// The transition is fenced: the caller must present the ownership generation
+// it inspected.
+func (s *Store) MarkCaptureUnknown(ctx context.Context, orderID, operationID string, expectedFence int64, detail json.RawMessage, tier string) (Order, error) {
+	return s.captureTransition(ctx, orderID, operationID, expectedFence, "UNKNOWN", StatusCaptureOutcomeUnknown, "CAPTURE_OUTCOME_UNKNOWN", detail, tier)
 }
 
 // MarkCaptureRejected resolves an attempt as a definite no-effect rejection:
 // the provider refused without capturing. The order returns to APPROVED (a
 // buyer may still be charged through a later authorized attempt), never to a
-// fake failure.
-func (s *Store) MarkCaptureRejected(ctx context.Context, orderID, operationID string, detail json.RawMessage, tier string) (Order, error) {
-	return s.captureTransition(ctx, orderID, operationID, "REJECTED", StatusApproved, "CAPTURE_REJECTED_DEFINITE", detail, tier)
+// fake failure. Fenced like every capture transition.
+func (s *Store) MarkCaptureRejected(ctx context.Context, orderID, operationID string, expectedFence int64, detail json.RawMessage, tier string) (Order, error) {
+	return s.captureTransition(ctx, orderID, operationID, expectedFence, "REJECTED", StatusApproved, "CAPTURE_REJECTED_DEFINITE", detail, tier)
 }
 
 // MarkReconciliationRequired records that local and provider evidence
@@ -615,19 +629,28 @@ func (s *Store) MarkReconciliationRequired(ctx context.Context, orderID string, 
 	return tx.Commit(ctx)
 }
 
-func (s *Store) captureTransition(ctx context.Context, orderID, operationID, opStatus, orderStatus, eventType string, detail json.RawMessage, tier string) (Order, error) {
+func (s *Store) captureTransition(ctx context.Context, orderID, operationID string, expectedFence int64, opStatus, orderStatus, eventType string, detail json.RawMessage, tier string) (Order, error) {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return Order{}, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	if _, err := tx.Exec(ctx, `
+	// Atomic fencing condition: the operation must still be in the state this
+	// worker inspected (same ownership generation). A takeover by another
+	// worker bumps the fence, so this UPDATE then matches zero rows and the
+	// stale transition is refused rather than overwriting a live attempt.
+	tag, err := tx.Exec(ctx, `
 		UPDATE merchant_operations
 		   SET status = $2, last_checked_at = now(), updated_at = now()
-		 WHERE id = $1::uuid AND operation_type = 'CAPTURE' AND status IN ('IN_FLIGHT', 'UNKNOWN')`,
-		operationID, opStatus); err != nil {
+		 WHERE id = $1::uuid AND operation_type = 'CAPTURE'
+		   AND status IN ('IN_FLIGHT', 'UNKNOWN') AND fence = $3`,
+		operationID, opStatus, expectedFence)
+	if err != nil {
 		return Order{}, err
+	}
+	if tag.RowsAffected() != 1 {
+		return Order{}, fmt.Errorf("%w: capture operation %s moved under this worker (ownership generation changed); refusing a stale write", ErrConflict, operationID)
 	}
 
 	order, err := scanOrder(tx.QueryRow(ctx, `
@@ -656,9 +679,10 @@ func (s *Store) captureTransition(ctx context.Context, orderID, operationID, opS
 // MarkCaptureVerifiedRecovered seals a capture proven by provider evidence
 // when no local in-flight operation must be closed first (recovery after a
 // restart, or evidence that predates this process). When operationID is
-// non-empty, the unresolved operation is closed as SUCCEEDED with the
-// capture id. Sticky: CAPTURED_VERIFIED is never re-entered or downgraded.
-func (s *Store) MarkCaptureVerifiedRecovered(ctx context.Context, orderID, operationID, captureID string, detail json.RawMessage) (Order, error) {
+// non-empty, the unresolved operation is closed as SUCCEEDED with the capture
+// id — fenced by the ownership generation the caller inspected. Sticky:
+// CAPTURED_VERIFIED is never re-entered or downgraded.
+func (s *Store) MarkCaptureVerifiedRecovered(ctx context.Context, orderID, operationID string, expectedFence int64, captureID string, detail json.RawMessage, tier string) (Order, error) {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return Order{}, err
@@ -666,12 +690,17 @@ func (s *Store) MarkCaptureVerifiedRecovered(ctx context.Context, orderID, opera
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	if operationID != "" {
-		if _, err := tx.Exec(ctx, `
+		tag, err := tx.Exec(ctx, `
 			UPDATE merchant_operations
 			   SET status = 'SUCCEEDED', provider_capture_id = $2, last_checked_at = now(), updated_at = now()
-			 WHERE id = $1::uuid AND operation_type = 'CAPTURE' AND status IN ('IN_FLIGHT', 'UNKNOWN')`,
-			operationID, captureID); err != nil {
+			 WHERE id = $1::uuid AND operation_type = 'CAPTURE'
+			   AND status IN ('IN_FLIGHT', 'UNKNOWN') AND fence = $3`,
+			operationID, captureID, expectedFence)
+		if err != nil {
 			return Order{}, err
+		}
+		if tag.RowsAffected() != 1 {
+			return Order{}, fmt.Errorf("%w: capture operation %s moved under this worker (ownership generation changed); refusing a stale write", ErrConflict, operationID)
 		}
 	}
 
@@ -691,7 +720,7 @@ func (s *Store) MarkCaptureVerifiedRecovered(ctx context.Context, orderID, opera
 	if _, err := tx.Exec(ctx, `
 		INSERT INTO merchant_events (order_id, trace_id, source, event_type, detail, tier)
 		VALUES ($1::uuid, $2::uuid, 'PAYPAL', 'PROVIDER_CAPTURE_RECOVERED', $3, $4)`,
-		orderID, order.TraceID, detail, TierReal); err != nil {
+		orderID, order.TraceID, detail, tier); err != nil {
 		return Order{}, err
 	}
 	if err := tx.Commit(ctx); err != nil {

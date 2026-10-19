@@ -160,13 +160,18 @@ func (h *Harness) NewEnv(sc Scenario, cand Candidate) *Env {
 		Provider: provider,
 		NewDriver: func(c Candidate) Driver {
 			svc := merchant.NewService(h.Store, provider, merchant.FaultNone, "")
+			// Provenance at the ORIGIN: this service is wired to a scripted
+			// fixture provider, so every provider-derived journal event it
+			// writes must carry tier F — never a claim of real Sandbox
+			// evidence.
+			svc.SetProviderEvidenceTier(merchant.TierFault)
 			switch c {
 			case CandidateReference:
 				return svc
 			case CandidateUnsafeIdentitySwap:
-				return NewUnsafeDriver("identity-swap", svc, h.Store, provider)
+				return NewUnsafeDriver("identity-swap", merchant.TierFault, svc, h.Store, provider)
 			case CandidateUnsafeAcceptMismatch:
-				return NewUnsafeDriver("accept-mismatch", svc, h.Store, provider)
+				return NewUnsafeDriver("accept-mismatch", merchant.TierFault, svc, h.Store, provider)
 			default:
 				panic("replay: unknown candidate " + string(c))
 			}

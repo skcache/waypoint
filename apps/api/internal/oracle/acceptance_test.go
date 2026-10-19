@@ -162,7 +162,8 @@ func TestOracleSuiteAgainstDeclaredExpectations(t *testing.T) {
 
 			// The bundle must round-trip: write, re-read, validate.
 			dir := t.TempDir()
-			bundle := oracle.BuildBundle(result, &ev, "test-revision")
+			revision, revisionSource := oracle.DetectRevision()
+			bundle := oracle.BuildBundle(result, &ev, revision, revisionSource)
 			if _, err := oracle.WriteBundle(dir, bundle, &ev); err != nil {
 				t.Fatalf("write bundle: %v", err)
 			}
@@ -179,6 +180,12 @@ func TestOracleSuiteAgainstDeclaredExpectations(t *testing.T) {
 			}
 			if len(back.Invariants) != 12 || back.Applied {
 				t.Fatalf("bundle invariants=%d applied=%v", len(back.Invariants), back.Applied)
+			}
+			if back.FixtureRevision == "" || back.FixtureRevision == "unknown" {
+				t.Fatalf("bundle carries no detected revision: %q", back.FixtureRevision)
+			}
+			if back.RevisionSource == "" || back.RevisionSource == "unknown" {
+				t.Fatalf("bundle does not say how its revision was determined: %q", back.RevisionSource)
 			}
 			if back.PayPalSandbox.Verified {
 				t.Fatal("tier-F scenario bundle must not claim verified real Sandbox evidence")
@@ -296,6 +303,32 @@ func TestAllScriptedObservationsAreTierF(t *testing.T) {
 				if !strings.Contains(obs.Source, "scripted") {
 					t.Fatalf("observation seq %d source = %q, want scripted fixture", obs.Seq, obs.Source)
 				}
+			}
+		})
+	}
+}
+
+// Journal provenance (M2 review correction): provider-derived journal events
+// created while the scripted provider was wired must be tagged F at their
+// origin — the durable journal may not claim tier R for them.
+func TestScriptedJournalProvenanceIsTierF(t *testing.T) {
+	h := openHarness(t)
+	for _, sc := range replay.StandardScenarios {
+		sc := sc
+		t.Run(sc.ID, func(t *testing.T) {
+			_, ev, _ := runScenario(t, h, sc)
+			sawProviderEvent := false
+			for _, e := range ev.Events {
+				if e.Source != "PAYPAL" {
+					continue
+				}
+				sawProviderEvent = true
+				if e.Tier != oracle.TierInjected {
+					t.Fatalf("provider-derived journal event %q carries tier %q in a scripted run; provider-derived events must be F", e.EventType, e.Tier)
+				}
+			}
+			if !sawProviderEvent {
+				t.Fatal("scenario recorded no provider-derived journal events (test would be vacuous)")
 			}
 		})
 	}

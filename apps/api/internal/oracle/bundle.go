@@ -11,7 +11,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -22,19 +21,23 @@ import (
 const BundleSchemaVersion = 1
 
 // OracleVersion identifies the oracle implementation's semantics.
-const OracleVersion = "waypoint-oracle-m2.0.0"
+const OracleVersion = "waypoint-oracle-m2.0.2"
 
 // Bundle is the redacted proof artifact for one scenario/candidate pair.
 type Bundle struct {
-	SchemaVersion   int               `json:"schema_version"`
-	GeneratedAt     time.Time         `json:"generated_at"`
-	ScenarioID      string            `json:"scenario_id"`
-	ScenarioTitle   string            `json:"scenario_title"`
-	ScenarioFamily  string            `json:"scenario_family"`
-	Candidate       string            `json:"candidate"`
-	Verdict         Verdict           `json:"verdict"`
-	ExpectedVerdict Verdict           `json:"expected_verdict"`
+	SchemaVersion   int       `json:"schema_version"`
+	GeneratedAt     time.Time `json:"generated_at"`
+	ScenarioID      string    `json:"scenario_id"`
+	ScenarioTitle   string    `json:"scenario_title"`
+	ScenarioFamily  string    `json:"scenario_family"`
+	Candidate       string    `json:"candidate"`
+	Verdict         Verdict   `json:"verdict"`
+	ExpectedVerdict Verdict   `json:"expected_verdict"`
+	// FixtureRevision is the revision of the code actually evaluated, derived
+	// by DetectRevision from the running binary/git — never a caller-supplied
+	// value. RevisionSource says how it was determined.
 	FixtureRevision string            `json:"fixture_revision"`
+	RevisionSource  string            `json:"revision_source"`
 	OracleVersion   string            `json:"oracle_version"`
 	EvidenceTiers   []string          `json:"evidence_tiers"`
 	Invariants      []InvariantResult `json:"invariants"`
@@ -59,7 +62,9 @@ type SandboxNote struct {
 var redactEmail = regexp.MustCompile(`[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}`)
 
 // BuildBundle derives the artifact from an evaluated run and its evidence.
-func BuildBundle(result Result, ev *Evidence, fixtureRevision string) Bundle {
+// fixtureRevision/revisionSource must come from DetectRevision — the bundle
+// records the code actually under evaluation, not a caller's claim.
+func BuildBundle(result Result, ev *Evidence, fixtureRevision, revisionSource string) Bundle {
 	tierSet := map[string]bool{}
 	for _, obs := range ev.Provider {
 		if obs.Tier != "" {
@@ -99,7 +104,8 @@ func BuildBundle(result Result, ev *Evidence, fixtureRevision string) Bundle {
 		Verdict:         result.Verdict,
 		ExpectedVerdict: ev.Scenario.ExpectedVerdict,
 		FixtureRevision: fixtureRevision,
-		OracleVersion:   fmt.Sprintf("%s (%s)", OracleVersion, fixtureRevision),
+		RevisionSource:  revisionSource,
+		OracleVersion:   OracleVersion,
 		EvidenceTiers:   tiers,
 		Invariants:      result.Invariants,
 		Skips:           result.Skips(),

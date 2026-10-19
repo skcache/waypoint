@@ -55,6 +55,6 @@ func defaultLimitations(ev *Evidence) []string {
 		fmt.Sprintf("Verdict scope: candidate %q under scenario %q only; it says nothing about unexecuted scenarios, unseen code paths, or production traffic.", ev.Candidate, ev.Scenario.ID),
 		fmt.Sprintf("Evidence tier: %s. Scenario evidence is deterministic fixture instrumentation; it is not a real PayPal Sandbox execution.", ev.Scenario.EvidenceTier),
 		"Provider interactions are scripted-fixture observations (tier F); previously recorded real Sandbox evidence (tier R) is referenced by the M1 record but is not re-executed here.",
-		"No deployed system was modified: the verdict is advisory and human-gated (I11).",
+		"No deployed system was modified. I11 is scoped to M2 reality: this milestone has no apply/deploy mechanism at all, so the check confirms only that no such action occurred and that verdicts are advisory outputs; enforcement against a future patch-application pipeline is not claimed.",
 	}
 }
