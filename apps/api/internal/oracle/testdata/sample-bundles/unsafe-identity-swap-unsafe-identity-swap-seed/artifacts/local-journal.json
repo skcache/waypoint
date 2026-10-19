@@ -2,114 +2,114 @@
   "events": [
     {
       "ID": 1,
-      "OrderID": "62df9bfd-c7ea-4c4d-a4f8-6121eb3077a6",
+      "OrderID": "9ea34261-5dce-4c37-897f-10bd50861671",
       "Source": "API",
       "EventType": "ORDER_CREATED",
       "Tier": "R",
-      "Detail": "{\"currency\": \"USD\", \"quantity\": 1, \"product_id\": \"maple-mug\", \"total_minor\": 1234, \"product_name\": \"Maple Ceramic Mug\", \"provider_request_id\": \"00d34d8e-779d-43dd-8b86-5d791d35fcd2\"}",
-      "CreatedAt": "2026-10-18T11:31:43.184294-07:00"
+      "Detail": "{\"currency\": \"USD\", \"quantity\": 1, \"product_id\": \"maple-mug\", \"total_minor\": 1234, \"product_name\": \"Maple Ceramic Mug\", \"provider_request_id\": \"36e9586a-a443-4eab-a000-a12b8985690d\"}",
+      "CreatedAt": "2026-10-19T11:43:28.113757-07:00"
     },
     {
       "ID": 2,
-      "OrderID": "62df9bfd-c7ea-4c4d-a4f8-6121eb3077a6",
+      "OrderID": "9ea34261-5dce-4c37-897f-10bd50861671",
       "Source": "PAYPAL",
       "EventType": "PROVIDER_ORDER_CREATED",
-      "Tier": "R",
+      "Tier": "F",
       "Detail": "{\"provider_order_id\": \"ORD-SCRIPT-0001\", \"approval_url_present\": false}",
-      "CreatedAt": "2026-10-18T11:31:43.186931-07:00"
+      "CreatedAt": "2026-10-19T11:43:28.116012-07:00"
     },
     {
       "ID": 3,
-      "OrderID": "62df9bfd-c7ea-4c4d-a4f8-6121eb3077a6",
+      "OrderID": "9ea34261-5dce-4c37-897f-10bd50861671",
       "Source": "PAYPAL",
       "EventType": "PROVIDER_ORDER_OBSERVED",
-      "Tier": "R",
+      "Tier": "F",
       "Detail": "{\"payer_id\": \"\", \"provider_status\": \"APPROVED\"}",
-      "CreatedAt": "2026-10-18T11:31:43.189692-07:00"
+      "CreatedAt": "2026-10-19T11:43:28.118736-07:00"
     },
     {
       "ID": 4,
-      "OrderID": "62df9bfd-c7ea-4c4d-a4f8-6121eb3077a6",
+      "OrderID": "9ea34261-5dce-4c37-897f-10bd50861671",
       "Source": "API",
       "EventType": "CAPTURE_ATTEMPT_STARTED",
       "Tier": "R",
-      "Detail": "{\"provider_order_id\": \"ORD-SCRIPT-0001\", \"provider_request_id\": \"49a9c8ad-fb30-442b-8011-360f9bd43250\"}",
-      "CreatedAt": "2026-10-18T11:31:43.191818-07:00"
+      "Detail": "{\"provider_order_id\": \"ORD-SCRIPT-0001\", \"provider_request_id\": \"76f6bdad-24db-4fa4-a3d6-2c2c9adfc729\"}",
+      "CreatedAt": "2026-10-19T11:43:28.12105-07:00"
     },
     {
       "ID": 5,
-      "OrderID": "62df9bfd-c7ea-4c4d-a4f8-6121eb3077a6",
+      "OrderID": "9ea34261-5dce-4c37-897f-10bd50861671",
       "Source": "PAYPAL",
       "EventType": "CAPTURE_OUTCOME_UNKNOWN",
-      "Tier": "R",
-      "Detail": "{\"operation_type\": \"CAPTURE\", \"error_classified\": \"AMBIGUOUS\", \"payload_fingerprint\": \"35030a2bb658d44084b4de0d233d039f949be08f5f491b992663225138d62c21\", \"provider_request_id\": \"49a9c8ad-fb30-442b-8011-360f9bd43250\", \"response_unreadable\": true}",
-      "CreatedAt": "2026-10-18T11:31:43.193641-07:00"
+      "Tier": "F",
+      "Detail": "{\"operation_type\": \"CAPTURE\", \"error_classified\": \"AMBIGUOUS\", \"payload_fingerprint\": \"c65fee1e389e114c2d37db6c8b712122c27976d14095fecddaa26af160320998\", \"provider_request_id\": \"76f6bdad-24db-4fa4-a3d6-2c2c9adfc729\", \"response_unreadable\": true}",
+      "CreatedAt": "2026-10-19T11:43:28.123169-07:00"
     },
     {
       "ID": 6,
-      "OrderID": "62df9bfd-c7ea-4c4d-a4f8-6121eb3077a6",
+      "OrderID": "9ea34261-5dce-4c37-897f-10bd50861671",
       "Source": "PAYPAL",
       "EventType": "PROVIDER_CAPTURE_CONFIRMED",
-      "Tier": "R",
-      "Detail": "{\"capture_id\": \"CAP-SCRIPT-0001\", \"resolved_by\": \"unsafe-seed\", \"provider_request_id\": \"a8107d92-5d64-41bb-9b89-d7c0d5a0058f\"}",
-      "CreatedAt": "2026-10-18T11:31:43.199248-07:00"
+      "Tier": "F",
+      "Detail": "{\"capture_id\": \"CAP-SCRIPT-0001\", \"resolved_by\": \"unsafe-seed\", \"provider_request_id\": \"a0e6301b-3eef-42bb-a318-dcccbf383ca2\"}",
+      "CreatedAt": "2026-10-19T11:43:28.128636-07:00"
     }
   ],
   "operations": [
     {
-      "ID": "cc8675de-12c3-414a-a624-50dfe6f48f35",
-      "OrderID": "62df9bfd-c7ea-4c4d-a4f8-6121eb3077a6",
+      "ID": "92a77178-4518-4733-8e47-11a518b7c8b7",
+      "OrderID": "9ea34261-5dce-4c37-897f-10bd50861671",
       "Type": "CREATE_ORDER",
-      "ProviderRequestID": "00d34d8e-779d-43dd-8b86-5d791d35fcd2",
-      "PayloadFingerprint": "25f5d02b5de05dba9390ca97ca4cf08fa0538bc925404e217ac3dd03bcd35779",
+      "ProviderRequestID": "36e9586a-a443-4eab-a000-a12b8985690d",
+      "PayloadFingerprint": "d99daab49deb66f8fc1daf8a989fbff6ae17f5a4ea934ededae2e8ec1dcf713d",
       "Status": "SUCCEEDED",
       "ProviderOrderID": "ORD-SCRIPT-0001",
       "ProviderCaptureID": "",
       "AttemptCount": 1,
       "OwnerID": "",
-      "CreatedAt": "2026-10-18T11:31:43.184294-07:00",
-      "UpdatedAt": "2026-10-18T11:31:43.186931-07:00"
+      "CreatedAt": "2026-10-19T11:43:28.113757-07:00",
+      "UpdatedAt": "2026-10-19T11:43:28.116012-07:00"
     },
     {
-      "ID": "07924588-8bc4-4159-9598-f2ce1444675c",
-      "OrderID": "62df9bfd-c7ea-4c4d-a4f8-6121eb3077a6",
+      "ID": "b53f6026-f9e9-4e67-a3a6-966b21868c5d",
+      "OrderID": "9ea34261-5dce-4c37-897f-10bd50861671",
       "Type": "CAPTURE",
-      "ProviderRequestID": "49a9c8ad-fb30-442b-8011-360f9bd43250",
-      "PayloadFingerprint": "35030a2bb658d44084b4de0d233d039f949be08f5f491b992663225138d62c21",
+      "ProviderRequestID": "76f6bdad-24db-4fa4-a3d6-2c2c9adfc729",
+      "PayloadFingerprint": "c65fee1e389e114c2d37db6c8b712122c27976d14095fecddaa26af160320998",
       "Status": "REJECTED",
       "ProviderOrderID": "",
       "ProviderCaptureID": "",
       "AttemptCount": 1,
-      "OwnerID": "merchant-76a95782",
-      "CreatedAt": "2026-10-18T11:31:43.191818-07:00",
-      "UpdatedAt": "2026-10-18T11:31:43.195071-07:00"
+      "OwnerID": "merchant-6bc609d8",
+      "CreatedAt": "2026-10-19T11:43:28.12105-07:00",
+      "UpdatedAt": "2026-10-19T11:43:28.124636-07:00"
     },
     {
-      "ID": "ca8affdb-4f52-48ee-af9f-6822cdbb9870",
-      "OrderID": "62df9bfd-c7ea-4c4d-a4f8-6121eb3077a6",
+      "ID": "cdc8a945-c304-47d2-ab13-f2d37c422a7d",
+      "OrderID": "9ea34261-5dce-4c37-897f-10bd50861671",
       "Type": "CAPTURE",
-      "ProviderRequestID": "a8107d92-5d64-41bb-9b89-d7c0d5a0058f",
+      "ProviderRequestID": "a0e6301b-3eef-42bb-a318-dcccbf383ca2",
       "PayloadFingerprint": "fp-UNSAFE-SEED",
       "Status": "SUCCEEDED",
       "ProviderOrderID": "",
       "ProviderCaptureID": "CAP-SCRIPT-0001",
       "AttemptCount": 1,
       "OwnerID": "unsafe-seed",
-      "CreatedAt": "2026-10-18T11:31:43.196906-07:00",
-      "UpdatedAt": "2026-10-18T11:31:43.198124-07:00"
+      "CreatedAt": "2026-10-19T11:43:28.126389-07:00",
+      "UpdatedAt": "2026-10-19T11:43:28.127615-07:00"
     }
   ],
   "orders": [
     {
-      "ID": "62df9bfd-c7ea-4c4d-a4f8-6121eb3077a6",
+      "ID": "9ea34261-5dce-4c37-897f-10bd50861671",
       "ProductID": "maple-mug",
       "Quantity": 1,
       "TotalMinor": 1234,
       "Currency": "USD",
       "Status": "CAPTURED_VERIFIED",
       "ProviderOrderID": "ORD-SCRIPT-0001",
-      "CreatedAt": "2026-10-18T11:31:43.184294-07:00",
-      "UpdatedAt": "2026-10-18T11:31:43.198655-07:00"
+      "CreatedAt": "2026-10-19T11:43:28.113757-07:00",
+      "UpdatedAt": "2026-10-19T11:43:28.128116-07:00"
     }
   ]
 }

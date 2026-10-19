@@ -16,7 +16,7 @@
       "id": "I3",
       "title": "Browser approval is not capture; COMPLETED requires capture evidence",
       "status": "PASS",
-      "summary": "every capture attempt is preceded by an observed buyer approval"
+      "summary": "every capture attempt is preceded by an observed buyer approval belonging to the same order"
     },
     {
       "id": "I4",
@@ -25,11 +25,11 @@
       "summary": "a capture was reissued under a NEW operation identity while an earlier attempt's outcome was not definitely closed",
       "counterexample": {
         "first_applied": true,
-        "first_request_id": "49a9c8ad-fb30-442b-8011-360f9bd43250",
+        "first_request_id": "76f6bdad-24db-4fa4-a3d6-2c2c9adfc729",
         "first_response_dropped": true,
         "new_obs_seq": 5,
-        "new_request_id": "a8107d92-5d64-41bb-9b89-d7c0d5a0058f",
-        "order_id": "62df9bfd-c7ea-4c4d-a4f8-6121eb3077a6"
+        "new_request_id": "a0e6301b-3eef-42bb-a318-dcccbf383ca2",
+        "order_id": "9ea34261-5dce-4c37-897f-10bd50861671"
       }
     },
     {
@@ -39,9 +39,9 @@
       "summary": "after an ambiguous capture outcome, a NEW capture identity was issued (the ambiguity was treated as failure)",
       "counterexample": {
         "ambiguous_obs_seq": 4,
-        "ambiguous_request_id": "49a9c8ad-fb30-442b-8011-360f9bd43250",
+        "ambiguous_request_id": "76f6bdad-24db-4fa4-a3d6-2c2c9adfc729",
         "new_obs_seq": 5,
-        "new_request_id": "a8107d92-5d64-41bb-9b89-d7c0d5a0058f",
+        "new_request_id": "a0e6301b-3eef-42bb-a318-dcccbf383ca2",
         "order_ref": "ORD-SCRIPT-0001"
       }
     },
@@ -58,10 +58,10 @@
       "summary": "a duplicate capture pathway was created: an earlier capture operation without evidence-backed definite closure was abandoned in favor of a new one",
       "counterexample": {
         "capture_operations": 2,
-        "earlier_operation_id": "07924588-8bc4-4159-9598-f2ce1444675c",
-        "earlier_request_id": "49a9c8ad-fb30-442b-8011-360f9bd43250",
+        "earlier_operation_id": "b53f6026-f9e9-4e67-a3a6-966b21868c5d",
+        "earlier_request_id": "76f6bdad-24db-4fa4-a3d6-2c2c9adfc729",
         "earlier_status": "REJECTED",
-        "order_id": "62df9bfd-c7ea-4c4d-a4f8-6121eb3077a6"
+        "order_id": "9ea34261-5dce-4c37-897f-10bd50861671"
       }
     },
     {
@@ -86,13 +86,13 @@
       "id": "I11",
       "title": "Unsafe or inconclusive verification never auto-applies",
       "status": "PASS",
-      "summary": "no auto-apply/deploy occurred; the verdict is advisory and human-gated"
+      "summary": "M2 performs no apply/deploy step and exposes no patch-application mechanism; the verdict is an advisory output only (automatic-apply prevention for a future pipeline is out of M2 scope)"
     },
     {
       "id": "I12",
       "title": "Evidence provenance is explicit (R/F/S)",
       "status": "PASS",
-      "summary": "all provider observations carry explicit tiers (scripted interactions labelled F, never R)"
+      "summary": "provenance is explicit across provider observations and the journal; scripted interactions are labelled F, never R"
     }
   ],
   "verdict": "UNSAFE"

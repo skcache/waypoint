@@ -1,14 +1,15 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-10-18T18:31:43.177435Z",
+  "generated_at": "2026-10-19T18:43:28.120117Z",
   "scenario_id": "fault-inconclusive-missing-proof",
   "scenario_title": "Verified claim with provider proof genuinely unavailable is INCONCLUSIVE",
   "scenario_family": "inconclusive",
   "candidate": "reference",
   "verdict": "INCONCLUSIVE",
   "expected_verdict": "INCONCLUSIVE",
-  "fixture_revision": "b410851",
-  "oracle_version": "waypoint-oracle-m2.0.0 (b410851)",
+  "fixture_revision": "c54eca51256d1f0fe7b2e13121e6d1373cc1f28f",
+  "revision_source": "git",
+  "oracle_version": "waypoint-oracle-m2.0.2",
   "evidence_tiers": [
     "F"
   ],
@@ -29,7 +30,7 @@
       "id": "I3",
       "title": "Browser approval is not capture; COMPLETED requires capture evidence",
       "status": "PASS",
-      "summary": "every capture attempt is preceded by an observed buyer approval"
+      "summary": "every capture attempt is preceded by an observed buyer approval belonging to the same order"
     },
     {
       "id": "I4",
@@ -47,10 +48,10 @@
       "id": "I6",
       "title": "Completed-capture claims require matching provider evidence",
       "status": "INCONCLUSIVE",
-      "summary": "order dba2690d-c2dc-465f-9761-1dd1d30bba4f claims a completed capture, but no provider capture evidence is available",
+      "summary": "order 61bac17b-ba79-457e-a47a-3512d6fd85ac claims a completed capture, but no provider capture evidence is available",
       "counterexample": {
-        "claim": "CAPTURED_VERIFIED",
-        "order_id": "dba2690d-c2dc-465f-9761-1dd1d30bba4f",
+        "claim": "CAP-SCRIPT-0001",
+        "order_id": "61bac17b-ba79-457e-a47a-3512d6fd85ac",
         "provider_evidence": "missing"
       }
     },
@@ -82,13 +83,13 @@
       "id": "I11",
       "title": "Unsafe or inconclusive verification never auto-applies",
       "status": "PASS",
-      "summary": "no auto-apply/deploy occurred; the verdict is advisory and human-gated"
+      "summary": "M2 performs no apply/deploy step and exposes no patch-application mechanism; the verdict is an advisory output only (automatic-apply prevention for a future pipeline is out of M2 scope)"
     },
     {
       "id": "I12",
       "title": "Evidence provenance is explicit (R/F/S)",
       "status": "PASS",
-      "summary": "all provider observations carry explicit tiers (scripted interactions labelled F, never R)"
+      "summary": "provenance is explicit across provider observations and the journal; scripted interactions are labelled F, never R"
     }
   ],
   "skips": [
@@ -112,7 +113,7 @@
     }
   ],
   "counterexamples": null,
-  "evidence_digest_sha256": "c0502c7bc59805eec0ad2b16d278b69e42916816112da72728afa502197d48f5",
+  "evidence_digest_sha256": "75ac511c4dbb64a98e4ce2bc97cc911be3e48f96fc86232403df3996b96e83fc",
   "evidence_counts": {
     "events": 5,
     "fault_events": 0,
@@ -129,6 +130,6 @@
     "Verdict scope: candidate \"reference\" under scenario \"fault-inconclusive-missing-proof\" only; it says nothing about unexecuted scenarios, unseen code paths, or production traffic.",
     "Evidence tier: F. Scenario evidence is deterministic fixture instrumentation; it is not a real PayPal Sandbox execution.",
     "Provider interactions are scripted-fixture observations (tier F); previously recorded real Sandbox evidence (tier R) is referenced by the M1 record but is not re-executed here.",
-    "No deployed system was modified: the verdict is advisory and human-gated (I11)."
+    "No deployed system was modified. I11 is scoped to M2 reality: this milestone has no apply/deploy mechanism at all, so the check confirms only that no such action occurred and that verdicts are advisory outputs; enforcement against a future patch-application pipeline is not claimed."
   ]
 }

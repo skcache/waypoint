@@ -16,7 +16,7 @@
       "id": "I3",
       "title": "Browser approval is not capture; COMPLETED requires capture evidence",
       "status": "PASS",
-      "summary": "every capture attempt is preceded by an observed buyer approval"
+      "summary": "every capture attempt is preceded by an observed buyer approval belonging to the same order"
     },
     {
       "id": "I4",
@@ -34,10 +34,10 @@
       "id": "I6",
       "title": "Completed-capture claims require matching provider evidence",
       "status": "INCONCLUSIVE",
-      "summary": "order dba2690d-c2dc-465f-9761-1dd1d30bba4f claims a completed capture, but no provider capture evidence is available",
+      "summary": "order 61bac17b-ba79-457e-a47a-3512d6fd85ac claims a completed capture, but no provider capture evidence is available",
       "counterexample": {
-        "claim": "CAPTURED_VERIFIED",
-        "order_id": "dba2690d-c2dc-465f-9761-1dd1d30bba4f",
+        "claim": "CAP-SCRIPT-0001",
+        "order_id": "61bac17b-ba79-457e-a47a-3512d6fd85ac",
         "provider_evidence": "missing"
       }
     },
@@ -69,13 +69,13 @@
       "id": "I11",
       "title": "Unsafe or inconclusive verification never auto-applies",
       "status": "PASS",
-      "summary": "no auto-apply/deploy occurred; the verdict is advisory and human-gated"
+      "summary": "M2 performs no apply/deploy step and exposes no patch-application mechanism; the verdict is an advisory output only (automatic-apply prevention for a future pipeline is out of M2 scope)"
     },
     {
       "id": "I12",
       "title": "Evidence provenance is explicit (R/F/S)",
       "status": "PASS",
-      "summary": "all provider observations carry explicit tiers (scripted interactions labelled F, never R)"
+      "summary": "provenance is explicit across provider observations and the journal; scripted interactions are labelled F, never R"
     }
   ],
   "verdict": "INCONCLUSIVE"

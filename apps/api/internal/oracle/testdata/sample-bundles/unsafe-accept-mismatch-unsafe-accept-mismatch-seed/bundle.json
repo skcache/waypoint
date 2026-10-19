@@ -1,14 +1,15 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-10-18T18:31:43.224124Z",
+  "generated_at": "2026-10-19T18:43:28.160722Z",
   "scenario_id": "unsafe-accept-mismatch",
   "scenario_title": "UNSAFE SEED: capture verified despite a provider amount mismatch",
   "scenario_family": "mutation",
   "candidate": "unsafe-accept-mismatch-seed",
   "verdict": "UNSAFE",
   "expected_verdict": "UNSAFE",
-  "fixture_revision": "b410851",
-  "oracle_version": "waypoint-oracle-m2.0.0 (b410851)",
+  "fixture_revision": "c54eca51256d1f0fe7b2e13121e6d1373cc1f28f",
+  "revision_source": "git",
+  "oracle_version": "waypoint-oracle-m2.0.2",
   "evidence_tiers": [
     "F"
   ],
@@ -29,7 +30,7 @@
       "id": "I3",
       "title": "Browser approval is not capture; COMPLETED requires capture evidence",
       "status": "PASS",
-      "summary": "every capture attempt is preceded by an observed buyer approval"
+      "summary": "every capture attempt is preceded by an observed buyer approval belonging to the same order"
     },
     {
       "id": "I4",
@@ -47,13 +48,14 @@
       "id": "I6",
       "title": "Completed-capture claims require matching provider evidence",
       "status": "FAIL",
-      "summary": "order ef180af9-74e8-45f4-916c-7848fb2dbb50 claims a completed capture that the provider evidence does not corroborate (amount/status mismatch)",
+      "summary": "order aa270a09-4260-485d-a843-0aaa8ea221ed claims capture CAP-SCRIPT-0001 for 12.34 USD, but the provider evidence shows \"99.99\" \"USD\"",
       "evidence": [
         "obs#4"
       ],
       "counterexample": {
         "claim": "12.34 USD",
-        "order_id": "ef180af9-74e8-45f4-916c-7848fb2dbb50",
+        "claimed_capture_id": "CAP-SCRIPT-0001",
+        "order_id": "aa270a09-4260-485d-a843-0aaa8ea221ed",
         "provider": "capture_id=\"CAP-SCRIPT-0001\" status=\"COMPLETED\" amount=\"99.99\" \"USD\""
       }
     },
@@ -85,13 +87,13 @@
       "id": "I11",
       "title": "Unsafe or inconclusive verification never auto-applies",
       "status": "PASS",
-      "summary": "no auto-apply/deploy occurred; the verdict is advisory and human-gated"
+      "summary": "M2 performs no apply/deploy step and exposes no patch-application mechanism; the verdict is an advisory output only (automatic-apply prevention for a future pipeline is out of M2 scope)"
     },
     {
       "id": "I12",
       "title": "Evidence provenance is explicit (R/F/S)",
       "status": "PASS",
-      "summary": "all provider observations carry explicit tiers (scripted interactions labelled F, never R)"
+      "summary": "provenance is explicit across provider observations and the journal; scripted interactions are labelled F, never R"
     }
   ],
   "skips": [
@@ -107,18 +109,19 @@
       "id": "I6",
       "title": "Completed-capture claims require matching provider evidence",
       "status": "FAIL",
-      "summary": "order ef180af9-74e8-45f4-916c-7848fb2dbb50 claims a completed capture that the provider evidence does not corroborate (amount/status mismatch)",
+      "summary": "order aa270a09-4260-485d-a843-0aaa8ea221ed claims capture CAP-SCRIPT-0001 for 12.34 USD, but the provider evidence shows \"99.99\" \"USD\"",
       "evidence": [
         "obs#4"
       ],
       "counterexample": {
         "claim": "12.34 USD",
-        "order_id": "ef180af9-74e8-45f4-916c-7848fb2dbb50",
+        "claimed_capture_id": "CAP-SCRIPT-0001",
+        "order_id": "aa270a09-4260-485d-a843-0aaa8ea221ed",
         "provider": "capture_id=\"CAP-SCRIPT-0001\" status=\"COMPLETED\" amount=\"99.99\" \"USD\""
       }
     }
   ],
-  "evidence_digest_sha256": "889a039f5d740b9707abdc0f939a91f180a0230369328f171ed1feda6ff382b3",
+  "evidence_digest_sha256": "040462a768b65e6b00edf42779bb902f8a0cf5292ce8e283ff503a71bf7896b8",
   "evidence_counts": {
     "events": 6,
     "fault_events": 0,
@@ -135,6 +138,6 @@
     "Verdict scope: candidate \"unsafe-accept-mismatch-seed\" under scenario \"unsafe-accept-mismatch\" only; it says nothing about unexecuted scenarios, unseen code paths, or production traffic.",
     "Evidence tier: F. Scenario evidence is deterministic fixture instrumentation; it is not a real PayPal Sandbox execution.",
     "Provider interactions are scripted-fixture observations (tier F); previously recorded real Sandbox evidence (tier R) is referenced by the M1 record but is not re-executed here.",
-    "No deployed system was modified: the verdict is advisory and human-gated (I11)."
+    "No deployed system was modified. I11 is scoped to M2 reality: this milestone has no apply/deploy mechanism at all, so the check confirms only that no such action occurred and that verdicts are advisory outputs; enforcement against a future patch-application pipeline is not claimed."
   ]
 }
