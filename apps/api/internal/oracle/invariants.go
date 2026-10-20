@@ -301,11 +301,39 @@ func checkI4(ev *Evidence) InvariantResult {
 			}
 		}
 		if obs.Method == "capture" {
-			if ev.opByRequest(obs.RequestID) == nil {
+			if obs.RequestID == "" {
+				return InvariantResult{
+					Status:         StatusFail,
+					Summary:        "an instrumented capture call carries no request id, so no durable identity can be established",
+					Counterexample: map[string]any{"obs_seq": obs.Seq, "order_ref": obs.OrderRef},
+				}
+			}
+			op := ev.opByRequest(obs.RequestID)
+			if op == nil {
 				return InvariantResult{
 					Status:         StatusFail,
 					Summary:        "a capture call used a request id with no durable operation row",
 					Counterexample: map[string]any{"obs_seq": obs.Seq, "request_id": obs.RequestID},
+				}
+			}
+			if op.Type != "CAPTURE" {
+				return InvariantResult{
+					Status:  StatusFail,
+					Summary: fmt.Sprintf("a capture call used a request id that belongs to a %s operation, not a durable CAPTURE operation", op.Type),
+					Counterexample: map[string]any{
+						"obs_seq": obs.Seq, "request_id": obs.RequestID,
+						"operation_id": op.ID, "operation_type": op.Type,
+					},
+				}
+			}
+			if ref := orderRefOfOp(ev, *op); ref != obs.OrderRef {
+				return InvariantResult{
+					Status:  StatusFail,
+					Summary: "a capture call's request id belongs to an operation of a DIFFERENT merchant order",
+					Counterexample: map[string]any{
+						"obs_seq": obs.Seq, "observation_order_ref": obs.OrderRef,
+						"request_id": obs.RequestID, "operation_id": op.ID, "operation_order_ref": ref,
+					},
 				}
 			}
 		}
@@ -474,20 +502,27 @@ func checkI6(ev *Evidence) InvariantResult {
 }
 
 // classifyClaimAgainstEvidence judges ONE claimed order against its provider
-// observations, binding the claim to the exact identity the merchant recorded:
-// the SUCCEEDED capture operation's provider capture id.
+// evidence, binding the claim to the FULL identity chain the merchant recorded:
 //
-//   - local claim without a capture identity → INCONCLUSIVE (cannot bind);
-//   - provider evidence missing entirely → INCONCLUSIVE;
-//   - provider evidence whose capture id / status / amount / currency
-//     contradicts the claim → FAIL (a matching observation never hides a
-//     materially contradictory one);
-//   - matching identity AND financial evidence → corroborated (ok=true).
+//	merchant order → durable CAPTURE operation → provider request id →
+//	provider capture id → amount / currency / terminal status
+//
+// Instrumented capture calls must therefore match the claim's request id AND
+// capture id. Read-only observations are different by nature: the provider
+// does not echo the original request header on a GET, so a read corroborates
+// on capture identity, status, amount and currency without inventing request
+// id evidence — its absence is not a contradiction.
+//
+//   - local claim without a capture or request identity → INCONCLUSIVE;
+//   - no provider evidence at all → INCONCLUSIVE;
+//   - contradictory identity/status/money → FAIL (a matching observation never
+//     hides a materially contradictory one);
+//   - a fully matching chain (call or read-only recovery) → corroborated.
 func classifyClaimAgainstEvidence(ev *Evidence, o LocalOrder) (InvariantResult, bool) {
-	claimID := ""
+	claimID, claimRequestID := "", ""
 	for _, op := range ev.captureOps(o.ID) {
 		if op.Status == "SUCCEEDED" && op.ProviderCaptureID != "" {
-			claimID = op.ProviderCaptureID
+			claimID, claimRequestID = op.ProviderCaptureID, op.ProviderRequestID
 			break
 		}
 	}
@@ -500,9 +535,18 @@ func classifyClaimAgainstEvidence(ev *Evidence, o LocalOrder) (InvariantResult, 
 			},
 		}, false
 	}
+	if claimRequestID == "" {
+		return InvariantResult{
+			Status:  StatusInconclusive,
+			Summary: fmt.Sprintf("order %s claims capture %s but its operation carries no provider request identity", o.ID, claimID),
+			Counterexample: map[string]any{
+				"order_id": o.ID, "claimed_capture_id": claimID, "local_request_id": "missing",
+			},
+		}, false
+	}
 
-	obsList := ev.capturesForOrderRef(o.ProviderOrderID)
-	if len(obsList) == 0 {
+	evidence := ev.captureEvidenceForOrderRef(o.ProviderOrderID)
+	if len(evidence) == 0 {
 		return InvariantResult{
 			Status:  StatusInconclusive,
 			Summary: fmt.Sprintf("order %s claims a completed capture, but no provider capture evidence is available", o.ID),
@@ -513,9 +557,79 @@ func classifyClaimAgainstEvidence(ev *Evidence, o LocalOrder) (InvariantResult, 
 	}
 
 	matched := false
-	for _, obs := range obsList {
+	for _, obs := range evidence {
+		if obs.Method == "read" {
+			// Read-only reconciliation: no request header is exposed by a
+			// GET. Corroborate on identity, status and money only.
+			if obs.CaptureID != claimID {
+				return InvariantResult{
+					Status:  StatusFail,
+					Summary: fmt.Sprintf("order %s claims capture %s, but a provider read shows capture %s — contradictory identity evidence", o.ID, claimID, obs.CaptureID),
+					Evidence: []string{
+						fmt.Sprintf("obs#%d", obs.Seq),
+					},
+					Counterexample: map[string]any{
+						"order_id": o.ID, "claimed_capture_id": claimID,
+						"provider_capture_id": obs.CaptureID, "obs_seq": obs.Seq,
+					},
+				}, false
+			}
+			if obs.CaptureStatus != "" && obs.CaptureStatus != "COMPLETED" {
+				return InvariantResult{
+					Status:  StatusFail,
+					Summary: fmt.Sprintf("order %s claims capture %s as completed, but the provider shows status %q for it", o.ID, claimID, obs.CaptureStatus),
+					Evidence: []string{
+						fmt.Sprintf("obs#%d", obs.Seq),
+					},
+					Counterexample: map[string]any{
+						"order_id": o.ID, "claimed_capture_id": claimID, "observed_capture_status": obs.CaptureStatus,
+					},
+				}, false
+			}
+			if obs.CaptureAmount != "" || obs.CaptureCurrency != "" {
+				amountOK := false
+				if got, ok := parseAmountExact(obs.CaptureAmount); ok && got == o.TotalMinor && obs.CaptureCurrency == o.Currency {
+					amountOK = true
+				}
+				if !amountOK {
+					return InvariantResult{
+						Status:  StatusFail,
+						Summary: fmt.Sprintf("order %s claims capture %s for %s %s, but the provider read shows %q %q", o.ID, claimID, amountString(o.TotalMinor), o.Currency, obs.CaptureAmount, obs.CaptureCurrency),
+						Evidence: []string{
+							fmt.Sprintf("obs#%d", obs.Seq),
+						},
+						Counterexample: map[string]any{
+							"order_id": o.ID, "claimed_capture_id": claimID,
+							"claim":    fmt.Sprintf("%s %s", amountString(o.TotalMinor), o.Currency),
+							"provider": fmt.Sprintf("capture_id=%q status=%q amount=%q %q", obs.CaptureID, obs.CaptureStatus, obs.CaptureAmount, obs.CaptureCurrency),
+						},
+					}, false
+				}
+				matched = true // identity + status + money all corroborated by a read
+			}
+			continue
+		}
+
+		// Instrumented capture call.
 		if !obs.Applied {
 			continue // idempotent replays and refusals are I7's domain
+		}
+		if obs.RequestID == "" {
+			continue // no execution identity to bind; cannot corroborate
+		}
+		if obs.RequestID != claimRequestID {
+			return InvariantResult{
+				Status:  StatusFail,
+				Summary: fmt.Sprintf("order %s claims capture %s under request id %s, but the provider executed that capture under request id %s", o.ID, claimID, claimRequestID, obs.RequestID),
+				Evidence: []string{
+					fmt.Sprintf("obs#%d", obs.Seq),
+				},
+				Counterexample: map[string]any{
+					"order_id": o.ID, "claimed_capture_id": claimID,
+					"claimed_request_id": claimRequestID, "provider_request_id": obs.RequestID,
+					"obs_seq": obs.Seq,
+				},
+			}, false
 		}
 		if obs.CaptureID != claimID {
 			return InvariantResult{
@@ -570,9 +684,9 @@ func classifyClaimAgainstEvidence(ev *Evidence, o LocalOrder) (InvariantResult, 
 	if !matched {
 		return InvariantResult{
 			Status:  StatusInconclusive,
-			Summary: fmt.Sprintf("order %s claims capture %s, but no applied provider observation carries that identity", o.ID, claimID),
+			Summary: fmt.Sprintf("order %s claims capture %s under request id %s, but no applied observation binds both identities", o.ID, claimID, claimRequestID),
 			Counterexample: map[string]any{
-				"order_id": o.ID, "claimed_capture_id": claimID,
+				"order_id": o.ID, "claimed_capture_id": claimID, "claimed_request_id": claimRequestID,
 			},
 		}, false
 	}

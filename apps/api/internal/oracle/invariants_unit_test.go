@@ -313,3 +313,124 @@ func TestI12RejectsScriptedJournalEventsLabeledReal(t *testing.T) {
 		t.Fatalf("I12 = %s, want a non-FAIL status for an honestly-labelled tier-F journal", got)
 	}
 }
+
+// --- M2 final correction: full capture identity chain -----------------------
+
+// A capture observation whose request id identifies only a CREATE_ORDER
+// operation does not establish a durable CAPTURE identity: I4 must fail.
+func TestI4RejectsCaptureRequestIDBelongingToCreateOperation(t *testing.T) {
+	order := baseOrder()
+	order.Status = "CAPTURE_OUTCOME_UNKNOWN"
+	createOp := oracle.LocalOp{
+		ID: "op-create", OrderID: "ord-1", Type: "CREATE_ORDER",
+		ProviderRequestID: "req-create-1", Status: "SUCCEEDED", ProviderOrderID: "REF-1",
+	}
+	obs := goodCaptureObs()
+	obs.RequestID = "req-create-1" // reuses the CREATE operation's request id
+	ev := &oracle.Evidence{
+		Orders:     []oracle.LocalOrder{order},
+		Operations: []oracle.LocalOp{createOp},
+		Provider:   []oracle.ProviderObs{obs},
+	}
+	if got := statusOf(t, ev, "I4"); got != oracle.StatusFail {
+		t.Fatalf("I4 = %s, want FAIL when the capture request id belongs only to a CREATE_ORDER operation", got)
+	}
+}
+
+// The right capture id and amount under the WRONG provider request id is
+// contradictory identity evidence: I6 must fail.
+func TestI6RejectsProviderRequestIDMismatch(t *testing.T) {
+	order, op := claimedOrder("CAP-1") // claim request id: req-1
+	obs := goodCaptureObs()            // capture id CAP-1, amount 12.34
+	obs.RequestID = "req-OTHER"        // executed under a different request id
+	ev := &oracle.Evidence{
+		Orders:     []oracle.LocalOrder{order},
+		Operations: []oracle.LocalOp{op},
+		Provider:   []oracle.ProviderObs{obs},
+	}
+	if got := statusOf(t, ev, "I6"); got != oracle.StatusFail {
+		t.Fatalf("I6 = %s, want FAIL when the provider capture was executed under a different request id", got)
+	}
+}
+
+// A capture observation attributed to one provider order whose request id
+// belongs to a CAPTURE operation of ANOTHER merchant order is rejected.
+func TestI4RejectsCaptureObservationBelongingToAnotherOrder(t *testing.T) {
+	ord1 := baseOrder() // REF-1, claims nothing
+	ord1.Status = "CAPTURE_OUTCOME_UNKNOWN"
+	ord2 := baseOrder()
+	ord2.ID = "ord-2"
+	ord2.ProviderOrderID = "REF-2"
+	ord2.Status = "CAPTURED_VERIFIED"
+
+	otherOrderCaptureOp := oracle.LocalOp{
+		ID: "op-2", OrderID: "ord-2", Type: "CAPTURE",
+		ProviderRequestID: "req-b", Status: "SUCCEEDED", ProviderCaptureID: "CAP-B",
+		ProviderOrderID: "REF-2",
+	}
+	obs := goodCaptureObs()
+	obs.OrderRef = "REF-1"  // claims to be order 1's capture...
+	obs.RequestID = "req-b" // ...but the request id belongs to order 2's operation
+	obs.CaptureID = "CAP-B"
+	ev := &oracle.Evidence{
+		Orders:     []oracle.LocalOrder{ord1, ord2},
+		Operations: []oracle.LocalOp{otherOrderCaptureOp},
+		Provider:   []oracle.ProviderObs{obs},
+	}
+	if got := statusOf(t, ev, "I4"); got != oracle.StatusFail {
+		t.Fatalf("I4 = %s, want FAIL when the capture observation borrows another order's operation identity", got)
+	}
+}
+
+// The full chain — order, durable CAPTURE operation, request id, capture id,
+// amount, currency, status — must pass when everything genuinely agrees.
+func TestI6FullyMatchingIdentityChainPasses(t *testing.T) {
+	order, op := claimedOrder("CAP-1")
+	obs := goodCaptureObs() // request id req-1, capture CAP-1, 12.34 USD, COMPLETED
+	ev := &oracle.Evidence{
+		Orders:     []oracle.LocalOrder{order},
+		Operations: []oracle.LocalOp{op},
+		Provider:   []oracle.ProviderObs{obs},
+	}
+	if got := statusOf(t, ev, "I6"); got != oracle.StatusPass {
+		t.Fatalf("I6 = %s, want PASS for a fully matching identity chain", got)
+	}
+}
+
+// Read-only recovery: the provider does not expose the original request
+// header on a read. That absence is legitimate — it must corroborate on
+// capture identity, amount, currency, and status without inventing request-id
+// evidence.
+func TestI6ReadOnlyRecoveryWithoutRequestHeaderPasses(t *testing.T) {
+	order, op := claimedOrder("CAP-1")
+	read := oracle.ProviderObs{
+		Seq: 4, Method: "read", OrderRef: "REF-1", // no request id: reads carry no header
+		OrderStatus: "COMPLETED", CaptureID: "CAP-1", CaptureStatus: "COMPLETED",
+		CaptureAmount: "12.34", CaptureCurrency: "USD",
+		Source: "scripted-fixture", Tier: oracle.TierInjected,
+	}
+	ev := &oracle.Evidence{
+		Orders:     []oracle.LocalOrder{order},
+		Operations: []oracle.LocalOp{op},
+		Provider:   []oracle.ProviderObs{read},
+	}
+	if got := statusOf(t, ev, "I6"); got != oracle.StatusPass {
+		t.Fatalf("I6 = %s, want PASS from read-only capture evidence without a request header", got)
+	}
+}
+
+// In contrast, an instrumented capture CALL without a request id lacks the
+// identity the chain requires: missing evidence, not a contradiction.
+func TestI6CaptureCallWithoutRequestIdentityIsInconclusive(t *testing.T) {
+	order, op := claimedOrder("CAP-1")
+	obs := goodCaptureObs()
+	obs.RequestID = ""
+	ev := &oracle.Evidence{
+		Orders:     []oracle.LocalOrder{order},
+		Operations: []oracle.LocalOp{op},
+		Provider:   []oracle.ProviderObs{obs},
+	}
+	if got := statusOf(t, ev, "I6"); got != oracle.StatusInconclusive {
+		t.Fatalf("I6 = %s, want INCONCLUSIVE when an instrumented capture call carries no request identity", got)
+	}
+}

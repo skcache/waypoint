@@ -185,11 +185,34 @@ func (e *Evidence) captureObsForRequest(requestID string) []ProviderObs {
 	return out
 }
 
-// capturesForOrderRef returns every capture observation for a provider order.
+// capturesForOrderRef returns every instrumented capture CALL for a provider
+// order (used for effect counting and identity continuity).
 func (e *Evidence) capturesForOrderRef(ref string) []ProviderObs {
 	var out []ProviderObs
 	for _, o := range e.Provider {
 		if o.Method == "capture" && o.OrderRef == ref {
+			out = append(out, o)
+		}
+	}
+	return out
+}
+
+// captureEvidenceForOrderRef returns everything that carries a capture
+// identity for an order: instrumented capture calls AND read observations
+// that expose a capture resource. Reads legitimately carry no request header
+// (the provider does not echo the original request id on a GET), so consumers
+// must treat a missing request id on a read as absent — not contradictory —
+// evidence.
+func (e *Evidence) captureEvidenceForOrderRef(ref string) []ProviderObs {
+	var out []ProviderObs
+	for _, o := range e.Provider {
+		if o.OrderRef != ref {
+			continue
+		}
+		switch {
+		case o.Method == "capture":
+			out = append(out, o)
+		case o.Method == "read" && o.CaptureID != "":
 			out = append(out, o)
 		}
 	}

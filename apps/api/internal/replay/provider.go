@@ -251,6 +251,8 @@ func (p *ScriptedProvider) GetOrder(ctx context.Context, orderID string) (*paypa
 			obs.OrderStatus = snap.status
 			obs.CaptureStatus = snap.captureState
 			obs.CaptureID = snap.captureID
+			obs.CaptureAmount = snap.captureAmount
+			obs.CaptureCurrency = snap.captureCurrency
 			p.record(obs)
 			st := snap
 			return snapshotOf(&st), nil
@@ -266,6 +268,11 @@ func (p *ScriptedProvider) GetOrder(ctx context.Context, orderID string) (*paypa
 	obs.OrderStatus = served.status
 	obs.CaptureStatus = served.captureState
 	obs.CaptureID = served.captureID
+	// A GET response exposes the capture resource's amount; record it so
+	// read-only reconciliation can corroborate financial evidence without
+	// inventing a request header the provider never echoes.
+	obs.CaptureAmount = served.captureAmount
+	obs.CaptureCurrency = served.captureCurrency
 	p.record(obs)
 	return snapshotOf(served), nil
 }
