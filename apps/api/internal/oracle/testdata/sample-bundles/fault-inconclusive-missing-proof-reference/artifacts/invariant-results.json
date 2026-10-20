@@ -34,10 +34,10 @@
       "id": "I6",
       "title": "Completed-capture claims require matching provider evidence",
       "status": "INCONCLUSIVE",
-      "summary": "order 61bac17b-ba79-457e-a47a-3512d6fd85ac claims a completed capture, but no provider capture evidence is available",
+      "summary": "order bcc4c29a-6696-48d2-a242-df8a1065681d claims a completed capture, but no provider capture evidence is available",
       "counterexample": {
         "claim": "CAP-SCRIPT-0001",
-        "order_id": "61bac17b-ba79-457e-a47a-3512d6fd85ac",
+        "order_id": "bcc4c29a-6696-48d2-a242-df8a1065681d",
         "provider_evidence": "missing"
       }
     },

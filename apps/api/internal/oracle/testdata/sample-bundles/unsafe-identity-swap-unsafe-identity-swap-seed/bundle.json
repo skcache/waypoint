@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-10-19T18:43:28.14168Z",
+  "generated_at": "2026-10-20T23:51:46.838281Z",
   "scenario_id": "unsafe-identity-swap",
   "scenario_title": "UNSAFE SEED: ambiguity treated as failure, capture reissued under a fresh identity",
   "scenario_family": "mutation",
   "candidate": "unsafe-identity-swap-seed",
   "verdict": "UNSAFE",
   "expected_verdict": "UNSAFE",
-  "fixture_revision": "c54eca51256d1f0fe7b2e13121e6d1373cc1f28f",
+  "fixture_revision": "0171ec250017d2ffd5fa15ac10e263d515ae0b9d",
   "revision_source": "git",
   "oracle_version": "waypoint-oracle-m2.0.2",
   "evidence_tiers": [
@@ -39,11 +39,11 @@
       "summary": "a capture was reissued under a NEW operation identity while an earlier attempt's outcome was not definitely closed",
       "counterexample": {
         "first_applied": true,
-        "first_request_id": "76f6bdad-24db-4fa4-a3d6-2c2c9adfc729",
+        "first_request_id": "187e0757-591a-4c9c-a334-a32ac2cecbd8",
         "first_response_dropped": true,
         "new_obs_seq": 5,
-        "new_request_id": "a0e6301b-3eef-42bb-a318-dcccbf383ca2",
-        "order_id": "9ea34261-5dce-4c37-897f-10bd50861671"
+        "new_request_id": "d9bb0e3a-b5c8-409a-b8e6-82876542721e",
+        "order_id": "3dd17f9f-6a0c-4207-bc1b-b863bdef2850"
       }
     },
     {
@@ -53,17 +53,27 @@
       "summary": "after an ambiguous capture outcome, a NEW capture identity was issued (the ambiguity was treated as failure)",
       "counterexample": {
         "ambiguous_obs_seq": 4,
-        "ambiguous_request_id": "76f6bdad-24db-4fa4-a3d6-2c2c9adfc729",
+        "ambiguous_request_id": "187e0757-591a-4c9c-a334-a32ac2cecbd8",
         "new_obs_seq": 5,
-        "new_request_id": "a0e6301b-3eef-42bb-a318-dcccbf383ca2",
+        "new_request_id": "d9bb0e3a-b5c8-409a-b8e6-82876542721e",
         "order_ref": "ORD-SCRIPT-0001"
       }
     },
     {
       "id": "I6",
       "title": "Completed-capture claims require matching provider evidence",
-      "status": "PASS",
-      "summary": "every completed-capture claim is corroborated by matching provider evidence (order, amount, currency, COMPLETED status)"
+      "status": "FAIL",
+      "summary": "order 3dd17f9f-6a0c-4207-bc1b-b863bdef2850 claims capture CAP-SCRIPT-0001 under request id d9bb0e3a-b5c8-409a-b8e6-82876542721e, but the provider executed that capture under request id 187e0757-591a-4c9c-a334-a32ac2cecbd8",
+      "evidence": [
+        "obs#4"
+      ],
+      "counterexample": {
+        "claimed_capture_id": "CAP-SCRIPT-0001",
+        "claimed_request_id": "d9bb0e3a-b5c8-409a-b8e6-82876542721e",
+        "obs_seq": 4,
+        "order_id": "3dd17f9f-6a0c-4207-bc1b-b863bdef2850",
+        "provider_request_id": "187e0757-591a-4c9c-a334-a32ac2cecbd8"
+      }
     },
     {
       "id": "I7",
@@ -72,10 +82,10 @@
       "summary": "a duplicate capture pathway was created: an earlier capture operation without evidence-backed definite closure was abandoned in favor of a new one",
       "counterexample": {
         "capture_operations": 2,
-        "earlier_operation_id": "b53f6026-f9e9-4e67-a3a6-966b21868c5d",
-        "earlier_request_id": "76f6bdad-24db-4fa4-a3d6-2c2c9adfc729",
+        "earlier_operation_id": "cf42c58b-d71f-4e13-a208-2f1b8ae6a690",
+        "earlier_request_id": "187e0757-591a-4c9c-a334-a32ac2cecbd8",
         "earlier_status": "REJECTED",
-        "order_id": "9ea34261-5dce-4c37-897f-10bd50861671"
+        "order_id": "3dd17f9f-6a0c-4207-bc1b-b863bdef2850"
       }
     },
     {
@@ -125,11 +135,11 @@
       "summary": "a capture was reissued under a NEW operation identity while an earlier attempt's outcome was not definitely closed",
       "counterexample": {
         "first_applied": true,
-        "first_request_id": "76f6bdad-24db-4fa4-a3d6-2c2c9adfc729",
+        "first_request_id": "187e0757-591a-4c9c-a334-a32ac2cecbd8",
         "first_response_dropped": true,
         "new_obs_seq": 5,
-        "new_request_id": "a0e6301b-3eef-42bb-a318-dcccbf383ca2",
-        "order_id": "9ea34261-5dce-4c37-897f-10bd50861671"
+        "new_request_id": "d9bb0e3a-b5c8-409a-b8e6-82876542721e",
+        "order_id": "3dd17f9f-6a0c-4207-bc1b-b863bdef2850"
       }
     },
     {
@@ -139,10 +149,26 @@
       "summary": "after an ambiguous capture outcome, a NEW capture identity was issued (the ambiguity was treated as failure)",
       "counterexample": {
         "ambiguous_obs_seq": 4,
-        "ambiguous_request_id": "76f6bdad-24db-4fa4-a3d6-2c2c9adfc729",
+        "ambiguous_request_id": "187e0757-591a-4c9c-a334-a32ac2cecbd8",
         "new_obs_seq": 5,
-        "new_request_id": "a0e6301b-3eef-42bb-a318-dcccbf383ca2",
+        "new_request_id": "d9bb0e3a-b5c8-409a-b8e6-82876542721e",
         "order_ref": "ORD-SCRIPT-0001"
+      }
+    },
+    {
+      "id": "I6",
+      "title": "Completed-capture claims require matching provider evidence",
+      "status": "FAIL",
+      "summary": "order 3dd17f9f-6a0c-4207-bc1b-b863bdef2850 claims capture CAP-SCRIPT-0001 under request id d9bb0e3a-b5c8-409a-b8e6-82876542721e, but the provider executed that capture under request id 187e0757-591a-4c9c-a334-a32ac2cecbd8",
+      "evidence": [
+        "obs#4"
+      ],
+      "counterexample": {
+        "claimed_capture_id": "CAP-SCRIPT-0001",
+        "claimed_request_id": "d9bb0e3a-b5c8-409a-b8e6-82876542721e",
+        "obs_seq": 4,
+        "order_id": "3dd17f9f-6a0c-4207-bc1b-b863bdef2850",
+        "provider_request_id": "187e0757-591a-4c9c-a334-a32ac2cecbd8"
       }
     },
     {
@@ -152,14 +178,14 @@
       "summary": "a duplicate capture pathway was created: an earlier capture operation without evidence-backed definite closure was abandoned in favor of a new one",
       "counterexample": {
         "capture_operations": 2,
-        "earlier_operation_id": "b53f6026-f9e9-4e67-a3a6-966b21868c5d",
-        "earlier_request_id": "76f6bdad-24db-4fa4-a3d6-2c2c9adfc729",
+        "earlier_operation_id": "cf42c58b-d71f-4e13-a208-2f1b8ae6a690",
+        "earlier_request_id": "187e0757-591a-4c9c-a334-a32ac2cecbd8",
         "earlier_status": "REJECTED",
-        "order_id": "9ea34261-5dce-4c37-897f-10bd50861671"
+        "order_id": "3dd17f9f-6a0c-4207-bc1b-b863bdef2850"
       }
     }
   ],
-  "evidence_digest_sha256": "236a7c698109ce80f78e0ed1798619cdbb93d9cc17c464e98c1f02f4a0af8a45",
+  "evidence_digest_sha256": "3d1700d398ffb065ecc271c73ca4620f0824d65edab50b2b4d439630672f1aeb",
   "evidence_counts": {
     "events": 6,
     "fault_events": 1,

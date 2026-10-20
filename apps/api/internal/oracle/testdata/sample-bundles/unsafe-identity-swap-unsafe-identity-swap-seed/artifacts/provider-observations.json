@@ -7,16 +7,16 @@
       "Seq": 1,
       "Phase": "capture",
       "Detail": "drop_response_after_mutation",
-      "At": "2026-10-19T18:43:28.124289Z"
+      "At": "2026-10-20T23:51:46.811528Z"
     }
   ],
   "observations": [
     {
       "Seq": 1,
-      "At": "2026-10-19T18:43:28.126567Z",
+      "At": "2026-10-20T23:51:46.81689Z",
       "Method": "create",
       "OrderRef": "ORD-SCRIPT-0001",
-      "RequestID": "36e9586a-a443-4eab-a000-a12b8985690d",
+      "RequestID": "4ea8265e-54a3-4b2a-98a6-818de1b988a4",
       "DurableBeforeCall": true,
       "SentAmount": "12.34",
       "SentCurrency": "USD",
@@ -35,7 +35,7 @@
     },
     {
       "Seq": 2,
-      "At": "2026-10-19T18:43:28.129291Z",
+      "At": "2026-10-20T23:51:46.821313Z",
       "Method": "read",
       "OrderRef": "ORD-SCRIPT-0001",
       "RequestID": "",
@@ -57,7 +57,7 @@
     },
     {
       "Seq": 3,
-      "At": "2026-10-19T18:43:28.131245Z",
+      "At": "2026-10-20T23:51:46.823932Z",
       "Method": "read",
       "OrderRef": "ORD-SCRIPT-0001",
       "RequestID": "",
@@ -79,10 +79,10 @@
     },
     {
       "Seq": 4,
-      "At": "2026-10-19T18:43:28.133682Z",
+      "At": "2026-10-20T23:51:46.826661Z",
       "Method": "capture",
       "OrderRef": "ORD-SCRIPT-0001",
-      "RequestID": "76f6bdad-24db-4fa4-a3d6-2c2c9adfc729",
+      "RequestID": "187e0757-591a-4c9c-a334-a32ac2cecbd8",
       "DurableBeforeCall": true,
       "SentAmount": "12.34",
       "SentCurrency": "USD",
@@ -101,10 +101,10 @@
     },
     {
       "Seq": 5,
-      "At": "2026-10-19T18:43:28.137977Z",
+      "At": "2026-10-20T23:51:46.833122Z",
       "Method": "capture",
       "OrderRef": "ORD-SCRIPT-0001",
-      "RequestID": "a0e6301b-3eef-42bb-a318-dcccbf383ca2",
+      "RequestID": "d9bb0e3a-b5c8-409a-b8e6-82876542721e",
       "DurableBeforeCall": true,
       "SentAmount": "12.34",
       "SentCurrency": "USD",
@@ -123,7 +123,7 @@
     },
     {
       "Seq": 6,
-      "At": "2026-10-19T18:43:28.137979Z",
+      "At": "2026-10-20T23:51:46.833125Z",
       "Method": "read",
       "OrderRef": "ORD-SCRIPT-0001",
       "RequestID": "",
@@ -137,8 +137,8 @@
       "OrderStatus": "COMPLETED",
       "CaptureID": "CAP-SCRIPT-0001",
       "CaptureStatus": "COMPLETED",
-      "CaptureAmount": "",
-      "CaptureCurrency": "",
+      "CaptureAmount": "12.34",
+      "CaptureCurrency": "USD",
       "Stale": false,
       "Source": "scripted-fixture",
       "Tier": "F"

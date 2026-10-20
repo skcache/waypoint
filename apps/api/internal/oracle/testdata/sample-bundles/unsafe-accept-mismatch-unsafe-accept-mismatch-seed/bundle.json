@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-10-19T18:43:28.160722Z",
+  "generated_at": "2026-10-20T23:51:46.880882Z",
   "scenario_id": "unsafe-accept-mismatch",
   "scenario_title": "UNSAFE SEED: capture verified despite a provider amount mismatch",
   "scenario_family": "mutation",
   "candidate": "unsafe-accept-mismatch-seed",
   "verdict": "UNSAFE",
   "expected_verdict": "UNSAFE",
-  "fixture_revision": "c54eca51256d1f0fe7b2e13121e6d1373cc1f28f",
+  "fixture_revision": "0171ec250017d2ffd5fa15ac10e263d515ae0b9d",
   "revision_source": "git",
   "oracle_version": "waypoint-oracle-m2.0.2",
   "evidence_tiers": [
@@ -48,14 +48,14 @@
       "id": "I6",
       "title": "Completed-capture claims require matching provider evidence",
       "status": "FAIL",
-      "summary": "order aa270a09-4260-485d-a843-0aaa8ea221ed claims capture CAP-SCRIPT-0001 for 12.34 USD, but the provider evidence shows \"99.99\" \"USD\"",
+      "summary": "order a4f434ad-f262-4723-9582-5102b31b3cda claims capture CAP-SCRIPT-0001 for 12.34 USD, but the provider evidence shows \"99.99\" \"USD\"",
       "evidence": [
         "obs#4"
       ],
       "counterexample": {
         "claim": "12.34 USD",
         "claimed_capture_id": "CAP-SCRIPT-0001",
-        "order_id": "aa270a09-4260-485d-a843-0aaa8ea221ed",
+        "order_id": "a4f434ad-f262-4723-9582-5102b31b3cda",
         "provider": "capture_id=\"CAP-SCRIPT-0001\" status=\"COMPLETED\" amount=\"99.99\" \"USD\""
       }
     },
@@ -109,19 +109,19 @@
       "id": "I6",
       "title": "Completed-capture claims require matching provider evidence",
       "status": "FAIL",
-      "summary": "order aa270a09-4260-485d-a843-0aaa8ea221ed claims capture CAP-SCRIPT-0001 for 12.34 USD, but the provider evidence shows \"99.99\" \"USD\"",
+      "summary": "order a4f434ad-f262-4723-9582-5102b31b3cda claims capture CAP-SCRIPT-0001 for 12.34 USD, but the provider evidence shows \"99.99\" \"USD\"",
       "evidence": [
         "obs#4"
       ],
       "counterexample": {
         "claim": "12.34 USD",
         "claimed_capture_id": "CAP-SCRIPT-0001",
-        "order_id": "aa270a09-4260-485d-a843-0aaa8ea221ed",
+        "order_id": "a4f434ad-f262-4723-9582-5102b31b3cda",
         "provider": "capture_id=\"CAP-SCRIPT-0001\" status=\"COMPLETED\" amount=\"99.99\" \"USD\""
       }
     }
   ],
-  "evidence_digest_sha256": "040462a768b65e6b00edf42779bb902f8a0cf5292ce8e283ff503a71bf7896b8",
+  "evidence_digest_sha256": "2954ce3fc18479b1cad57aba5b58e88ba59914008acf24059e0420a9b043f280",
   "evidence_counts": {
     "events": 6,
     "fault_events": 0,

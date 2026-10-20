@@ -6,10 +6,10 @@
   "observations": [
     {
       "Seq": 1,
-      "At": "2026-10-19T18:43:28.148868Z",
+      "At": "2026-10-20T23:51:46.855953Z",
       "Method": "create",
       "OrderRef": "ORD-SCRIPT-0001",
-      "RequestID": "5c96eb1a-f8c1-472f-9ec5-591d5943a712",
+      "RequestID": "4e6a7875-d8f0-41d6-bac6-3a71cd7eb2ed",
       "DurableBeforeCall": true,
       "SentAmount": "12.34",
       "SentCurrency": "USD",
@@ -28,7 +28,7 @@
     },
     {
       "Seq": 2,
-      "At": "2026-10-19T18:43:28.151565Z",
+      "At": "2026-10-20T23:51:46.867243Z",
       "Method": "read",
       "OrderRef": "ORD-SCRIPT-0001",
       "RequestID": "",
@@ -50,7 +50,7 @@
     },
     {
       "Seq": 3,
-      "At": "2026-10-19T18:43:28.153484Z",
+      "At": "2026-10-20T23:51:46.869961Z",
       "Method": "read",
       "OrderRef": "ORD-SCRIPT-0001",
       "RequestID": "",
@@ -72,10 +72,10 @@
     },
     {
       "Seq": 4,
-      "At": "2026-10-19T18:43:28.15546Z",
+      "At": "2026-10-20T23:51:46.873071Z",
       "Method": "capture",
       "OrderRef": "ORD-SCRIPT-0001",
-      "RequestID": "3c02c0a4-115d-423c-8f17-d1899ac78033",
+      "RequestID": "cad1ba31-cd91-406e-8ccf-6e4da3c2db63",
       "DurableBeforeCall": true,
       "SentAmount": "12.34",
       "SentCurrency": "USD",
@@ -94,7 +94,7 @@
     },
     {
       "Seq": 5,
-      "At": "2026-10-19T18:43:28.157453Z",
+      "At": "2026-10-20T23:51:46.875549Z",
       "Method": "read",
       "OrderRef": "ORD-SCRIPT-0001",
       "RequestID": "",
@@ -108,8 +108,8 @@
       "OrderStatus": "COMPLETED",
       "CaptureID": "CAP-SCRIPT-0001",
       "CaptureStatus": "COMPLETED",
-      "CaptureAmount": "",
-      "CaptureCurrency": "",
+      "CaptureAmount": "99.99",
+      "CaptureCurrency": "USD",
       "Stale": false,
       "Source": "scripted-fixture",
       "Tier": "F"

@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-10-19T18:43:27.980602Z",
+  "generated_at": "2026-10-20T23:51:46.573684Z",
   "scenario_id": "ref-happy-path",
   "scenario_title": "Reference implementation: valid checkout, approval, capture, stale read after verification",
   "scenario_family": "baseline",
   "candidate": "reference",
   "verdict": "VERIFIED_FOR_TESTED_SCENARIOS",
   "expected_verdict": "VERIFIED_FOR_TESTED_SCENARIOS",
-  "fixture_revision": "c54eca51256d1f0fe7b2e13121e6d1373cc1f28f",
+  "fixture_revision": "0171ec250017d2ffd5fa15ac10e263d515ae0b9d",
   "revision_source": "git",
   "oracle_version": "waypoint-oracle-m2.0.2",
   "evidence_tiers": [
@@ -96,7 +96,7 @@
     }
   ],
   "counterexamples": null,
-  "evidence_digest_sha256": "338055982ce731e571ee4ebff3d2e80afdb394931403802d461cd09168ce1895",
+  "evidence_digest_sha256": "7442fc36ffb858485fd97f42a00d60ff8659907b2067ae9b1f38285cd1997383",
   "evidence_counts": {
     "events": 6,
     "fault_events": 0,

@@ -34,14 +34,14 @@
       "id": "I6",
       "title": "Completed-capture claims require matching provider evidence",
       "status": "FAIL",
-      "summary": "order aa270a09-4260-485d-a843-0aaa8ea221ed claims capture CAP-SCRIPT-0001 for 12.34 USD, but the provider evidence shows \"99.99\" \"USD\"",
+      "summary": "order a4f434ad-f262-4723-9582-5102b31b3cda claims capture CAP-SCRIPT-0001 for 12.34 USD, but the provider evidence shows \"99.99\" \"USD\"",
       "evidence": [
         "obs#4"
       ],
       "counterexample": {
         "claim": "12.34 USD",
         "claimed_capture_id": "CAP-SCRIPT-0001",
-        "order_id": "aa270a09-4260-485d-a843-0aaa8ea221ed",
+        "order_id": "a4f434ad-f262-4723-9582-5102b31b3cda",
         "provider": "capture_id=\"CAP-SCRIPT-0001\" status=\"COMPLETED\" amount=\"99.99\" \"USD\""
       }
     },
