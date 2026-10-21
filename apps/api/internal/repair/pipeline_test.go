@@ -341,3 +341,30 @@ func copyTree(src, dst string) {
 		return nil
 	})
 }
+
+// TestBaselineWithoutFeedbackStopsAtTheRejectedCandidate is the comparison
+// case: with identical model replies, the oracle-fed loop rejects a bad first
+// patch, feeds the failure back, and accepts the second; the baseline stops at
+// the first rejection. Both runs use the labelled boundary double.
+func TestBaselineWithoutFeedbackStopsAtTheRejectedCandidate(t *testing.T) {
+	_, _, ev, dsn := pipelineFixture(t, "F4")
+	root := repoRoot(t)
+	out := tempOut(t)
+
+	model := &scriptedModel{replies: []string{diagnosisReply(), badPatchReply()}}
+	rep := repair.Run(context.Background(), repair.Options{
+		RepoRoot: root, BaseRef: "HEAD", Fault: "F4", DSN: dsn, OutDir: out,
+		Mode: "baseline", MaxAttempts: 2, Model: model, Evidence: ev,
+		Allow: repair.DefaultAllowlist(), Revision: "test-revision", RevisionSource: "test",
+		IncidentID: ev.IncidentID,
+	})
+	if len(rep.Attempts) != 1 || model.calls != 2 {
+		t.Fatalf("baseline attempts=%d model calls=%d, want 1/2 (diagnosis + one patch)", len(rep.Attempts), model.calls)
+	}
+	if rep.Status != repair.StatusNotVerified {
+		t.Fatalf("baseline status = %s, want NOT_VERIFIED", rep.Status)
+	}
+	if rep.Attempts[0].Ladder.Accepted {
+		t.Fatalf("a rejected patch was accepted: %+v", rep.Attempts[0].Ladder)
+	}
+}
