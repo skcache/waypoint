@@ -29,6 +29,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -62,6 +63,12 @@ type Config struct {
 	APIKey string
 	// Model names the model to call.
 	Model string
+	// Timeout bounds one model call. Zero means the adapter default (30s).
+	Timeout time.Duration
+	// MaxOutputTokens bounds the completion. Zero means the adapter default
+	// (1000); reasoning models need headroom because hidden reasoning counts
+	// against the budget.
+	MaxOutputTokens int
 }
 
 // Configured reports whether every required value is present.
@@ -86,6 +93,20 @@ func ConfigFromEnv(getenv func(string) string) (Config, error) {
 	}
 	if err := ValidateModel(cfg.Model); err != nil {
 		return Config{}, err
+	}
+	if raw := getenv("LLM_TIMEOUT_SECONDS"); raw != "" {
+		secs, err := strconv.Atoi(raw)
+		if err != nil || secs < 10 || secs > 600 {
+			return Config{}, fmt.Errorf("invalid LLM_TIMEOUT_SECONDS (value redacted): want an integer between 10 and 600")
+		}
+		cfg.Timeout = time.Duration(secs) * time.Second
+	}
+	if raw := getenv("LLM_MAX_OUTPUT_TOKENS"); raw != "" {
+		n, err := strconv.Atoi(raw)
+		if err != nil || n < 100 || n > 16000 {
+			return Config{}, fmt.Errorf("invalid LLM_MAX_OUTPUT_TOKENS (value redacted): want an integer between 100 and 16000")
+		}
+		cfg.MaxOutputTokens = n
 	}
 	return cfg, nil
 }
@@ -189,10 +210,11 @@ func classifyStatus(status int) ErrorKind {
 
 // Client is a minimal hosted chat-completions client.
 type Client struct {
-	base   *url.URL
-	apiKey string
-	model  string
-	http   *http.Client
+	base      *url.URL
+	apiKey    string
+	model     string
+	maxTokens int
+	http      *http.Client
 }
 
 // New validates the configuration and builds a client with bounded
@@ -213,9 +235,13 @@ func New(cfg Config) (*Client, error) {
 		// Unreachable: ValidateBaseURL already parsed the value.
 		return nil, fmt.Errorf("%w: base URL is not parseable", ErrNotConfigured)
 	}
-	c := &Client{base: u, apiKey: cfg.APIKey, model: cfg.Model}
+	maxTokens := cfg.MaxOutputTokens
+	if maxTokens <= 0 {
+		maxTokens = maxOutputTokens
+	}
+	c := &Client{base: u, apiKey: cfg.APIKey, model: cfg.Model, maxTokens: maxTokens}
 	c.http = &http.Client{
-		Timeout:       defaultTimeout,
+		Timeout:       clientTimeout(cfg),
 		CheckRedirect: c.checkRedirect,
 		Transport: &http.Transport{
 			TLSClientConfig:     &tls.Config{MinVersion: tls.VersionTLS12},
@@ -237,6 +263,13 @@ func newWithClient(cfg Config, hc *http.Client) (*Client, error) {
 	}
 	c.http = hc
 	return c, nil
+}
+
+func clientTimeout(cfg Config) time.Duration {
+	if cfg.Timeout > 0 {
+		return cfg.Timeout
+	}
+	return defaultTimeout
 }
 
 func (c *Client) checkRedirect(req *http.Request, via []*http.Request) error {
@@ -277,7 +310,8 @@ type chatRequest struct {
 // strict schema enforcement lives one layer up, on the extracted draft.
 type chatCompletionResponse struct {
 	Choices []struct {
-		Message struct {
+		FinishReason string `json:"finish_reason"`
+		Message      struct {
 			Content string `json:"content"`
 		} `json:"message"`
 	} `json:"choices"`
@@ -324,7 +358,7 @@ func (c *Client) GenerateDetail(ctx context.Context, system, user string) (Compl
 			{Role: "user", Content: user},
 		},
 		Temperature: 0,
-		MaxTokens:   maxOutputTokens,
+		MaxTokens:   c.maxTokens,
 	})
 	if err != nil {
 		return Completion{}, &Error{Kind: KindUnavailable, Detail: "request encoding failed"}
@@ -377,7 +411,11 @@ func (c *Client) GenerateDetail(ctx context.Context, system, user string) (Compl
 		return Completion{}, &Error{Kind: KindUnavailable, Status: resp.StatusCode, Detail: "the provider reported an error"}
 	}
 	if len(envelope.Choices) == 0 || strings.TrimSpace(envelope.Choices[0].Message.Content) == "" {
-		return Completion{}, &Error{Kind: KindUnavailable, Status: resp.StatusCode, Detail: "the provider response carried no assistant text"}
+		detail := "the provider response carried no assistant text"
+		if len(envelope.Choices) > 0 && envelope.Choices[0].FinishReason == "length" {
+			detail = "the provider exhausted the output budget before emitting text (raise LLM_MAX_OUTPUT_TOKENS)"
+		}
+		return Completion{}, &Error{Kind: KindUnavailable, Status: resp.StatusCode, Detail: detail}
 	}
 	out := Completion{Text: envelope.Choices[0].Message.Content}
 	if envelope.Usage != nil {
