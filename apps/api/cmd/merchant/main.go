@@ -104,8 +104,8 @@ func run() error {
 	if fault == "" {
 		fault = merchant.FaultNone
 	}
-	if fault != merchant.FaultNone && fault != merchant.FaultF1 {
-		return fmt.Errorf("invalid MERCHANT_FAULT %q (want none or F1)", fault)
+	if fault != merchant.FaultNone && fault != merchant.FaultF1 && fault != merchant.FaultF4 {
+		return fmt.Errorf("invalid MERCHANT_FAULT %q (want none, F1 or F4)", fault)
 	}
 
 	app := &server{

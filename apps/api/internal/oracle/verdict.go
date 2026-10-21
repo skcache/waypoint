@@ -7,12 +7,12 @@ import (
 
 // Result is the complete evaluation output for one scenario run.
 type Result struct {
-	Scenario    ScenarioMeta
-	Candidate   string
-	Verdict     Verdict
-	Invariants  []InvariantResult
-	Limitations []string
-	EvaluatedAt time.Time
+	Scenario    ScenarioMeta      `json:"scenario"`
+	Candidate   string            `json:"candidate"`
+	Verdict     Verdict           `json:"verdict"`
+	Invariants  []InvariantResult `json:"invariants"`
+	Limitations []string          `json:"limitations"`
+	EvaluatedAt time.Time         `json:"evaluated_at"`
 }
 
 // Evaluate runs the frozen invariant registry and combines the verdict.

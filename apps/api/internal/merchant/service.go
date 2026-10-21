@@ -460,7 +460,7 @@ func (s *Service) Capture(ctx context.Context, orderID string) (Order, error) {
 		return updated, &CaptureRejectedError{Order: updated, Cause: err}
 	}
 
-	captureID, verr := captureEvidence(result, order)
+	captureID, verr := s.captureEvidence(result, order)
 	if verr != nil {
 		detail, _ := json.Marshal(map[string]any{
 			"operation_type":      op.Type,
@@ -719,11 +719,16 @@ func completeCapture(res *paypal.Order, order Order) (string, bool) {
 	return "", false
 }
 
-// captureEvidence verifies a capture response before it may be trusted:
+// captureEvidence verifies a capture response before it may be trusted —
 // order id, COMPLETED status, a COMPLETED capture resource with an id, and
-// the exact amount and currency. Buyer approval and an accepted request are
-// not completion.
-func captureEvidence(res *paypal.Order, order Order) (string, error) {
+// the exact amount and currency — and returns the provider capture resource
+// id. Buyer approval and an accepted request are not completion.
+//
+// FaultF4 is DELIBERATE: response handling reads the ORDER envelope id as if it
+// were the capture resource id. The local journal then certifies an identity
+// the provider never issued — a defect a passing build and the ordinary unit
+// tests cannot see, but the independent oracle can (I6).
+func (s *Service) captureEvidence(res *paypal.Order, order Order) (string, error) {
 	if res == nil {
 		return "", errors.New("empty capture response")
 	}
@@ -736,6 +741,9 @@ func captureEvidence(res *paypal.Order, order Order) (string, error) {
 	captureID, ok := completeCapture(res, order)
 	if !ok {
 		return "", errors.New("capture response carries no COMPLETED capture with matching amount and currency")
+	}
+	if s.fault == FaultF4 {
+		return res.ID, nil
 	}
 	return captureID, nil
 }

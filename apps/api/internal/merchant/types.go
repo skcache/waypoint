@@ -64,6 +64,13 @@ const (
 const (
 	FaultNone = "none"
 	FaultF1   = "F1"
+	// FaultF4 is the M3 held-out, unfamiliar defect: response handling mixes
+	// the provider ORDER envelope id with the CAPTURE resource id. The local
+	// journal then certifies a capture identity the provider never issued,
+	// which is invisible to a build or a green test but caught by the
+	// independent oracle (I6 identity binding). It exists so M3 can prove the
+	// pipeline generalizes beyond F1 instead of replaying a known answer.
+	FaultF4 = "F4"
 )
 
 // Product is one fixture catalog item. Price is server-owned trust: the
