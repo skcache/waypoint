@@ -1046,3 +1046,73 @@ func TestStaleReconcilerCannotDemoteAfterTakeover(t *testing.T) {
 		t.Fatalf("capture calls = %v, want exactly one send reusing req-fence-1", fake.captureCalls)
 	}
 }
+
+// TestStaleWorkerCannotMarkReconciliationRequired pins the P2 fence on the
+// reconciliation demotion: a worker that inspected operation generation N must
+// not demote an order whose capture another worker has since taken over
+// (generation N+1, live lease), and the pre-capture predicate path must refuse
+// while any live IN_FLIGHT attempt exists.
+func TestStaleWorkerCannotMarkReconciliationRequired(t *testing.T) {
+	store := newFixtureStore(t)
+	ctx := context.Background()
+	svc := merchant.NewService(store, &fakePayPal{}, merchant.FaultNone, "")
+
+	order := newOrder(t, store, svc, 1)
+	approve(t, svc, order.ID)
+
+	op, err := store.InsertCaptureOp(ctx, order.ID, "req-recon-fence", "fp-recon-fence", "worker-a", 0)
+	if err != nil {
+		t.Fatalf("insert capture op: %v", err)
+	}
+	if _, err := store.MarkCaptureUnknown(ctx, order.ID, op.ID, op.Fence, json.RawMessage(`{"test":"ambiguous outcome"}`), merchant.TierFault); err != nil {
+		t.Fatalf("mark capture unknown: %v", err)
+	}
+	claimed, err := store.BeginCaptureRetry(ctx, order.ID, op.ID, "worker-b", 5*time.Minute)
+	if err != nil {
+		t.Fatalf("worker B takeover: %v", err)
+	}
+	if claimed.Fence != op.Fence+1 {
+		t.Fatalf("takeover fence = %d, want %d", claimed.Fence, op.Fence+1)
+	}
+
+	detail := json.RawMessage(`{"test":"stale reconciliation demotion"}`)
+
+	// Worker A still believes it owns generation N: refused.
+	if err := store.MarkReconciliationRequired(ctx, order.ID, op.ID, op.Fence, detail, merchant.TierFault); !errors.Is(err, merchant.ErrConflict) {
+		t.Fatalf("stale fenced demotion = %v, want ErrConflict", err)
+	}
+	if d := detailFor(t, store, order.ID); d.Order.Status == merchant.StatusReconciliationRequired {
+		t.Fatalf("stale worker demoted a live takeover: order status = %s", d.Order.Status)
+	}
+	active, err := store.ActiveCapture(ctx, order.ID)
+	if err != nil || active == nil {
+		t.Fatalf("active capture after refusal: %v %v", active, err)
+	}
+	if active.Fence != claimed.Fence || active.OwnerID != "worker-b" {
+		t.Fatalf("live takeover was disturbed: fence=%d owner=%q", active.Fence, active.OwnerID)
+	}
+
+	// The pre-capture predicate path is refused while the live attempt exists.
+	if err := store.MarkReconciliationRequired(ctx, order.ID, "", 0, detail, merchant.TierFault); !errors.Is(err, merchant.ErrConflict) {
+		t.Fatalf("unfenced demotion under a live capture = %v, want ErrConflict", err)
+	}
+
+	// After the lease expires, the predicate path succeeds and records the
+	// provenance tier it was given (no hardcoded tier R in scripted runs).
+	if _, err := store.Pool().Exec(ctx, `
+		UPDATE merchant_operations SET lease_expires_at = now() - interval '1 second'
+		 WHERE id = $1::uuid`, op.ID); err != nil {
+		t.Fatalf("expire lease: %v", err)
+	}
+	if err := store.MarkReconciliationRequired(ctx, order.ID, "", 0, detail, merchant.TierFault); err != nil {
+		t.Fatalf("demotion after lease expiry: %v", err)
+	}
+	d := detailFor(t, store, order.ID)
+	if d.Order.Status != merchant.StatusReconciliationRequired {
+		t.Fatalf("status = %s, want RECONCILIATION_REQUIRED", d.Order.Status)
+	}
+	last := d.Events[len(d.Events)-1]
+	if last.EventType != "RECONCILIATION_REQUIRED" || last.Tier != merchant.TierFault {
+		t.Fatalf("reconciliation event = %s tier %s, want RECONCILIATION_REQUIRED tier F", last.EventType, last.Tier)
+	}
+}

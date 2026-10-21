@@ -419,7 +419,7 @@ func (s *Service) Capture(ctx context.Context, orderID string) (Order, error) {
 		// COMPLETED without matching capture evidence must never be
 		// "fixed" by sending another capture.
 		detail, _ := json.Marshal(map[string]any{"provider_status": res.Status, "note": "COMPLETED without matching capture evidence"})
-		if err := s.store.MarkReconciliationRequired(ctx, orderID, detail); err != nil {
+		if err := s.store.MarkReconciliationRequired(ctx, orderID, "", 0, detail, s.evidenceTier()); err != nil {
 			return Order{}, err
 		}
 		return Order{}, fmt.Errorf("%w: provider reports COMPLETED without matching capture evidence; reconciliation required", ErrConflict)
@@ -508,7 +508,7 @@ func (s *Service) beginCaptureAttempt(ctx context.Context, order Order) (Operati
 		}
 		if active.AttemptCount >= maxCaptureAttempts {
 			detail, _ := json.Marshal(map[string]any{"attempts": active.AttemptCount, "provider_request_id": active.ProviderRequestID})
-			if err := s.store.MarkReconciliationRequired(ctx, order.ID, detail); err != nil {
+			if err := s.store.MarkReconciliationRequired(ctx, order.ID, active.ID, active.Fence, detail, s.evidenceTier()); err != nil {
 				return Operation{}, err
 			}
 			return Operation{}, fmt.Errorf("%w: attempt limit reached for order %s; reconcile before retrying", ErrConflict, order.ID)
@@ -520,7 +520,7 @@ func (s *Service) beginCaptureAttempt(ctx context.Context, order Order) (Operati
 				"provider_request_id": active.ProviderRequestID,
 				"note":                "same-id retry window exceeded; a repeated request id may no longer be guaranteed to return the original result",
 			})
-			if err := s.store.MarkReconciliationRequired(ctx, order.ID, detail); err != nil {
+			if err := s.store.MarkReconciliationRequired(ctx, order.ID, active.ID, active.Fence, detail, s.evidenceTier()); err != nil {
 				return Operation{}, err
 			}
 			return Operation{}, fmt.Errorf("%w: same-id retry window (%s) exceeded for order %s; manual reconciliation required (request id %s preserved)",

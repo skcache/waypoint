@@ -603,7 +603,20 @@ func (s *Store) MarkCaptureRejected(ctx context.Context, orderID, operationID st
 
 // MarkReconciliationRequired records that local and provider evidence
 // disagree or remain insufficient; nothing is failed or completed by guess.
-func (s *Store) MarkReconciliationRequired(ctx context.Context, orderID string, detail json.RawMessage) error {
+//
+// The transition is FENCED when an operation is named: opID/expectedFence must
+// still identify the caller's ownership generation, otherwise a stale worker
+// could demote an order whose capture another worker has already taken over
+// and is actively mutating. With no operation named (the pre-capture
+// COMPLETED-without-evidence path), the transition is refused while any live
+// IN_FLIGHT capture exists — the same ownership rule, expressed as a
+// predicate, because there is no generation to compare.
+//
+// A refusal returns ErrConflict; callers must not retry blindly.
+func (s *Store) MarkReconciliationRequired(ctx context.Context, orderID, opID string, expectedFence int64, detail json.RawMessage, tier string) error {
+	if tier == "" {
+		tier = TierReal
+	}
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return err
@@ -614,16 +627,37 @@ func (s *Store) MarkReconciliationRequired(ctx context.Context, orderID string, 
 	if err := tx.QueryRow(ctx, `SELECT trace_id::text FROM merchant_orders WHERE id = $1::uuid`, orderID).Scan(&traceID); err != nil {
 		return err
 	}
-	if _, err := tx.Exec(ctx, `
-		UPDATE merchant_orders SET status = $2, updated_at = now()
-		 WHERE id = $1::uuid AND status IN ('CAPTURE_OUTCOME_UNKNOWN', 'CAPTURE_IN_FLIGHT')`,
-		orderID, StatusReconciliationRequired); err != nil {
+
+	var tag pgconn.CommandTag
+	if opID != "" {
+		tag, err = tx.Exec(ctx, `
+			UPDATE merchant_orders SET status = $4, updated_at = now()
+			 WHERE id = $1::uuid
+			   AND status IN ('APPROVED', 'CAPTURE_OUTCOME_UNKNOWN', 'CAPTURE_IN_FLIGHT')
+			   AND EXISTS (SELECT 1 FROM merchant_operations op
+			                WHERE op.id = $2::uuid AND op.order_id = $1::uuid
+			                  AND op.fence = $3 AND op.status IN ('IN_FLIGHT', 'UNKNOWN'))`,
+			orderID, opID, expectedFence, StatusReconciliationRequired)
+	} else {
+		tag, err = tx.Exec(ctx, `
+			UPDATE merchant_orders SET status = $2, updated_at = now()
+			 WHERE id = $1::uuid
+			   AND status IN ('APPROVED', 'CAPTURE_OUTCOME_UNKNOWN', 'CAPTURE_IN_FLIGHT')
+			   AND NOT EXISTS (SELECT 1 FROM merchant_operations op
+			                    WHERE op.order_id = $1::uuid AND op.status = 'IN_FLIGHT'
+			                      AND op.lease_expires_at IS NOT NULL AND op.lease_expires_at > now())`,
+			orderID, StatusReconciliationRequired)
+	}
+	if err != nil {
 		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return fmt.Errorf("%w: reconciliation demotion refused for order %s — the operation moved under this worker (ownership generation changed or a live attempt owns it); re-read the durable state", ErrConflict, orderID)
 	}
 	if _, err := tx.Exec(ctx, `
 		INSERT INTO merchant_events (order_id, trace_id, source, event_type, detail, tier)
 		VALUES ($1::uuid, $2::uuid, 'API', 'RECONCILIATION_REQUIRED', $3, $4)`,
-		orderID, traceID, detail, TierReal); err != nil {
+		orderID, traceID, detail, tier); err != nil {
 		return err
 	}
 	return tx.Commit(ctx)
