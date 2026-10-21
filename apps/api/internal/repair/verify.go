@@ -108,11 +108,27 @@ func (v *Verifier) Run(ctx context.Context) Verification {
 		out.Steps = append(out.Steps, StepResult{Step: "eval", ExitCode: -1, Output: err.Error()})
 		return out
 	}
-	eval := v.Runner.Run(ctx, v.Workspace.Dir, v.ArtifactDir, 300*time.Second, testEnv,
-		"go", "run", "./cmd/repaircheck", "-fault", v.Fault, "-out", "/out", "-dsn", v.Runner.DSN(),
+	// 4a. Candidate-linked fixture run. It records ONLY provider observations.
+	// Any eval.json it may have forged is deleted before the judge runs.
+	_ = os.Remove(filepath.Join(v.ArtifactDir, "eval.json"))
+	fixture := v.Runner.Run(ctx, v.Workspace.Dir, v.ArtifactDir, 300*time.Second, testEnv,
+		"go", "run", "./cmd/fixturecheck", "-fault", v.Fault, "-out", "/out", "-dsn", v.Runner.DSN())
+	fixture.Step = "fixture"
+	out.Steps = append(out.Steps, fixture)
+	if !fixture.Passed() {
+		return out
+	}
+
+	// 4b. Trusted judge. It imports the oracle only — no merchant/replay code —
+	// so candidate code cannot run in this process, forge its output, or exit
+	// it early. It re-reads the journal itself and writes eval.json on every
+	// path.
+	judge := v.Runner.Run(ctx, v.Workspace.Dir, v.ArtifactDir, 300*time.Second, testEnv,
+		"go", "run", "./cmd/judgecheck", "-fault", v.Fault,
+		"-in", "/out/observations.json", "-out", "/out", "-dsn", v.Runner.DSN(),
 		"-base-revision", v.BaseRevision, "-patch-digest", v.PatchDigest)
-	eval.Step = "eval"
-	out.Steps = append(out.Steps, eval)
+	judge.Step = "judge"
+	out.Steps = append(out.Steps, judge)
 
 	data, err := os.ReadFile(filepath.Join(v.ArtifactDir, "eval.json"))
 	if err != nil {

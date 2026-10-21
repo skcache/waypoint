@@ -20,6 +20,12 @@ inside the disposable Docker sandbox described in `report.json`
 (`candidate_sandbox`), and the trusted suite plus the independent oracle
 decided acceptance — the model never certifies its own patch.
 
+The verifier recorded in these reports is the original single-process
+`cmd/repaircheck`. It was replaced after the verifier-integrity review by the
+split `cmd/fixturecheck` (candidate-linked observations only) and
+`cmd/judgecheck` (trusted oracle process); historical command strings are kept
+verbatim.
+
 `report.json` carries model provenance, per-call latency and reported token
 usage, the verification ladder, the applied diff and the acceptance reason.
 `eval.json` is the verifier's output from inside the sandbox.

@@ -30,7 +30,7 @@ Built for the [PayPal AI Hackathon 2026](https://paypalaihackathon.devpost.com/)
 | Fault harness + unsafe seeds (`apps/api/internal/replay`) | **Implemented (M2)** — scripted deterministic provider (tier F), scenarios for lost response, duplicate delivery, concurrency, restart, stale reads; two knowingly-unsafe seed patches (fresh-identity reissue; wrong-amount acceptance) rejected by the oracle with counterexamples |
 | Go API (`apps/api`) | `GET /healthz`, `GET /readyz`, and the legacy V1 `POST /api/v1/intents/draft` endpoint (kept running; the V1 product direction is retired) |
 | Investigation + repair pipeline (`apps/api/internal/repair`, `cmd/repair`) | **Implemented (M3)** — evidence-bounded structured diagnosis, schema-validated, allowlisted patches applied in a disposable git worktree, candidate execution in a **disposable Docker sandbox** (no host home/env, internal network only, non-root, read-only root, CPU/memory/PID/time limits, fail-closed), bounded retries on failure evidence, review report that keeps diagnosis/patch/build/tests/oracle/acceptance as separate facts; never applies to the working tree, pushes or deploys. Live hosted-model evaluation runs only when `LLM_*` credentials are configured; otherwise the command reports `NOT_CONFIGURED`. |
-| Fixture verifier (`apps/api/cmd/repaircheck`) | **Implemented (M3)** — runs the candidate's compiled merchant package through checkout → approval → capture and returns the oracle's verdict plus a proof bundle; acceptance requires a provider-observed capture identity and an oracle `VERIFIED_FOR_TESTED_SCENARIOS` |
+| Verifier (`apps/api/cmd/fixturecheck` + `apps/api/cmd/judgecheck`) | **Implemented (M3)** — the fixture run (candidate-linked) records only provider observations; a separate **trusted judge** (imports the oracle only, no merchant/replay code) re-reads the durable journal, evaluates the evidence, and writes the verdict plus proof bundle. Acceptance requires a provider-observed capture identity and an oracle `VERIFIED_FOR_TESTED_SCENARIOS`; candidate code cannot run inside, forge, or terminate the judge |
 | PostgreSQL | **Implemented** — versioned migrations `0001`–`0006` (fixture tables in `0004`, capture-ownership lease in `0005`, ownership-generation fence in `0006`); `/readyz` reports database readiness |
 | PayPal Sandbox (Orders v2) | **Verified** — real sandbox order creation, genuine buyer approval, provider-confirmed capture (`COMPLETED`), and a provider-rejected malformed request observed end-to-end; the developer-only feasibility spike CLI is retained under `cmd/paypal-spike` |
 | Web app (`apps/web`) | Static V1 preview pages; will be rebuilt around real incident data |
@@ -156,7 +156,7 @@ Safety properties that are enforced in code, not prose:
   environment; only report JSON, Markdown, step logs and model feedback are
   sanitized.
 - The proof report records the **resolved candidate base commit** and a
-  **sha256 digest of the applied diff**; `repaircheck` refuses to write a
+  **sha256 digest of the applied diff**; the trusted judge refuses to write a
   bundle whose source revision is unknown.
 - Verification runs the **candidate's own compiled code** in the worktree. The
   oracle is built from the trusted revision and reads PostgreSQL with its own
