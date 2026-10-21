@@ -35,31 +35,55 @@ type Harness struct {
 // The connected database name MUST end in "_test". Real credentials are never
 // committed: they arrive via environment (.env is loaded by the Makefile).
 func OpenHarness(ctx context.Context, dsn string) (*Harness, error) {
+	resolved, err := ResolveDSN(dsn)
+	if err != nil {
+		return nil, err
+	}
+	u, err := url.Parse(resolved)
+	if err != nil {
+		return nil, fmt.Errorf("oracle harness: DSN is not a valid URL (value redacted)")
+	}
+	name := strings.TrimPrefix(u.Path, "/")
+	return openNamed(ctx, u, name)
+}
+
+// ResolveDSN applies the documented resolution order and returns the concrete
+// test DSN (explicit → TEST_DATABASE_URL → derived from DATABASE_URL →
+// local default), validating the _test suffix. Callers that execute the
+// verifier in a child process need the resolved value, not the empty input.
+func ResolveDSN(dsn string) (string, error) {
+	return ResolveDSNFor(dsn, "waypoint_oracle_test")
+}
+
+// ResolveDSNFor is ResolveDSN with an explicit default database name. Test
+// packages use distinct names so `go test ./...` (which runs packages in
+// parallel) cannot have two suites rebuilding the same schema.
+func ResolveDSNFor(dsn, dbName string) (string, error) {
 	if dsn == "" {
 		dsn = os.Getenv("TEST_DATABASE_URL")
 	}
 	if dsn == "" {
 		if base := os.Getenv("DATABASE_URL"); base != "" {
-			if derived, ok := deriveTestDSN(base, "waypoint_oracle_test"); ok {
+			if derived, ok := deriveTestDSN(base, dbName); ok {
 				dsn = derived
 			}
 		}
 	}
 	if dsn == "" {
-		dsn = defaultOracleDSN
+		dsn = withDBName(defaultOracleDSN, dbName)
 	}
 	u, err := url.Parse(dsn)
 	if err != nil {
-		return nil, fmt.Errorf("oracle harness: DSN is not a valid URL (value redacted)")
+		return "", fmt.Errorf("oracle harness: DSN is not a valid URL (value redacted)")
 	}
 	name := strings.TrimPrefix(u.Path, "/")
 	if !strings.HasSuffix(name, "_test") {
-		return nil, fmt.Errorf("oracle harness: refusing database %q (name must end in _test)", name)
+		return "", fmt.Errorf("oracle harness: refusing database %q (name must end in _test)", name)
 	}
 	if !dbNamePattern.MatchString(name) {
-		return nil, fmt.Errorf("oracle harness: database name %q is not a simple identifier", name)
+		return "", fmt.Errorf("oracle harness: database name %q is not a simple identifier", name)
 	}
-	return openNamed(ctx, u, name)
+	return dsn, nil
 }
 
 // deriveTestDSN swaps the database name in a base DSN, keeping host, port,
@@ -74,6 +98,19 @@ func deriveTestDSN(base, dbName string) (string, bool) {
 }
 
 // OpenHarnessForTests is the test-side entry point with the same guards.
+func OpenHarnessForTestsNamed(ctx context.Context, dsn, dbName string) (*Harness, error) {
+	resolved, err := ResolveDSNFor(dsn, dbName)
+	if err != nil {
+		return nil, err
+	}
+	u, err := url.Parse(resolved)
+	if err != nil {
+		return nil, fmt.Errorf("oracle harness: DSN is not a valid URL (value redacted)")
+	}
+	name := strings.TrimPrefix(u.Path, "/")
+	return openNamed(ctx, u, name)
+}
+
 func OpenHarnessForTests(ctx context.Context, dsn string) (*Harness, error) {
 	return OpenHarness(ctx, dsn)
 }
@@ -136,6 +173,17 @@ func openNamed(ctx context.Context, u *url.URL, name string) (*Harness, error) {
 }
 
 // Close releases the pool.
+// withDBName replaces the database name in a base DSN while keeping
+// credentials, host and options.
+func withDBName(base, name string) string {
+	u, err := url.Parse(base)
+	if err != nil {
+		return base
+	}
+	u.Path = "/" + name
+	return u.String()
+}
+
 func (h *Harness) Close() {
 	if h != nil && h.Pool != nil {
 		h.Pool.Close()

@@ -175,6 +175,14 @@ func EvaluateFixture(ctx context.Context, h *Harness, fault string) (FixtureVerd
 	if err != nil {
 		return FixtureVerdict{}, err
 	}
+	return JudgeFixtureRun(ctx, h, run)
+}
+
+// JudgeFixtureRun applies the acceptance rules to an already-executed run, so
+// callers that need the raw evidence (the repair pipeline) do not have to
+// execute the journey twice.
+func JudgeFixtureRun(ctx context.Context, h *Harness, run FixtureRun) (FixtureVerdict, error) {
+	fault := run.Fault
 	ev, err := run.ToOracleEvidence(ctx, h)
 	if err != nil {
 		return FixtureVerdict{}, err

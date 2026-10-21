@@ -723,11 +723,6 @@ func completeCapture(res *paypal.Order, order Order) (string, bool) {
 // order id, COMPLETED status, a COMPLETED capture resource with an id, and
 // the exact amount and currency — and returns the provider capture resource
 // id. Buyer approval and an accepted request are not completion.
-//
-// FaultF4 is DELIBERATE: response handling reads the ORDER envelope id as if it
-// were the capture resource id. The local journal then certifies an identity
-// the provider never issued — a defect a passing build and the ordinary unit
-// tests cannot see, but the independent oracle can (I6).
 func (s *Service) captureEvidence(res *paypal.Order, order Order) (string, error) {
 	if res == nil {
 		return "", errors.New("empty capture response")

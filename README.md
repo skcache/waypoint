@@ -6,14 +6,19 @@ independently verifies that the repairs preserve correct financial state.
 
 Built for the [PayPal AI Hackathon 2026](https://paypalaihackathon.devpost.com/).
 
-> **Status: early V2 prototype (milestones M1–M2 implemented).** The repository contains:
+> **Status: early V2 prototype (milestones M1–M3 implemented).** The repository contains:
 > a runnable **merchant checkout fixture** (Go + PostgreSQL) that performs real PayPal
-> **Sandbox** orders with a durable operation journal and a deliberately injectable
-> provider-request defect; an independent **deterministic financial-correctness oracle**
-> with a fault harness and knowingly-unsafe patch seeds it rejects; the Go API with
-> PostgreSQL migrations; and the previous static three-route web preview, which will be
-> replaced by the V2 incident console in a later milestone. The AI investigator and
-> repair agent are **not built yet**. Nothing here processes real money; all provider
+> **Sandbox** orders with a durable operation journal and deliberately injectable
+> defects; an independent **deterministic financial-correctness oracle** with a fault
+> harness and knowingly-unsafe patch seeds it rejects; an **AI investigation and repair
+> pipeline** that diagnoses an incident, generates a scoped source patch, applies it in
+> a disposable worktree, and accepts it only after the candidate's own code passes
+> independent verification; the Go API with PostgreSQL migrations; and the previous
+> static three-route web preview, which will be replaced by the V2 incident console in a
+> later milestone. **The live hosted-model evaluation is NOT RUN in this repository's
+> checked-in evidence: no model credentials are configured here.** The pipeline's
+> integration boundaries are exercised with a clearly labelled scripted double, never
+> presented as a hosted-AI result. Nothing here processes real money; all provider
 > traffic is sandbox.
 
 ## Current status
@@ -24,10 +29,12 @@ Built for the [PayPal AI Hackathon 2026](https://paypalaihackathon.devpost.com/)
 | Financial oracle (`apps/api/internal/oracle`) | **Implemented (M2)** — deterministic I1–I12 invariant engine over the durable journal and trusted provider observations; verdicts `VERIFIED_FOR_TESTED_SCENARIOS` / `UNSAFE` / `INCONCLUSIVE`; NOT_APPLICABLE for unexercised invariants; redacted proof bundles |
 | Fault harness + unsafe seeds (`apps/api/internal/replay`) | **Implemented (M2)** — scripted deterministic provider (tier F), scenarios for lost response, duplicate delivery, concurrency, restart, stale reads; two knowingly-unsafe seed patches (fresh-identity reissue; wrong-amount acceptance) rejected by the oracle with counterexamples |
 | Go API (`apps/api`) | `GET /healthz`, `GET /readyz`, and the legacy V1 `POST /api/v1/intents/draft` endpoint (kept running; the V1 product direction is retired) |
-| PostgreSQL | **Implemented** — versioned migrations `0001`–`0005` (fixture tables in `0004`, capture-ownership lease in `0005`); `/readyz` reports database readiness |
+| Investigation + repair pipeline (`apps/api/internal/repair`, `cmd/repair`) | **Implemented (M3)** — evidence-bounded structured diagnosis, schema-validated, allowlisted patches applied in a disposable git worktree, bounded subprocess execution (time/timeout/output/env isolation), bounded retries on failure evidence, review report that keeps diagnosis/patch/build/tests/oracle/acceptance as separate facts; never applies to the working tree, pushes or deploys. **Live hosted-model evaluation: BLOCKED (no credentials configured); the pipeline is exercised end-to-end with a labelled scripted boundary double.** |
+| Fixture verifier (`apps/api/cmd/repaircheck`) | **Implemented (M3)** — runs the candidate's compiled merchant package through checkout → approval → capture and returns the oracle's verdict plus a proof bundle; acceptance requires a provider-observed capture identity and an oracle `VERIFIED_FOR_TESTED_SCENARIOS` |
+| PostgreSQL | **Implemented** — versioned migrations `0001`–`0006` (fixture tables in `0004`, capture-ownership lease in `0005`, ownership-generation fence in `0006`); `/readyz` reports database readiness |
 | PayPal Sandbox (Orders v2) | **Verified** — real sandbox order creation, genuine buyer approval, provider-confirmed capture (`COMPLETED`), and a provider-rejected malformed request observed end-to-end; the developer-only feasibility spike CLI is retained under `cmd/paypal-spike` |
 | Web app (`apps/web`) | Static V1 preview pages; will be rebuilt around real incident data |
-| AI investigator + repair agent, full evaluation | Planned — not implemented (milestone M3+) |
+| Full evaluation + workbench UI | Planned — milestone M4+ (multi-family fault/repair benchmark, incident console) |
 
 ## Merchant fixture (the M1 vertical slice)
 
@@ -110,6 +117,59 @@ go run ./cmd/oracle -out /tmp/bundles -revision "$(git rev-parse --short HEAD)"
 # redacted proof bundles land in /tmp/bundles (see
 # internal/oracle/testdata/sample-bundles/ for committed samples)
 ```
+
+## Repair pipeline (the M3 vertical slice)
+
+`cmd/repair` turns one fixture incident into a reviewable repair report:
+
+```
+fixture incident (tier F, reproducible) ─► bounded evidence bundle
+        ─► hosted-model diagnosis (schema-validated, citations checked)
+        ─► hosted-model patch (allowlisted files only)
+        ─► disposable worktree ─► build ─► trusted tests
+        ─► candidate fixture run ─► independent oracle verdict
+        ─► report for a human (never applied, pushed or deployed)
+```
+
+Safety properties that are enforced in code, not prose:
+
+- The only writable surface is `apps/api/internal/merchant/service.go` plus new
+  lowercase `.go` files in that directory. Tests, the store, the fault
+  catalogue, migrations, the harness, the oracle and `cmd/*` are rejected by
+  path, before anything is written.
+- Patches are exact-match textual edits; an `old_text` that does not occur
+  exactly once is refused. Symlinks, absolute paths, traversal, deletions and
+  renames are refused. A post-apply `git status` check must show exactly the
+  files the applier wrote.
+- Candidate commands run with a process-group timeout, capped output, and an
+  allowlisted environment (no LLM or PayPal credentials), with `GOPROXY=off`
+  and `-mod=readonly`.
+- Verification runs the **candidate's own compiled code** in the worktree. The
+  oracle is built from the trusted revision and reads PostgreSQL with its own
+  SQL; a candidate cannot make the judge agree with it.
+- Acceptance is separate from every earlier rung: diagnosis produced, patch
+  generated, patch applied, build passed, tests passed, oracle verdict,
+  accepted for human review. A clean build is never reported as a fix.
+
+Run it (requires `LLM_API_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL`, and the local
+PostgreSQL test database):
+
+```bash
+cd apps/api
+go run ./cmd/repair -fault F4 -out ../../tmp/repair-f4 -attempts 2
+go run ./cmd/repair -fault F4 -out ../../tmp/repair-f4-baseline -mode baseline  # B0 comparison
+```
+
+Without model configuration the command exits 3 with status `NOT_CONFIGURED`
+and writes an honest report; it never fabricates a model run.
+
+**Known finding (F1):** the M1 fault-reproduction test asserts that the injected
+defect really malforms the provider payload. Any in-scope fix changes that
+payload, so the pipeline refuses the F1 fix rather than weakening the test
+(`TestPipelineRejectsF1FixThatBreaksTheFaultReproductionTest`). F4 — a held-out
+response-handling defect that no test pins — is the repairable case. Retiring a
+defect-reproduction assertion needs a human-authored change outside the
+candidate's writable scope.
 
 ## Local development
 

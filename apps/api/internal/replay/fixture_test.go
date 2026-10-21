@@ -14,7 +14,7 @@ import (
 // _test database, with the same fail-closed policy as the oracle suite.
 func fixtureHarness(t *testing.T) *replay.Harness {
 	t.Helper()
-	h, err := replay.OpenHarnessForTests(context.Background(), os.Getenv("TEST_DATABASE_URL"))
+	h, err := replay.OpenHarnessForTestsNamed(context.Background(), os.Getenv("TEST_DATABASE_URL"), "waypoint_fixture_test")
 	if err != nil {
 		if os.Getenv("REQUIRE_DATABASE_TESTS") != "" {
 			t.Fatalf("database tests are REQUIRED but the fixture harness failed: %v", err)
