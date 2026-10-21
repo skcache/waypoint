@@ -127,7 +127,7 @@
             "-out",
             "/out",
             "-dsn",
-            "postgres://waypoint:ba4d6bc0c709299aed62343a@wp-db-82157c55db06:5432/waypoint_repair_test?sslmode=disable"
+            "[REDACTED-DSN]"
           ],
           "exit_code": 0,
           "timed_out": false,

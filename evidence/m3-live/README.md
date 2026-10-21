@@ -23,3 +23,35 @@ decided acceptance — the model never certifies its own patch.
 `report.json` carries model provenance, per-call latency and reported token
 usage, the verification ladder, the applied diff and the acceptance reason.
 `eval.json` is the verifier's output from inside the sandbox.
+
+## Provenance and digests
+
+The runs applied these diffs to base commit **`08b4124`** (the reports record
+`08b4124-dirty` because the adapter's timeout/token plumbing was still
+uncommitted; no fixture file was modified). The reports predate the
+`patch_digest` field, so the digests below were recomputed from the committed
+diffs:
+
+| Run | Patch digest (sha256) |
+|---|---|
+| F4 | `sha256:a5ca12ba2d69bc1c384a3e6a0595561248cd4d938794cbb9392498c21530f524` |
+| F1 | `sha256:7ab46787b484aefe8d8677d46bda5464413ba36ac8ad2f63d60971f39a24398f` |
+
+Newer runs record the same digest and the resolved base commit directly in
+`report.json`/`report.md` and in the oracle bundle.
+
+## Credential-history note
+
+Earlier revisions of these reports (commits `a6577b0` and `acb4c39`) contained
+the PostgreSQL DSN of the run's **disposable** database container, including
+its randomly generated password. That container and its Docker network were
+removed when the run finished; the password was never valid outside that
+sandbox and cannot be reused. The reports in this directory are sanitized and
+the DSN is now `[REDACTED-DSN]`.
+
+Published history was **not rewritten automatically**. If repository policy
+requires removing the string from history, rewrite with `git filter-repo`
+(or BFG) over the `evidence/m3-live` paths and force-push with the
+maintainer's approval; otherwise document the exposure as a rotated, ephemeral
+credential. No live Anthropic/PayPal/model credential was ever present in the
+artifacts.

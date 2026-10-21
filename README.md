@@ -144,9 +144,20 @@ Safety properties that are enforced in code, not prose:
 - Candidate commands run inside a **disposable Docker sandbox**: no host home
   directory or host environment, an internal network with no outbound route,
   a non-root uid, read-only root filesystem, and memory/CPU/PID/wall-clock
-  limits. Only the worktree, an artifact directory and a disposable module
-  cache are mounted. If Docker is unavailable the pipeline fails closed — it
-  never executes candidate code on the host.
+  limits. The candidate source tree is mounted **read-only**, so generated
+  code can be compiled and tested but cannot rewrite trusted tests, the
+  oracle, the replay harness or the verifier. Writable state is limited to the
+  artifact directory, build cache and scratch space. If Docker is unavailable
+  the pipeline fails closed — it never executes candidate code on the host.
+- Persisted artifacts are **credential-redacted**: PostgreSQL URLs are parsed
+  and their passwords removed, DSN flag arguments are replaced wholesale,
+  Authorization headers are stripped, and configured secret values are
+  scrubbed. The verifier still receives the real DSN through the sandbox
+  environment; only report JSON, Markdown, step logs and model feedback are
+  sanitized.
+- The proof report records the **resolved candidate base commit** and a
+  **sha256 digest of the applied diff**; `repaircheck` refuses to write a
+  bundle whose source revision is unknown.
 - Verification runs the **candidate's own compiled code** in the worktree. The
   oracle is built from the trusted revision and reads PostgreSQL with its own
   SQL; a candidate cannot make the judge agree with it.
