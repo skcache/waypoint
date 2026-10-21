@@ -281,10 +281,25 @@ type chatCompletionResponse struct {
 			Content string `json:"content"`
 		} `json:"message"`
 	} `json:"choices"`
+	Usage *struct {
+		PromptTokens     int `json:"prompt_tokens"`
+		CompletionTokens int `json:"completion_tokens"`
+		TotalTokens      int `json:"total_tokens"`
+	} `json:"usage"`
 	Error *struct {
 		Message string `json:"message"`
 		Type    string `json:"type"`
 	} `json:"error"`
+}
+
+// Completion is one assistant reply plus whatever usage metadata the provider
+// reported. Usage is optional by design: providers evolve their envelopes, and
+// a missing usage block must not turn a usable reply into an error.
+type Completion struct {
+	Text             string
+	PromptTokens     int
+	CompletionTokens int
+	UsageReported    bool
 }
 
 // Generate performs one chat completion and returns the assistant message
@@ -292,6 +307,16 @@ type chatCompletionResponse struct {
 // still stochastic, which is exactly why every reply is validated strictly
 // by the caller before it is shown as a draft.
 func (c *Client) Generate(ctx context.Context, system, user string) (string, error) {
+	out, err := c.GenerateDetail(ctx, system, user)
+	if err != nil {
+		return "", err
+	}
+	return out.Text, nil
+}
+
+// GenerateDetail performs one chat completion and returns the assistant text
+// with the provider's usage numbers when present.
+func (c *Client) GenerateDetail(ctx context.Context, system, user string) (Completion, error) {
 	payload, err := json.Marshal(chatRequest{
 		Model: c.model,
 		Messages: []chatMessage{
@@ -302,13 +327,13 @@ func (c *Client) Generate(ctx context.Context, system, user string) (string, err
 		MaxTokens:   maxOutputTokens,
 	})
 	if err != nil {
-		return "", &Error{Kind: KindUnavailable, Detail: "request encoding failed"}
+		return Completion{}, &Error{Kind: KindUnavailable, Detail: "request encoding failed"}
 	}
 
 	endpoint := strings.TrimRight(c.base.String(), "/") + chatCompletionsPath
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
 	if err != nil {
-		return "", &Error{Kind: KindUnavailable, Detail: "request construction failed"}
+		return Completion{}, &Error{Kind: KindUnavailable, Detail: "request construction failed"}
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+c.apiKey)
@@ -318,13 +343,13 @@ func (c *Client) Generate(ctx context.Context, system, user string) (string, err
 		// Classification only — the raw transport error is not embedded:
 		// it can carry the request URL, and callers must not echo internals.
 		if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
-			return "", &Error{Kind: KindUnavailable, Detail: "the request did not complete in time"}
+			return Completion{}, &Error{Kind: KindUnavailable, Detail: "the request did not complete in time"}
 		}
 		var netErr net.Error
 		if errors.As(err, &netErr) && netErr.Timeout() {
-			return "", &Error{Kind: KindUnavailable, Detail: "the request timed out"}
+			return Completion{}, &Error{Kind: KindUnavailable, Detail: "the request timed out"}
 		}
-		return "", &Error{Kind: KindUnavailable, Detail: "the request failed before a response arrived"}
+		return Completion{}, &Error{Kind: KindUnavailable, Detail: "the request failed before a response arrived"}
 	}
 	defer func() {
 		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 64<<10))
@@ -337,22 +362,28 @@ func (c *Client) Generate(ctx context.Context, system, user string) (string, err
 		if kind == KindRejected {
 			detail = "the provider rejected the request"
 		}
-		return "", &Error{Kind: kind, Status: resp.StatusCode, Detail: detail}
+		return Completion{}, &Error{Kind: kind, Status: resp.StatusCode, Detail: detail}
 	}
 
 	var envelope chatCompletionResponse
 	dec := json.NewDecoder(io.LimitReader(resp.Body, maxResponseBytes))
 	if err := dec.Decode(&envelope); err != nil {
-		return "", &Error{Kind: KindUnavailable, Status: resp.StatusCode, Detail: "the provider response could not be read"}
+		return Completion{}, &Error{Kind: KindUnavailable, Status: resp.StatusCode, Detail: "the provider response could not be read"}
 	}
 	if _, err := dec.Token(); err != io.EOF {
-		return "", &Error{Kind: KindUnavailable, Status: resp.StatusCode, Detail: "the provider response could not be read"}
+		return Completion{}, &Error{Kind: KindUnavailable, Status: resp.StatusCode, Detail: "the provider response could not be read"}
 	}
 	if envelope.Error != nil && envelope.Error.Message != "" {
-		return "", &Error{Kind: KindUnavailable, Status: resp.StatusCode, Detail: "the provider reported an error"}
+		return Completion{}, &Error{Kind: KindUnavailable, Status: resp.StatusCode, Detail: "the provider reported an error"}
 	}
 	if len(envelope.Choices) == 0 || strings.TrimSpace(envelope.Choices[0].Message.Content) == "" {
-		return "", &Error{Kind: KindUnavailable, Status: resp.StatusCode, Detail: "the provider response carried no assistant text"}
+		return Completion{}, &Error{Kind: KindUnavailable, Status: resp.StatusCode, Detail: "the provider response carried no assistant text"}
 	}
-	return envelope.Choices[0].Message.Content, nil
+	out := Completion{Text: envelope.Choices[0].Message.Content}
+	if envelope.Usage != nil {
+		out.PromptTokens = envelope.Usage.PromptTokens
+		out.CompletionTokens = envelope.Usage.CompletionTokens
+		out.UsageReported = true
+	}
+	return out, nil
 }
