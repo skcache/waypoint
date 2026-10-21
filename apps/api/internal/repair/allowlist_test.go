@@ -77,18 +77,3 @@ func TestRunBoundedCapsRunawayOutput(t *testing.T) {
 		t.Fatalf("captured output = %d bytes, want the bounded window", len(res.Output))
 	}
 }
-
-func TestSandboxEnvNeverForwardsSecrets(t *testing.T) {
-	t.Setenv("LLM_API_KEY", "sk-live-SECRET-1234567890")
-	t.Setenv("PAYPAL_CLIENT_SECRET", "paypal-secret-value")
-	env := repair.SandboxEnv(t.TempDir(), "", nil)
-	joined := strings.Join(env, "\n")
-	for _, needle := range []string{"sk-live-SECRET", "paypal-secret-value", "LLM_API_KEY", "PAYPAL_CLIENT_SECRET"} {
-		if strings.Contains(joined, needle) {
-			t.Fatalf("sandbox environment leaks %q", needle)
-		}
-	}
-	if !strings.Contains(joined, "GOPROXY=off") || !strings.Contains(joined, "GOFLAGS=-mod=readonly") {
-		t.Fatalf("sandbox environment missing supply-chain limits:\n%s", joined)
-	}
-}

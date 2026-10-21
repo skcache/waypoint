@@ -12,13 +12,13 @@ import (
 
 // Verifier executes the trusted checks against the CANDIDATE worktree: the
 // code compiled and run here is the patched merchant package, never the
-// reference implementation sitting in the developer's tree.
+// reference implementation sitting in the developer's tree. Every command runs
+// inside the OS-enforced sandbox; there is no host fallback.
 type Verifier struct {
 	Workspace   *Workspace
+	Runner      Runner
 	Fault       string
-	DSN         string
 	ArtifactDir string
-	CacheRoot   string
 	Changed     []string
 }
 
@@ -49,27 +49,32 @@ type evalFile struct {
 // Run executes gofmt → build → trusted tests → fixture verification.
 func (v *Verifier) Run(ctx context.Context) Verification {
 	var out Verification
-	apiDir := filepath.Join(v.Workspace.Dir, "apps", "api")
-	env := SandboxEnv(v.Workspace.Dir, v.CacheRoot, nil)
-	testEnv := SandboxEnv(v.Workspace.Dir, v.CacheRoot, map[string]string{
-		"TEST_DATABASE_URL":      v.DSN,
+	if v.Runner == nil {
+		out.Steps = append(out.Steps, StepResult{Step: "sandbox", ExitCode: -1, Output: "no sandbox runner: refusing to execute candidate code on the host"})
+		return out
+	}
+	noEnv := map[string]string{}
+	testEnv := map[string]string{
+		"TEST_DATABASE_URL":      v.Runner.DSN(),
 		"REQUIRE_DATABASE_TESTS": "1",
-	})
+	}
 
-	// 1. The patch must be gofmt-clean.
-	fmtArgs := append([]string{"-l"}, v.Changed...)
-	gofmt := RunBounded(ctx, v.Workspace.Dir, 60*time.Second, env, "gofmt", fmtArgs...)
+	// 1. The patch must be gofmt-clean. Commands run in /work/apps/api, so
+	// quote paths relative to the module root.
+	fmtArgs := []string{"-l"}
+	for _, c := range v.Changed {
+		fmtArgs = append(fmtArgs, strings.TrimPrefix(c, "apps/api/"))
+	}
+	gofmt := v.Runner.Run(ctx, v.Workspace.Dir, v.ArtifactDir, 60*time.Second, noEnv, "gofmt", fmtArgs...)
 	gofmt.Step = "gofmt"
-	gofmt.Output = redact(gofmt.Output, v.Workspace.Dir)
 	out.Steps = append(out.Steps, gofmt)
 	if !gofmt.Passed() || strings.TrimSpace(gofmt.Output) != "" {
 		return out
 	}
 
 	// 2. Build the whole module.
-	build := RunBounded(ctx, apiDir, 240*time.Second, env, "go", "build", "./...")
+	build := v.Runner.Run(ctx, v.Workspace.Dir, v.ArtifactDir, 240*time.Second, noEnv, "go", "build", "./...")
 	build.Step = "build"
-	build.Output = redact(build.Output, v.Workspace.Dir)
 	out.Steps = append(out.Steps, build)
 	if !build.Passed() {
 		return out
@@ -77,9 +82,16 @@ func (v *Verifier) Run(ctx context.Context) Verification {
 
 	// 3. Trusted regressions (tests live outside the writable surface, so a
 	// candidate cannot edit them into passing).
-	tests := RunBounded(ctx, apiDir, 300*time.Second, testEnv, "go", "test", "-count=1", "-timeout", "240s", "./internal/merchant/", "./internal/domain/")
+	testArgs := []string{"test", "-count=1", "-timeout", "240s"}
+	if v.Fault == "F1" {
+		// The fixture intentionally contains the F1 defect, so its correctness
+		// gate lives behind the f1_repair tag; pre-repair reproduction is a
+		// separate (fault_reproduction) test run against the pinned base.
+		testArgs = append(testArgs, "-tags", "f1_repair")
+	}
+	testArgs = append(testArgs, "./internal/merchant/", "./internal/domain/")
+	tests := v.Runner.Run(ctx, v.Workspace.Dir, v.ArtifactDir, 300*time.Second, testEnv, "go", testArgs...)
 	tests.Step = "tests"
-	tests.Output = redact(tests.Output, v.Workspace.Dir)
 	out.Steps = append(out.Steps, tests)
 	if !tests.Passed() {
 		return out
@@ -91,10 +103,9 @@ func (v *Verifier) Run(ctx context.Context) Verification {
 		out.Steps = append(out.Steps, StepResult{Step: "eval", ExitCode: -1, Output: err.Error()})
 		return out
 	}
-	eval := RunBounded(ctx, apiDir, 300*time.Second, testEnv,
-		"go", "run", "./cmd/repaircheck", "-fault", v.Fault, "-out", v.ArtifactDir, "-dsn", v.DSN)
+	eval := v.Runner.Run(ctx, v.Workspace.Dir, v.ArtifactDir, 300*time.Second, testEnv,
+		"go", "run", "./cmd/repaircheck", "-fault", v.Fault, "-out", "/out", "-dsn", v.Runner.DSN())
 	eval.Step = "eval"
-	eval.Output = redact(eval.Output, v.Workspace.Dir)
 	out.Steps = append(out.Steps, eval)
 
 	data, err := os.ReadFile(filepath.Join(v.ArtifactDir, "eval.json"))

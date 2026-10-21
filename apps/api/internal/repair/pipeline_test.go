@@ -83,7 +83,7 @@ func badPatchReply() string {
 	return string(data)
 }
 
-func pipelineFixture(t *testing.T, fault string) (*replay.Harness, replay.FixtureRun, repair.Evidence, string) {
+func pipelineFixture(t *testing.T, fault string) (*replay.Harness, replay.FixtureRun, repair.Evidence) {
 	t.Helper()
 	h, err := replay.OpenHarnessForTestsNamed(context.Background(), os.Getenv("TEST_DATABASE_URL"), "waypoint_repair_test")
 	if err != nil {
@@ -113,11 +113,7 @@ func pipelineFixture(t *testing.T, fault string) (*replay.Harness, replay.Fixtur
 	if err != nil {
 		t.Fatalf("evidence: %v", err)
 	}
-	dsn, err := replay.ResolveDSNFor(os.Getenv("TEST_DATABASE_URL"), "waypoint_repair_test")
-	if err != nil {
-		t.Fatalf("resolve dsn: %v", err)
-	}
-	return h, run, ev, dsn
+	return h, run, ev
 }
 
 // TestPipelineRepairsTheHeldOutDefectWithABoundaryDouble exercises the whole M3
@@ -126,7 +122,7 @@ func pipelineFixture(t *testing.T, fault string) (*replay.Harness, replay.Fixtur
 // oracle verdict — against the held-out F4 defect. The model is a labelled
 // boundary double, not a hosted model, and the report records that name.
 func TestPipelineRepairsTheHeldOutDefectWithABoundaryDouble(t *testing.T) {
-	_, _, ev, dsn := pipelineFixture(t, "F4")
+	_, _, ev := pipelineFixture(t, "F4")
 	root := repoRoot(t)
 	before, err := repair.RepoStatus(root)
 	if err != nil {
@@ -136,7 +132,7 @@ func TestPipelineRepairsTheHeldOutDefectWithABoundaryDouble(t *testing.T) {
 
 	model := &scriptedModel{replies: []string{diagnosisReply(), badPatchReply(), fixF4PatchReply()}}
 	rep := repair.Run(context.Background(), repair.Options{
-		RepoRoot: root, BaseRef: "HEAD", Fault: "F4", DSN: dsn, OutDir: out,
+		RepoRoot: root, BaseRef: "HEAD", Fault: "F4", OutDir: out, Runner: sharedSandbox(t),
 		Mode: "oracle", MaxAttempts: 2, Model: model, Evidence: ev,
 		Allow: repair.DefaultAllowlist(), RepoStatusBefore: before,
 		Revision: "test-revision", RevisionSource: "test", IncidentID: ev.IncidentID,
@@ -198,13 +194,13 @@ func TestPipelineRepairsTheHeldOutDefectWithABoundaryDouble(t *testing.T) {
 // TestPipelineBaselineIsSingleShot pins the baseline semantics: one attempt, no
 // feedback loop, and the honest NOT_VERIFIED status when that attempt is bad.
 func TestPipelineBaselineIsSingleShot(t *testing.T) {
-	_, _, ev, dsn := pipelineFixture(t, "F4")
+	_, _, ev := pipelineFixture(t, "F4")
 	root := repoRoot(t)
 	out := tempOut(t)
 
 	model := &scriptedModel{replies: []string{diagnosisReply(), fixF4PatchReply(), fixF4PatchReply()}}
 	rep := repair.Run(context.Background(), repair.Options{
-		RepoRoot: root, BaseRef: "HEAD", Fault: "F4", DSN: dsn, OutDir: out,
+		RepoRoot: root, BaseRef: "HEAD", Fault: "F4", OutDir: out, Runner: sharedSandbox(t),
 		Mode: "baseline", MaxAttempts: 2, Model: model, Evidence: ev,
 		Allow: repair.DefaultAllowlist(), Revision: "test-revision", RevisionSource: "test",
 		IncidentID: ev.IncidentID,
@@ -234,16 +230,14 @@ func lastAttempt(rep *repair.Report) repair.Attempt {
 	return rep.Attempts[len(rep.Attempts)-1]
 }
 
-// TestPipelineRejectsF1FixThatBreaksTheFaultReproductionTest is a deliberate
-// negative case and an honest finding: F1's trusted fixture test asserts that
-// the injected defect really malforms the provider payload. Any in-scope fix of
-// the defect changes that payload, so the fix necessarily fails a test that
-// pins the bug. The pipeline must refuse to accept it rather than weaken the
-// test — which is exactly what this asserts. (Resolving F1 needs a human to
-// retire the defect-reproduction assertion as part of the repair; that is out
-// of the candidate's writable scope.)
-func TestPipelineRejectsF1FixThatBreaksTheFaultReproductionTest(t *testing.T) {
-	_, run, ev, dsn := pipelineFixture(t, "F1")
+// TestPipelineRepairsF1WithBoundaryDouble proves the F1 family is repairable
+// now that pre-repair reproduction and post-repair correctness are separated:
+// the pinned revision reproduces the malformed payload (tagged reproduction
+// test / fixture journey), while the candidate must pass the normal suite,
+// which asserts correct provider-facing behavior, plus the oracle. The model
+// is the labelled boundary double, not a hosted model.
+func TestPipelineRepairsF1WithBoundaryDouble(t *testing.T) {
+	_, run, ev := pipelineFixture(t, "F1")
 	if run.OrderStatus != "FAILED_DEFINITE" {
 		t.Fatalf("pre-repair order status = %s, want FAILED_DEFINITE", run.OrderStatus)
 	}
@@ -278,29 +272,27 @@ func TestPipelineRejectsF1FixThatBreaksTheFaultReproductionTest(t *testing.T) {
 
 	model := &scriptedModel{replies: []string{string(diagJSON), string(patchJSON)}}
 	rep := repair.Run(context.Background(), repair.Options{
-		RepoRoot: root, BaseRef: "HEAD", Fault: "F1", DSN: dsn, OutDir: out,
-		Mode: "oracle", MaxAttempts: 1, Model: model, Evidence: ev,
+		RepoRoot: root, BaseRef: "HEAD", Fault: "F1", OutDir: out,
+		Runner: sharedSandbox(t),
+		Mode:   "oracle", MaxAttempts: 2, Model: model, Evidence: ev,
 		Allow: repair.DefaultAllowlist(), RepoStatusBefore: before,
 		Revision: "test-revision", RevisionSource: "test", IncidentID: ev.IncidentID,
 	})
-	if rep.Status != repair.StatusNotVerified {
-		t.Fatalf("status = %s, want NOT_VERIFIED (%+v)", rep.Status, lastAttempt(rep))
-	}
-	a := lastAttempt(rep)
-	if !a.Ladder.PatchApplied || !a.Ladder.BuildPassed {
-		t.Fatalf("expected the patch to apply and build before failing tests: %+v", a.Ladder)
-	}
-	if a.Ladder.TestsPassed || a.Ladder.Accepted {
-		t.Fatalf("trusted tests must fail when the fix breaks fault reproduction: %+v", a.Ladder)
-	}
-	tests := ""
-	for _, st := range a.Steps {
-		if st.Step == "tests" {
-			tests = st.Output
+	if rep.Status != repair.StatusAccepted {
+		for _, a := range rep.Attempts {
+			t.Logf("attempt %d error=%q", a.Number, a.Error)
+			for _, st := range a.Steps {
+				t.Logf("  %s exit=%d out=%s", st.Step, st.ExitCode, tailOf(st.Output, 1200))
+			}
 		}
+		t.Fatalf("status = %s, want ACCEPTED (%+v)", rep.Status, lastAttempt(rep))
 	}
-	if !strings.Contains(tests, "TestCheckoutF1FaultProducesRealRejectionAndIncident") {
-		t.Fatalf("the rejection does not name the pinned fault-reproduction test:\n%s", tailOf(tests, 2000))
+	last := lastAttempt(rep)
+	if last.Eval == nil || last.Eval.OracleVerdict != string(oracle.VerdictVerified) {
+		t.Fatalf("oracle verdict = %+v, want VERIFIED", last.Eval)
+	}
+	if !strings.Contains(last.Diff, "paypal.FormatMinorUSD(totalMinor)") {
+		t.Fatalf("diff does not show the fix:\n%s", last.Diff)
 	}
 	if after, err := repair.RepoStatus(root); err != nil || after != before {
 		t.Fatalf("developer tree changed: %v", err)
@@ -347,13 +339,13 @@ func copyTree(src, dst string) {
 // patch, feeds the failure back, and accepts the second; the baseline stops at
 // the first rejection. Both runs use the labelled boundary double.
 func TestBaselineWithoutFeedbackStopsAtTheRejectedCandidate(t *testing.T) {
-	_, _, ev, dsn := pipelineFixture(t, "F4")
+	_, _, ev := pipelineFixture(t, "F4")
 	root := repoRoot(t)
 	out := tempOut(t)
 
 	model := &scriptedModel{replies: []string{diagnosisReply(), badPatchReply()}}
 	rep := repair.Run(context.Background(), repair.Options{
-		RepoRoot: root, BaseRef: "HEAD", Fault: "F4", DSN: dsn, OutDir: out,
+		RepoRoot: root, BaseRef: "HEAD", Fault: "F4", OutDir: out, Runner: sharedSandbox(t),
 		Mode: "baseline", MaxAttempts: 2, Model: model, Evidence: ev,
 		Allow: repair.DefaultAllowlist(), Revision: "test-revision", RevisionSource: "test",
 		IncidentID: ev.IncidentID,

@@ -147,6 +147,7 @@ type Report struct {
 	EvidenceTier   string    `json:"evidence_tier"`
 	BaseRevision   string    `json:"base_revision"`
 	RevisionSource string    `json:"revision_source"`
+	Sandbox        string    `json:"candidate_sandbox,omitempty"`
 	StartedAt      time.Time `json:"started_at"`
 	FinishedAt     time.Time `json:"finished_at"`
 	Status         string    `json:"status"`

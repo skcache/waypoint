@@ -150,7 +150,7 @@ func run(cfg llm.Config, repoFlag, baseRef, fault, outDir, mode string, attempts
 
 	started := time.Now()
 	rep := repair.Run(ctx, repair.Options{
-		RepoRoot: root, BaseRef: baseRef, Fault: fault, DSN: dsn, OutDir: outDir,
+		RepoRoot: root, BaseRef: baseRef, Fault: fault, OutDir: outDir,
 		Mode: mode, MaxAttempts: attempts, Model: model, Evidence: ev, Allow: allow,
 		RepoStatusBefore: statusBefore, Revision: rev, RevisionSource: revSource,
 		IncidentID: incidentID,
@@ -162,7 +162,7 @@ func run(cfg llm.Config, repoFlag, baseRef, fault, outDir, mode string, attempts
 			return err
 		}
 		baseRep := repair.Run(ctx, repair.Options{
-			RepoRoot: root, BaseRef: baseRef, Fault: fault, DSN: dsn, OutDir: baseOut,
+			RepoRoot: root, BaseRef: baseRef, Fault: fault, OutDir: baseOut,
 			Mode: "baseline", MaxAttempts: 1, Model: model, Evidence: ev, Allow: allow,
 			RepoStatusBefore: statusBefore, Revision: rev, RevisionSource: revSource,
 			IncidentID: incidentID,

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 	"sync"
 	"syscall"
@@ -118,57 +117,6 @@ func RunBounded(ctx context.Context, dir string, timeout time.Duration, env []st
 	res.Output = buf.String()
 	res.OutputTruncated = buf.Truncated()
 	return res
-}
-
-// SandboxEnv builds the deterministic environment for candidate-executed
-// commands. Only an explicit allowlist is forwarded; LLM and PayPal
-// credentials are never among them. TEST_DATABASE_URL is added only for steps
-// that need the local test database (tests and the fixture verifier).
-func SandboxEnv(root, cacheRoot string, extra map[string]string) []string {
-	if cacheRoot == "" {
-		cacheRoot = filepath.Join(os.TempDir(), "waypoint-sandbox-cache")
-	}
-	// Sandbox HOME/TMP live OUTSIDE the worktree: they must never show up in
-	// the candidate's git status or diff.
-	home := filepath.Join(cacheRoot, ".sandbox-home")
-	tmp := filepath.Join(cacheRoot, ".sandbox-tmp")
-	_ = os.MkdirAll(home, 0o700)
-	_ = os.MkdirAll(tmp, 0o700)
-	_ = root
-	modCache := os.Getenv("GOMODCACHE")
-	if modCache == "" {
-		if h, err := os.UserHomeDir(); err == nil {
-			modCache = filepath.Join(h, "go", "pkg", "mod")
-		}
-	}
-
-	base := map[string]string{
-		"PATH":                os.Getenv("PATH"),
-		"HOME":                home,
-		"TMPDIR":              tmp,
-		"GOCACHE":             filepath.Join(cacheRoot, ".gocache"),
-		"GOMODCACHE":          modCache,
-		"GOPATH":              filepath.Join(root, ".gopath"),
-		"GOFLAGS":             "-mod=readonly",
-		"GOPROXY":             "off",
-		"GOTOOLCHAIN":         "local",
-		"GOMEMLIMIT":          "1GiB",
-		"GOMAXPROCS":          "2",
-		"CGO_ENABLED":         "0",
-		"GO111MODULE":         "on",
-		"GIT_CONFIG_NOSYSTEM": "1",
-	}
-	for k, v := range extra {
-		base[k] = v
-	}
-	out := make([]string, 0, len(base))
-	for k, v := range base {
-		if v == "" {
-			continue
-		}
-		out = append(out, k+"="+v)
-	}
-	return out
 }
 
 // redact removes credentials and host paths from captured output before it is

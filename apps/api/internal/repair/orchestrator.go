@@ -15,7 +15,6 @@ type Options struct {
 	RepoRoot         string
 	BaseRef          string
 	Fault            string
-	DSN              string
 	OutDir           string
 	Mode             string // "oracle" (feedback loop) or "baseline" (single shot)
 	MaxAttempts      int
@@ -26,6 +25,10 @@ type Options struct {
 	Revision         string
 	RevisionSource   string
 	IncidentID       string
+	// Runner is the OS-enforced candidate execution boundary. When nil, Run
+	// opens a Docker sandbox and closes it; when provided (tests), the caller
+	// owns its lifetime. There is no host fallback.
+	Runner Runner
 }
 
 // Run executes the bounded investigation → patch → verify loop. It never
@@ -104,7 +107,26 @@ func Run(ctx context.Context, opts Options) *Report {
 		_ = os.WriteFile(filepath.Join(opts.OutDir, "diagnosis.json"), append(data, '\n'), 0o600)
 	}
 
-	// 2. Bounded attempts.
+	// 2. Candidate execution boundary. Fail closed if it cannot be opened.
+	runner := opts.Runner
+	owned := false
+	if runner == nil {
+		r, err := OpenSandbox(ctx, opts.RepoRoot)
+		if err != nil {
+			rep.Status = StatusError
+			rep.Limitations = append(rep.Limitations,
+				"the candidate execution sandbox is unavailable; refusing to run model-generated code on the host (fail closed): "+err.Error())
+			return finish(rep, opts)
+		}
+		runner = r
+		owned = true
+	}
+	if owned {
+		defer runner.Close()
+	}
+	rep.Sandbox = runner.Describe()
+
+	// 3. Bounded attempts.
 	feedback := ""
 	for n := 1; n <= opts.MaxAttempts; n++ {
 		a := Attempt{Number: n, StartedAt: time.Now().UTC()}
@@ -160,7 +182,7 @@ func Run(ctx context.Context, opts Options) *Report {
 				a.Diff = diff
 				_ = os.WriteFile(filepath.Join(dir, "patch.diff"), []byte(diff), 0o600)
 			}
-			v := (&Verifier{Workspace: ws, Fault: opts.Fault, DSN: opts.DSN, ArtifactDir: dir, CacheRoot: filepath.Join(os.TempDir(), "waypoint-repair-gocache"), Changed: changed}).Run(ctx)
+			v := (&Verifier{Workspace: ws, Runner: runner, Fault: opts.Fault, ArtifactDir: dir, Changed: changed}).Run(ctx)
 			a.Steps = v.Steps
 			a.Eval = v.Eval
 			a.Ladder.OracleVerdict = v.OracleVerdict
@@ -195,7 +217,7 @@ func Run(ctx context.Context, opts Options) *Report {
 		}
 	}
 
-	// 3. Isolation proof: the developer's tree must be byte-for-byte unchanged.
+	// 4. Isolation proof: the developer's tree must be byte-for-byte unchanged.
 	if opts.RepoStatusBefore != "" {
 		if after, err := RepoStatus(opts.RepoRoot); err != nil || after != opts.RepoStatusBefore {
 			rep.Status = StatusError
@@ -340,6 +362,9 @@ func renderMarkdown(rep *Report) string {
 			b.WriteString(", tokens not reported")
 		}
 		b.WriteString("\n")
+	}
+	if rep.Sandbox != "" {
+		fmt.Fprintf(&b, "\nCandidate sandbox: %s\n", rep.Sandbox)
 	}
 	if rep.CostUSD != nil {
 		fmt.Fprintf(&b, "\nCost: $%.4f\n", *rep.CostUSD)
