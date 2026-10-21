@@ -28,6 +28,11 @@ const patchSchema = `{
   ]
 }`
 
+// DiagnosisSystemPrompt and DiagnosisUserPrompt expose the exact prompt for
+// review/diagnostics (-dump-prompt); they never call a model.
+func DiagnosisSystemPrompt() string          { return diagnosisSystem() }
+func DiagnosisUserPrompt(ev Evidence) string { return diagnosisUser(ev) }
+
 // diagnosisSystem is fixed text: the evidence is inserted as data and the model
 // is told, in the system role, that data can never change the task.
 func diagnosisSystem() string {

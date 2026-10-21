@@ -130,6 +130,7 @@ func Run(ctx context.Context, opts Options) *Report {
 	feedback := ""
 	for n := 1; n <= opts.MaxAttempts; n++ {
 		a := Attempt{Number: n, StartedAt: time.Now().UTC()}
+		a.Ladder.DiagnosisProduced = rep.Diagnosis != nil
 		dir := filepath.Join(attemptsDir, fmt.Sprintf("attempt-%d", n))
 		_ = os.MkdirAll(dir, 0o700)
 
@@ -251,6 +252,7 @@ func finish(rep *Report, opts Options) *Report {
 	if len(rep.Attempts) > 0 {
 		rep.Final = rep.Attempts[len(rep.Attempts)-1].Ladder
 	}
+	rep.Final.DiagnosisProduced = rep.Diagnosis != nil
 	for _, a := range rep.Attempts {
 		if a.Ladder.Accepted {
 			rep.Final = a.Ladder

@@ -39,16 +39,8 @@ func main() {
 	dsn := flag.String("dsn", os.Getenv("TEST_DATABASE_URL"), "PostgreSQL test DSN (database name must end in _test)")
 	checkModel := flag.Bool("check-model", false, "validate hosted model configuration and exit (no model call)")
 	compare := flag.Bool("compare-baseline", false, "also run a single-shot baseline with the same model and compare outcomes")
+	dumpPrompt := flag.Bool("dump-prompt", false, "write the exact diagnosis prompt to the output directory and exit (no model call)")
 	flag.Parse()
-
-	if *outDir == "" {
-		fmt.Fprintln(os.Stderr, "usage: repair -fault F1|F4 -out <dir> [-mode oracle|baseline] [-attempts 2] [-base-ref HEAD]")
-		os.Exit(2)
-	}
-	if *fault != "F1" && *fault != "F4" {
-		fmt.Fprintf(os.Stderr, "invalid -fault %q (want F1 or F4)\n", *fault)
-		os.Exit(2)
-	}
 
 	cfg, cfgErr := llm.ConfigFromEnv(os.Getenv)
 	if *checkModel {
@@ -57,8 +49,16 @@ func main() {
 			fmt.Fprintln(os.Stderr, cfgErr)
 			os.Exit(3)
 		}
-		fmt.Printf("CONFIGURED model=%s base=%s\n", cfg.Model, cfg.BaseURL)
+		fmt.Printf("CONFIGURED model=%s base=%s timeout=%s\n", cfg.Model, cfg.BaseURL, cfg.Timeout)
 		os.Exit(0)
+	}
+	if *outDir == "" {
+		fmt.Fprintln(os.Stderr, "usage: repair -fault F1|F4 -out <dir> [-mode oracle|baseline] [-attempts 2] [-base-ref HEAD]")
+		os.Exit(2)
+	}
+	if *fault != "F1" && *fault != "F4" {
+		fmt.Fprintf(os.Stderr, "invalid -fault %q (want F1 or F4)\n", *fault)
+		os.Exit(2)
 	}
 	if cfgErr != nil {
 		// No hosted model: write the honest artifact and stop. No fake AI run.
@@ -74,7 +74,7 @@ func main() {
 		os.Exit(3)
 	}
 
-	if err := run(cfg, *repo, *baseRef, *fault, *outDir, *mode, *attempts, *dsn, *compare); err != nil {
+	if err := run(cfg, *repo, *baseRef, *fault, *outDir, *mode, *attempts, *dsn, *compare, *dumpPrompt); err != nil {
 		fmt.Fprintln(os.Stderr, "repair:", err)
 		os.Exit(1)
 	}
@@ -82,7 +82,7 @@ func main() {
 
 const merchantFaultDefault = "F1"
 
-func run(cfg llm.Config, repoFlag, baseRef, fault, outDir, mode string, attempts int, dsn string, compare bool) error {
+func run(cfg llm.Config, repoFlag, baseRef, fault, outDir, mode string, attempts int, dsn string, compare, dumpPrompt bool) error {
 	ctx := context.Background()
 	root, err := repoRoot(repoFlag)
 	if err != nil {
@@ -142,6 +142,17 @@ func run(cfg llm.Config, repoFlag, baseRef, fault, outDir, mode string, attempts
 
 	fmt.Printf("incident: %s\n", incidentID)
 	fmt.Printf("pre-repair: status=%s accepted=%v — %s\n", preVerdict.OrderStatus, preVerdict.Accepted, preVerdict.Reason)
+
+	if dumpPrompt {
+		if err := os.WriteFile(filepath.Join(outDir, "diagnosis-system.txt"), []byte(repair.DiagnosisSystemPrompt()), 0o600); err != nil {
+			return err
+		}
+		if err := os.WriteFile(filepath.Join(outDir, "diagnosis-user.txt"), []byte(repair.DiagnosisUserPrompt(ev)), 0o600); err != nil {
+			return err
+		}
+		fmt.Printf("prompt written to %s (no model call)\n", outDir)
+		return nil
+	}
 
 	statusBefore, err := repair.RepoStatus(root)
 	if err != nil {
