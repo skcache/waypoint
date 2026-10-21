@@ -18,9 +18,9 @@ import (
 )
 
 type evidenceFile struct {
-	Fault        string                 `json:"fault"`
-	OrderID      string                 `json:"order_id"`
-	Observations []oracle.ProviderObs   `json:"observations"`
+	Fault        string               `json:"fault"`
+	OrderID      string               `json:"order_id"`
+	Observations []oracle.ProviderObs `json:"observations"`
 }
 
 func main() {

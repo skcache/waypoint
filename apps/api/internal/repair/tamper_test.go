@@ -20,7 +20,8 @@ var trustedSourcePaths = []string{
 	"apps/api/internal/merchant/service_test.go",
 	"apps/api/internal/oracle/invariants.go",
 	"apps/api/internal/replay/provider.go",
-	"apps/api/cmd/repaircheck/main.go",
+	"apps/api/cmd/fixturecheck/main.go",
+	"apps/api/cmd/judgecheck/main.go",
 }
 
 // tamperEdits is a candidate patch that tries to overwrite trusted verifier
@@ -46,7 +47,8 @@ func init() {
 		"/src/apps/api/internal/merchant/service_test.go",
 		"/src/apps/api/internal/oracle/invariants.go",
 		"/src/apps/api/internal/replay/provider.go",
-		"/src/apps/api/cmd/repaircheck/main.go",
+		"/src/apps/api/cmd/fixturecheck/main.go",
+		"/src/apps/api/cmd/judgecheck/main.go",
 	} {
 		if err := os.WriteFile(p, []byte("// tampered by candidate\n"), 0o644); err != nil {
 			println("TAMPER_BLOCKED", p, err.Error())
