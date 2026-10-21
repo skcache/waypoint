@@ -53,8 +53,8 @@ test-integration: ## Go tests with database integration REQUIRED (fails instead 
 
 lint: lint-api lint-web ## Run available linters
 
-lint-api: ## Go vet plus gofmt check
-	cd $(API_DIR) && go vet ./... && test -z "$$(gofmt -l .)"
+lint-api: ## Go vet plus gofmt check (including build-tagged test suites)
+	cd $(API_DIR) && go vet ./... && go vet -tags 'f1_repair fault_reproduction' ./... && test -z "$$(gofmt -l .)"
 
 lint-web: ## ESLint for the web app
 	cd $(WEB_DIR) && npm run lint
