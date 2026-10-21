@@ -123,7 +123,7 @@ func (v *Verifier) Run(ctx context.Context) Verification {
 	// so candidate code cannot run in this process, forge its output, or exit
 	// it early. It re-reads the journal itself and writes eval.json on every
 	// path.
-	judge := v.Runner.Run(ctx, v.Workspace.Dir, v.ArtifactDir, 300*time.Second, testEnv,
+	judge := v.Runner.RunTrusted(ctx, v.Workspace.Dir, v.ArtifactDir, 300*time.Second, testEnv,
 		"go", "run", "./cmd/judgecheck", "-fault", v.Fault,
 		"-in", "/out/observations.json", "-out", "/out", "-dsn", v.Runner.DSN(),
 		"-base-revision", v.BaseRevision, "-patch-digest", v.PatchDigest)

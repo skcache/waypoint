@@ -17,6 +17,7 @@ import (
 // pipeline fails closed — there is deliberately no host fallback.
 type Runner interface {
 	Run(ctx context.Context, worktree, artifacts string, timeout time.Duration, env map[string]string, name string, args ...string) StepResult
+	RunTrusted(ctx context.Context, worktree, artifacts string, timeout time.Duration, env map[string]string, name string, args ...string) StepResult
 	DSN() string
 	Close()
 	Describe() string
@@ -46,14 +47,16 @@ const (
 //   - memory, CPU, PID and wall-clock limits;
 //   - a read-only root filesystem with tmpfs for the Go build cache.
 type Sandbox struct {
-	root        string
-	modcache    string
-	gocache     string
-	network     string
-	dbContainer string
-	dbPassword  string
-	image       string
-	closed      bool
+	root              string
+	modcacheCandidate string
+	modcacheJudge     string
+	gocacheCandidate  string
+	gocacheJudge      string
+	network           string
+	dbContainer       string
+	dbPassword        string
+	image             string
+	closed            bool
 }
 
 // OpenSandbox verifies Docker is usable, prepares a disposable module cache
@@ -79,10 +82,12 @@ func OpenSandbox(ctx context.Context, repoRoot string) (*Sandbox, error) {
 		return nil, fmt.Errorf("sandbox: temp root: %w", err)
 	}
 	s := &Sandbox{
-		root:     root,
-		modcache: filepath.Join(root, "gomodcache"),
-		gocache:  filepath.Join(root, "gocache"),
-		image:    sandboxImage,
+		root:              root,
+		modcacheCandidate: filepath.Join(root, "gomodcache-candidate"),
+		modcacheJudge:     filepath.Join(root, "gomodcache-judge"),
+		gocacheCandidate:  filepath.Join(root, "gocache-candidate"),
+		gocacheJudge:      filepath.Join(root, "gocache-judge"),
+		image:             sandboxImage,
 	}
 	cleanup := func() {
 		_ = os.RemoveAll(root)
@@ -90,7 +95,7 @@ func OpenSandbox(ctx context.Context, repoRoot string) (*Sandbox, error) {
 
 	// Populate the module cache on the HOST with trusted go, from the pinned
 	// module graph, so the sandbox needs no network and no host home mount.
-	for _, dir := range []string{s.modcache, s.gocache, filepath.Join(root, "home"), filepath.Join(root, "gopath")} {
+	for _, dir := range []string{s.modcacheCandidate, s.gocacheCandidate, s.gocacheJudge, filepath.Join(root, "home"), filepath.Join(root, "gopath")} {
 		if err := os.MkdirAll(dir, 0o700); err != nil {
 			cleanup()
 			return nil, fmt.Errorf("sandbox: prepare cache dir: %w", err)
@@ -99,8 +104,8 @@ func OpenSandbox(ctx context.Context, repoRoot string) (*Sandbox, error) {
 	dl := RunBounded(ctx, filepath.Join(repoRoot, "apps", "api"), 300*time.Second, []string{
 		"PATH=" + os.Getenv("PATH"),
 		"HOME=" + filepath.Join(root, "home"),
-		"GOMODCACHE=" + s.modcache,
-		"GOCACHE=" + s.gocache,
+		"GOMODCACHE=" + s.modcacheCandidate,
+		"GOCACHE=" + s.gocacheCandidate,
 		"GOPATH=" + filepath.Join(root, "gopath"),
 		"GOFLAGS=-mod=readonly",
 		"GOTOOLCHAIN=local",
@@ -109,6 +114,13 @@ func OpenSandbox(ctx context.Context, repoRoot string) (*Sandbox, error) {
 	if !dl.Passed() {
 		cleanup()
 		return nil, fmt.Errorf("sandbox unavailable: module cache prefetch failed (fail closed): %s", redact(dl.Output, root))
+	}
+	// The trusted judge gets its own pristine copy. Candidate containers can
+	// never mount it; theirs is mounted read-only.
+	cp := RunBounded(ctx, root, 120*time.Second, os.Environ(), "cp", "-R", "-p", s.modcacheCandidate, s.modcacheJudge)
+	if !cp.Passed() {
+		cleanup()
+		return nil, fmt.Errorf("sandbox unavailable: judge module cache copy failed (fail closed): %s", strings.TrimSpace(cp.Output))
 	}
 
 	s.network = "wp-net-" + randSuffix()
@@ -167,7 +179,7 @@ func (s *Sandbox) DSN() string {
 
 // Describe summarises the boundary for reports.
 func (s *Sandbox) Describe() string {
-	return fmt.Sprintf("docker image %s; internal network %s; disposable postgres %s; non-root uid %d; memory %s; cpus %s; pids %s; read-only root",
+	return fmt.Sprintf("docker image %s; internal network %s; disposable postgres %s; non-root uid %d; memory %s; cpus %s; pids %s; read-only root; read-only module cache; separate pristine judge cache",
 		s.image, s.network, s.dbContainer, os.Getuid(), sandboxMemory, sandboxCPUs, sandboxPidsLimit)
 }
 
@@ -176,7 +188,20 @@ func (s *Sandbox) Describe() string {
 // cannot modify trusted tests, the oracle, the replay harness, the verifier
 // commands or any other source file. Writable state is limited to /out,
 // /gocache, /tmp and /home.
+// Run executes a candidate-linked command. Its module cache is mounted
+// READ-ONLY and its build cache is private to candidate steps.
 func (s *Sandbox) Run(ctx context.Context, worktree, artifacts string, timeout time.Duration, env map[string]string, name string, args ...string) StepResult {
+	return s.run(ctx, worktree, artifacts, timeout, env, false, name, args...)
+}
+
+// RunTrusted executes a command that does not load candidate code (the judge).
+// It uses a separate pristine module cache (read-only) and a separate build
+// cache, so nothing candidate-controlled can influence the judge's build.
+func (s *Sandbox) RunTrusted(ctx context.Context, worktree, artifacts string, timeout time.Duration, env map[string]string, name string, args ...string) StepResult {
+	return s.run(ctx, worktree, artifacts, timeout, env, true, name, args...)
+}
+
+func (s *Sandbox) run(ctx context.Context, worktree, artifacts string, timeout time.Duration, env map[string]string, trusted bool, name string, args ...string) StepResult {
 	if s.closed {
 		return StepResult{Step: name, ExitCode: -1, Output: "sandbox is closed"}
 	}
@@ -185,6 +210,10 @@ func (s *Sandbox) Run(ctx context.Context, worktree, artifacts string, timeout t
 	}
 	container := "wp-run-" + randSuffix()
 	uid, gid := os.Getuid(), os.Getgid()
+	modcache, gocache := s.modcacheCandidate, s.gocacheCandidate
+	if trusted {
+		modcache, gocache = s.modcacheJudge, s.gocacheJudge
+	}
 
 	dockerArgs := []string{
 		"run", "--rm",
@@ -201,8 +230,8 @@ func (s *Sandbox) Run(ctx context.Context, worktree, artifacts string, timeout t
 		"--security-opt", "no-new-privileges",
 		"-v", worktree + ":/src:ro",
 		"-v", artifacts + ":/out:rw",
-		"-v", s.modcache + ":/gomodcache:rw",
-		"-v", s.gocache + ":/gocache:rw",
+		"-v", modcache + ":/gomodcache:ro",
+		"-v", gocache + ":/gocache:rw",
 		"-e", "HOME=/home/sandbox",
 		"-e", "TMPDIR=/tmp",
 		"-e", "PATH=/usr/local/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",

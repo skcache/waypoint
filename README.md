@@ -144,11 +144,13 @@ Safety properties that are enforced in code, not prose:
 - Candidate commands run inside a **disposable Docker sandbox**: no host home
   directory or host environment, an internal network with no outbound route,
   a non-root uid, read-only root filesystem, and memory/CPU/PID/wall-clock
-  limits. The candidate source tree is mounted **read-only**, so generated
-  code can be compiled and tested but cannot rewrite trusted tests, the
-  oracle, the replay harness or the verifier. Writable state is limited to the
-  artifact directory, build cache and scratch space. If Docker is unavailable
-  the pipeline fails closed — it never executes candidate code on the host.
+  limits. The candidate source tree and the preloaded **module cache** are
+  mounted **read-only**, so generated code can be compiled and tested but
+  cannot rewrite trusted tests, the oracle, the replay harness, the verifier,
+  or a dependency used to build the judge. The trusted judge uses a separate
+  pristine module cache and its own build cache; the candidate's build cache
+  is private to candidate steps. If Docker is unavailable the pipeline fails
+  closed — it never executes candidate code on the host.
 - Persisted artifacts are **credential-redacted**: PostgreSQL URLs are parsed
   and their passwords removed, DSN flag arguments are replaced wholesale,
   Authorization headers are stripped, and configured secret values are
