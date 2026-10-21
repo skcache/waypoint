@@ -1,0 +1,32 @@
+{
+  "root_cause": "In the FaultF4 path, captureEvidence returns the provider order ID (res.ID) instead of the already-validated capture resource ID, causing the wrong provider identity to be persisted as the capture ID.",
+  "mechanism": "EV-14 shows that the provider actually completed capture CAP-SCRIPT-0001 for USD 12.34, while EV-2 and EV-3 identify ORD-SCRIPT-0001 as the provider order ID; substituting res.ID causes the CAPTURE operation and confirmation event to persist ORD-SCRIPT-0001 as the capture identity (EV-4, EV-10), producing a local CAPTURED_VERIFIED record that conflicts with the actual provider capture identified in EV-1.",
+  "suspected_files": [
+    "apps/api/internal/merchant/service.go"
+  ],
+  "supporting_evidence": [
+    "EV-1",
+    "EV-2",
+    "EV-3",
+    "EV-4",
+    "EV-10",
+    "EV-14"
+  ],
+  "invariants_at_risk": [
+    "I6"
+  ],
+  "proposed_fix": "Remove the FaultF4 substitution so captureEvidence always returns the capture resource ID produced by completeCapture, and add a regression test requiring persisted and reported capture identities to equal the provider capture resource ID and never the provider order ID.",
+  "confidence_reasons": [
+    "EV-1 directly distinguishes the claimed capture ID ORD-SCRIPT-0001 from the actual provider capture ID CAP-SCRIPT-0001.",
+    "EV-2 and EV-3 establish ORD-SCRIPT-0001 as the provider order identity, while EV-4 shows that same value stored as the CAPTURE operation's ProviderCaptureID.",
+    "EV-14 records the actual provider capture resource as CAP-SCRIPT-0001 with a completed USD 12.34 capture.",
+    "EV-10 shows the substituted order ID propagated into the capture-confirmation journal detail.",
+    "The supplied captureEvidence implementation validates the actual capture resource and then returns res.ID for FaultF4, directly explaining the observed identity substitution."
+  ],
+  "uncertainties": [
+    "EV-6 describes float formatting as the F4 mechanism, but EV-11 and EV-14 show a canonical 12.34 amount and the supplied source only applies float formatting for FaultF1; the provenance of EV-6's mechanism text is unresolved.",
+    "The evidence establishes a capture-identity inconsistency, not an amount, currency, duplicate-capture, or fund-loss discrepancy.",
+    "Because the evidence tier is F, the behavior was observed only in a scripted fixture and cannot establish real Sandbox behavior.",
+    "No evidence shows how downstream reconciliation or payment consumers used the incorrect capture identity."
+  ]
+}

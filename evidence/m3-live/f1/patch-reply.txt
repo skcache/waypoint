@@ -1,0 +1,11 @@
+{
+  "summary": "Replace the FaultF1 float-based amount formatting with paypal.FormatMinorUSD so provider requests always use the canonical two-decimal amount while retaining the injectable fault mode and existing operation safeguards.",
+  "edits": [
+    {
+      "path": "apps/api/internal/merchant/service.go",
+      "old_text": "// amountValue renders the provider amount string.\n//\n// FaultF1 is DELIBERATE: it reproduces a realistic float-formatting defect\n// where presentation formatting leaks into the API payload. \"%f\" prints six\n// decimal places (\"12.340000\"), so the request that reaches PayPal is\n// malformed and is really rejected by the sandbox. The fault is active only\n// when MERCHANT_FAULT=F1 is set explicitly; it exists so the V2 incident\n// pipeline has a genuine, reproducible provider failure to investigate.\nfunc (s *Service) amountValue(totalMinor int64) string {\n\tif s.fault == FaultF1 {\n\t\treturn fmt.Sprintf(\"%f\", float64(totalMinor)/100)\n\t}\n\treturn paypal.FormatMinorUSD(totalMinor)\n}",
+      "new_text": "// amountValue renders the provider amount string from integer minor units.\n// FaultF1 remains an injectable mode, but the provider boundary always uses\n// the canonical two-decimal representation; float formatting can emit invalid\n// precision (for example, \"12.340000\").\nfunc (s *Service) amountValue(totalMinor int64) string {\n\treturn paypal.FormatMinorUSD(totalMinor)\n}",
+      "rationale": "Converting minor units to float64 and formatting with %f sends \"12.340000\" for 1234 USD minor units, which violates the provider's decimal precision and causes a definite rejection. Formatting directly from the integer minor units sends the canonical \"12.34\" and keeps create and echo verification aligned without weakening any operation, approval, ordering, or capture checks."
+    }
+  ]
+}
