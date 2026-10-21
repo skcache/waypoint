@@ -1,0 +1,14 @@
+diff --git a/apps/api/internal/merchant/service.go b/apps/api/internal/merchant/service.go
+index 5811e1e..e139b12 100644
+--- a/apps/api/internal/merchant/service.go
++++ b/apps/api/internal/merchant/service.go
+@@ -737,9 +737,6 @@ func (s *Service) captureEvidence(res *paypal.Order, order Order) (string, error
+ 	if !ok {
+ 		return "", errors.New("capture response carries no COMPLETED capture with matching amount and currency")
+ 	}
+-	if s.fault == FaultF4 {
+-		return res.ID, nil
+-	}
+ 	return captureID, nil
+ }
+ 

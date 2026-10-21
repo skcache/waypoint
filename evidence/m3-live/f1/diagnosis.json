@@ -1,0 +1,31 @@
+{
+  "root_cause": "The FaultF1 branch in Service.amountValue converts integer minor units to float64 and formats them with %f, producing a six-decimal provider amount instead of the canonical two-decimal amount.",
+  "mechanism": "For the persisted total of 1234 USD minor units, the faulty formatter sends \"12.340000\" in the create-order request; the scripted provider rejects that payload with HTTP 422 and DECIMAL_PRECISION, so the create operation is marked REJECTED and the order becomes FAILED_DEFINITE with no provider order or capture ID and no captured payment.",
+  "suspected_files": [
+    "apps/api/internal/merchant/service.go"
+  ],
+  "supporting_evidence": [
+    "EV-1",
+    "EV-2",
+    "EV-3",
+    "EV-5",
+    "EV-6",
+    "EV-7"
+  ],
+  "invariants_at_risk": [
+    "I6"
+  ],
+  "proposed_fix": "Remove the float-based F1 serialization path and always derive the outbound amount from integer minor units with paypal.FormatMinorUSD; add a boundary test asserting that 1234 USD minor units serialize as exactly \"12.34\" before any create-order call.",
+  "confidence_reasons": [
+    "EV-7 directly records that the create request sent \"12.340000\", matching the float/%f behavior in the supplied service.go.",
+    "EV-2 records the intended amount as 1234 USD minor units, which corresponds to 12.34 USD rather than a six-decimal presentation value.",
+    "EV-6 records the provider issue DECIMAL_PRECISION and a 422 rejection for the same request ID and payload fingerprint shown by the rejected operation in EV-3.",
+    "EV-5 explicitly identifies F1 as float formatting leaking into the provider payload.",
+    "EV-1 and EV-3 show that the definite rejection left the order failed with empty provider-order, provider-capture, and claimed-capture identifiers, so no capture is evidenced."
+  ],
+  "uncertainties": [
+    "The provider interaction is a tier-F scripted fixture observation rather than a real Sandbox run, so this evidence cannot establish the defect's behavior or prevalence against a live provider.",
+    "No captured payment occurred in this incident, so the evidence establishes a failed create and invalid amount serialization, not a completed overcharge or undercharge.",
+    "The supplied files do not establish whether any other amount-serialization path outside service.go has the same defect."
+  ]
+}

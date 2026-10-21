@@ -1,0 +1,27 @@
+diff --git a/apps/api/internal/merchant/service.go b/apps/api/internal/merchant/service.go
+index 5811e1e..356639b 100644
+--- a/apps/api/internal/merchant/service.go
++++ b/apps/api/internal/merchant/service.go
+@@ -133,18 +133,11 @@ func (s *Service) evidenceTier() string {
+ 	return TierReal
+ }
+ 
+-// amountValue renders the provider amount string.
+-//
+-// FaultF1 is DELIBERATE: it reproduces a realistic float-formatting defect
+-// where presentation formatting leaks into the API payload. "%f" prints six
+-// decimal places ("12.340000"), so the request that reaches PayPal is
+-// malformed and is really rejected by the sandbox. The fault is active only
+-// when MERCHANT_FAULT=F1 is set explicitly; it exists so the V2 incident
+-// pipeline has a genuine, reproducible provider failure to investigate.
++// amountValue renders the provider amount string from integer minor units.
++// FaultF1 remains an injectable mode, but the provider boundary always uses
++// the canonical two-decimal representation; float formatting can emit invalid
++// precision (for example, "12.340000").
+ func (s *Service) amountValue(totalMinor int64) string {
+-	if s.fault == FaultF1 {
+-		return fmt.Sprintf("%f", float64(totalMinor)/100)
+-	}
+ 	return paypal.FormatMinorUSD(totalMinor)
+ }
+ 
