@@ -33,9 +33,10 @@ type Bundle struct {
 	Candidate       string    `json:"candidate"`
 	Verdict         Verdict   `json:"verdict"`
 	ExpectedVerdict Verdict   `json:"expected_verdict"`
-	// FixtureRevision is the revision of the code actually evaluated, derived
-	// by DetectRevision from the running binary/git — never a caller-supplied
-	// value. RevisionSource says how it was determined.
+	// FixtureRevision is the revision of the candidate source actually
+	// evaluated. In a sandboxed repair run the trusted orchestrator supplies
+	// the commit it resolved from git ("orchestrator-base"); standalone runs
+	// detect it from the binary/git. It is never candidate-supplied.
 	FixtureRevision string            `json:"fixture_revision"`
 	RevisionSource  string            `json:"revision_source"`
 	OracleVersion   string            `json:"oracle_version"`
@@ -43,11 +44,13 @@ type Bundle struct {
 	Invariants      []InvariantResult `json:"invariants"`
 	Skips           []InvariantResult `json:"skips"`
 	Counterexamples []InvariantResult `json:"counterexamples"`
-	EvidenceDigest  string            `json:"evidence_digest_sha256"`
-	EvidenceCounts  map[string]int    `json:"evidence_counts"`
-	PayPalSandbox   SandboxNote       `json:"paypal_sandbox"`
-	Applied         bool              `json:"applied"`
-	Limitations     []string          `json:"limitations"`
+	// PatchDigest binds the bundle to the exact applied candidate diff.
+	PatchDigest    string         `json:"patch_digest,omitempty"`
+	EvidenceDigest string         `json:"evidence_digest_sha256"`
+	EvidenceCounts map[string]int `json:"evidence_counts"`
+	PayPalSandbox  SandboxNote    `json:"paypal_sandbox"`
+	Applied        bool           `json:"applied"`
+	Limitations    []string       `json:"limitations"`
 }
 
 // SandboxNote states honestly whether the bundle contains real provider

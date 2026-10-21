@@ -36,8 +36,9 @@ const (
 // Sandbox is a disposable Docker network + PostgreSQL container plus a private
 // Go module cache. Candidate code runs in a one-shot container with:
 //
-//   - no host home directory and no host credentials (only the worktree, the
-//     artifact directory and a disposable module cache are mounted);
+//   - no host home directory and no host credentials (only a READ-ONLY
+//     candidate source tree, the artifact directory and a disposable module
+//     cache are mounted);
 //   - no outbound network (an internal Docker network; the only reachable peer
 //     is the disposable database container);
 //   - non-root execution (the invoking user's uid/gid, no capabilities,
@@ -170,9 +171,11 @@ func (s *Sandbox) Describe() string {
 		s.image, s.network, s.dbContainer, os.Getuid(), sandboxMemory, sandboxCPUs, sandboxPidsLimit)
 }
 
-// Run executes one command inside the sandbox with the worktree and artifact
-// directory mounted. The candidate never sees the host home, host env or the
-// Docker socket.
+// Run executes one command inside the sandbox. The candidate source tree is
+// mounted READ-ONLY at /src: generated code can be compiled and tested, but it
+// cannot modify trusted tests, the oracle, the replay harness, the verifier
+// commands or any other source file. Writable state is limited to /out,
+// /gocache, /tmp and /home.
 func (s *Sandbox) Run(ctx context.Context, worktree, artifacts string, timeout time.Duration, env map[string]string, name string, args ...string) StepResult {
 	if s.closed {
 		return StepResult{Step: name, ExitCode: -1, Output: "sandbox is closed"}
@@ -196,7 +199,7 @@ func (s *Sandbox) Run(ctx context.Context, worktree, artifacts string, timeout t
 		"--tmpfs", "/home:rw,nosuid,size=64m",
 		"--cap-drop", "ALL",
 		"--security-opt", "no-new-privileges",
-		"-v", worktree + ":/work:rw",
+		"-v", worktree + ":/src:ro",
 		"-v", artifacts + ":/out:rw",
 		"-v", s.modcache + ":/gomodcache:rw",
 		"-v", s.gocache + ":/gocache:rw",
@@ -212,7 +215,7 @@ func (s *Sandbox) Run(ctx context.Context, worktree, artifacts string, timeout t
 		"-e", "GOMEMLIMIT=1GiB",
 		"-e", "GOMAXPROCS=2",
 		"-e", "CGO_ENABLED=0",
-		"-w", "/work/apps/api",
+		"-w", "/src/apps/api",
 	}
 	for k, v := range env {
 		dockerArgs = append(dockerArgs, "-e", k+"="+v)
@@ -226,7 +229,7 @@ func (s *Sandbox) Run(ctx context.Context, worktree, artifacts string, timeout t
 		// The docker CLI is not the container: kill it explicitly.
 		_ = exec.Command("docker", "kill", container).Run()
 	}
-	res.Command = append([]string{name}, args...)
+	res.Command = redactCommand(append([]string{name}, args...))
 	res.Output = redact(res.Output, s.root)
 	return res
 }

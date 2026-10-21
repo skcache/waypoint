@@ -88,7 +88,13 @@ func run(cfg llm.Config, repoFlag, baseRef, fault, outDir, mode string, attempts
 	if err != nil {
 		return err
 	}
-	rev, revSource := oracle.DetectRevision()
+	// The candidate base is a concrete commit resolved from the trusted repo,
+	// never the model's or the candidate's claim.
+	baseSHA, err := resolveCommit(root, baseRef)
+	if err != nil {
+		return err
+	}
+	rev, revSource := baseSHA, "git-resolve"
 
 	model, err := repair.NewLLMModel(cfg)
 	if err != nil {
@@ -161,7 +167,7 @@ func run(cfg llm.Config, repoFlag, baseRef, fault, outDir, mode string, attempts
 
 	started := time.Now()
 	rep := repair.Run(ctx, repair.Options{
-		RepoRoot: root, BaseRef: baseRef, Fault: fault, OutDir: outDir,
+		RepoRoot: root, BaseRef: baseSHA, Fault: fault, OutDir: outDir,
 		Mode: mode, MaxAttempts: attempts, Model: model, Evidence: ev, Allow: allow,
 		RepoStatusBefore: statusBefore, Revision: rev, RevisionSource: revSource,
 		IncidentID: incidentID,
@@ -173,7 +179,7 @@ func run(cfg llm.Config, repoFlag, baseRef, fault, outDir, mode string, attempts
 			return err
 		}
 		baseRep := repair.Run(ctx, repair.Options{
-			RepoRoot: root, BaseRef: baseRef, Fault: fault, OutDir: baseOut,
+			RepoRoot: root, BaseRef: baseSHA, Fault: fault, OutDir: baseOut,
 			Mode: "baseline", MaxAttempts: 1, Model: model, Evidence: ev, Allow: allow,
 			RepoStatusBefore: statusBefore, Revision: rev, RevisionSource: revSource,
 			IncidentID: incidentID,
@@ -202,6 +208,15 @@ func run(cfg llm.Config, repoFlag, baseRef, fault, outDir, mode string, attempts
 		return nil
 	}
 	return fmt.Errorf("no candidate passed independent verification (status %s)", rep.Status)
+}
+
+// resolveCommit pins a ref (HEAD, tag, SHA) to a commit SHA.
+func resolveCommit(repo, ref string) (string, error) {
+	out, err := exec.Command("git", "-C", repo, "rev-parse", "--verify", ref+"^{commit}").Output()
+	if err != nil {
+		return "", fmt.Errorf("resolve -base-ref %q to a commit: %w", ref, err)
+	}
+	return strings.TrimSpace(string(out)), nil
 }
 
 func oracleOrNone(e *repair.EvalSummary) string {

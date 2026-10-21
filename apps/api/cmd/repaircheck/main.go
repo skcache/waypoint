@@ -21,19 +21,21 @@ func main() {
 	fault := flag.String("fault", "F1", "fixture defect to exercise (F1 or F4)")
 	out := flag.String("out", "", "directory for eval.json and the proof bundle (required)")
 	dsn := flag.String("dsn", os.Getenv("TEST_DATABASE_URL"), "PostgreSQL test DSN (database name must end in _test)")
+	baseRevision := flag.String("base-revision", "", "candidate base commit, resolved by the trusted orchestrator")
+	patchDigest := flag.String("patch-digest", "", "sha256 of the applied candidate diff")
 	flag.Parse()
 
 	if *out == "" {
 		fmt.Fprintln(os.Stderr, "usage: repaircheck -fault F1|F4 -out <dir> [-dsn dsn]")
 		os.Exit(2)
 	}
-	if err := run(*fault, *out, *dsn); err != nil {
+	if err := run(*fault, *out, *dsn, *baseRevision, *patchDigest); err != nil {
 		fmt.Fprintln(os.Stderr, "repaircheck:", err)
 		os.Exit(1)
 	}
 }
 
-func run(fault, outDir, dsn string) error {
+func run(fault, outDir, dsn, baseRevision, patchDigest string) error {
 	ctx := context.Background()
 	h, err := replay.OpenHarness(ctx, dsn)
 	if err != nil {
@@ -59,8 +61,16 @@ func run(fault, outDir, dsn string) error {
 		return err
 	}
 
-	revision, source := oracle.DetectRevision()
+	revision, source := baseRevision, "orchestrator-base"
+	if revision == "" {
+		revision, source = oracle.DetectRevision()
+	}
+	if revision == "" || revision == "unknown" {
+		// A proof bundle must not claim an unidentified source identity.
+		return fmt.Errorf("repaircheck: candidate base revision is unknown; refusing to write the proof bundle")
+	}
 	bundle := oracle.BuildBundle(verdict.Oracle, &verdict.Evidence, revision, source)
+	bundle.PatchDigest = patchDigest
 	bdata, err := json.MarshalIndent(bundle, "", "  ")
 	if err != nil {
 		return err

@@ -178,7 +178,16 @@ func (w *Workspace) ApplyEdits(edits []Edit, allow Allowlist) ([]string, error) 
 			return nil, fmt.Errorf("repair: workspace changed unexpected file %q", path)
 		}
 	}
-	return changed, nil
+	// Two edits may target the same file; report it once.
+	seen := map[string]bool{}
+	unique := changed[:0]
+	for _, c := range changed {
+		if !seen[c] {
+			seen[c] = true
+			unique = append(unique, c)
+		}
+	}
+	return unique, nil
 }
 
 // StatusPorcelain returns `git status --porcelain`.

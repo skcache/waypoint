@@ -123,18 +123,19 @@ type EvalSummary struct {
 
 // Attempt is one bounded repair try with everything needed to review it.
 type Attempt struct {
-	Number     int          `json:"number"`
-	StartedAt  time.Time    `json:"started_at"`
-	FinishedAt time.Time    `json:"finished_at"`
-	Ladder     Ladder       `json:"ladder"`
-	Patch      *Patch       `json:"patch,omitempty"`
-	Diff       string       `json:"diff,omitempty"`
-	Changed    []string     `json:"changed_files,omitempty"`
-	Steps      []StepResult `json:"steps,omitempty"`
-	Eval       *EvalSummary `json:"eval,omitempty"`
-	Feedback   string       `json:"feedback_to_model,omitempty"`
-	Error      string       `json:"error,omitempty"`
-	Calls      []CallMeta   `json:"model_calls,omitempty"`
+	Number      int          `json:"number"`
+	StartedAt   time.Time    `json:"started_at"`
+	FinishedAt  time.Time    `json:"finished_at"`
+	Ladder      Ladder       `json:"ladder"`
+	Patch       *Patch       `json:"patch,omitempty"`
+	Diff        string       `json:"diff,omitempty"`
+	PatchDigest string       `json:"patch_digest,omitempty"`
+	Changed     []string     `json:"changed_files,omitempty"`
+	Steps       []StepResult `json:"steps,omitempty"`
+	Eval        *EvalSummary `json:"eval,omitempty"`
+	Feedback    string       `json:"feedback_to_model,omitempty"`
+	Error       string       `json:"error,omitempty"`
+	Calls       []CallMeta   `json:"model_calls,omitempty"`
 }
 
 // Report is the reviewable repair artifact. It states plainly that nothing was
@@ -162,6 +163,7 @@ type Report struct {
 	UsageReported    bool       `json:"usage_reported"`
 	CostUSD          *float64   `json:"cost_usd,omitempty"`
 
+	PatchDigest           string    `json:"patch_digest,omitempty"`
 	Applied               bool      `json:"applied_to_developer_tree"`
 	Deployed              bool      `json:"deployed"`
 	HumanApprovalRequired bool      `json:"human_approval_required"`
@@ -193,5 +195,5 @@ func MarshalReport(r *Report) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	return append(data, '\n'), nil
+	return append([]byte(redactText(string(data))), '\n'), nil
 }

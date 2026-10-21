@@ -122,6 +122,7 @@ func RunBounded(ctx context.Context, dir string, timeout time.Duration, env []st
 // redact removes credentials and host paths from captured output before it is
 // stored in a report or fed back to the model.
 func redact(s, workspace string) string {
+	s = redactText(s)
 	if workspace != "" {
 		s = strings.ReplaceAll(s, workspace, "<workspace>")
 	}

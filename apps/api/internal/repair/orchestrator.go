@@ -2,6 +2,8 @@ package repair
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -181,9 +183,13 @@ func Run(ctx context.Context, opts Options) *Report {
 			a.Ladder.PatchApplied = true
 			if diff, derr := ws.Diff(); derr == nil {
 				a.Diff = diff
+				a.PatchDigest = patchDigest(diff)
 				_ = os.WriteFile(filepath.Join(dir, "patch.diff"), []byte(diff), 0o600)
 			}
-			v := (&Verifier{Workspace: ws, Runner: runner, Fault: opts.Fault, ArtifactDir: dir, Changed: changed}).Run(ctx)
+			v := (&Verifier{
+				Workspace: ws, Runner: runner, Fault: opts.Fault, ArtifactDir: dir,
+				Changed: changed, BaseRevision: opts.Revision, PatchDigest: a.PatchDigest,
+			}).Run(ctx)
 			a.Steps = v.Steps
 			a.Eval = v.Eval
 			a.Ladder.OracleVerdict = v.OracleVerdict
@@ -211,6 +217,7 @@ func Run(ctx context.Context, opts Options) *Report {
 		rep.Attempts = append(rep.Attempts, a)
 
 		if a.Ladder.Accepted {
+			rep.PatchDigest = a.PatchDigest
 			break
 		}
 		if opts.Mode == "baseline" {
@@ -236,6 +243,13 @@ func (r *Report) aggregate(m CallMeta) {
 	if m.UsageReported {
 		r.UsageReported = true
 	}
+}
+
+// patchDigest is sha256 over the exact applied unified diff, prefixed for
+// readability. It binds the proof artifact to the bytes a human reviews.
+func patchDigest(diff string) string {
+	sum := sha256.Sum256([]byte(diff))
+	return "sha256:" + hex.EncodeToString(sum[:])
 }
 
 func allPassed(steps []StepResult) bool {
@@ -274,7 +288,9 @@ func finish(rep *Report, opts Options) *Report {
 // ---- reporting -------------------------------------------------------------
 
 func writeReportArtifacts(rep *Report, outDir string) error {
+	sanitizeReport(rep)
 	if data, err := MarshalReport(rep); err == nil {
+		data = []byte(redactText(string(data)))
 		_ = os.WriteFile(filepath.Join(outDir, "report.json"), data, 0o600)
 	}
 	md := renderMarkdown(rep)
@@ -284,7 +300,8 @@ func writeReportArtifacts(rep *Report, outDir string) error {
 		dir := filepath.Join(outDir, "attempts", fmt.Sprintf("attempt-%d", a.Number))
 		var log strings.Builder
 		for _, s := range a.Steps {
-			fmt.Fprintf(&log, "$ %s\n(exit %d, %dms, timed_out=%v)\n%s\n\n", strings.Join(s.Command, " "), s.ExitCode, s.DurationMS, s.TimedOut, s.Output)
+			fmt.Fprintf(&log, "$ %s\n(exit %d, %dms, timed_out=%v)\n%s\n\n",
+				strings.Join(redactCommand(s.Command), " "), s.ExitCode, s.DurationMS, s.TimedOut, redactText(s.Output))
 		}
 		_ = os.WriteFile(filepath.Join(dir, "steps.log"), []byte(log.String()), 0o600)
 	}
@@ -299,6 +316,11 @@ func renderMarkdown(rep *Report) string {
 	fmt.Fprintf(&b, "**Incident:** %s  \n**Fault family:** %s (evidence tier %s)  \n**Base revision:** %s (%s)  \n**Mode:** %s  \n**Status:** `%s`\n\n",
 		rep.IncidentID, rep.Fault, rep.EvidenceTier, rep.BaseRevision, rep.RevisionSource, rep.Mode, rep.Status)
 
+	if rep.PatchDigest != "" {
+		fmt.Fprintf(&b, "**Candidate base revision:** `%s`  \n**Patch digest:** `%s`\n\n", rep.BaseRevision, rep.PatchDigest)
+	} else {
+		fmt.Fprintf(&b, "**Candidate base revision:** `%s`\n\n", rep.BaseRevision)
+	}
 	b.WriteString("## Verification ladder\n\n| Stage | Result |\n|---|---|\n")
 	b.WriteString(fmt.Sprintf("| Diagnosis produced | %v |\n", rep.Diagnosis != nil))
 	b.WriteString(fmt.Sprintf("| Patch generated | %v |\n", rep.Final.PatchGenerated))

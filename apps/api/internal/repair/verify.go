@@ -20,6 +20,11 @@ type Verifier struct {
 	Fault       string
 	ArtifactDir string
 	Changed     []string
+	// BaseRevision is the exact commit the candidate was applied to (resolved
+	// by the trusted orchestrator, never by the model). PatchDigest is sha256
+	// of the applied diff. Both are recorded in the proof bundle.
+	BaseRevision string
+	PatchDigest  string
 }
 
 // Verification is the evidence from one verification run.
@@ -104,7 +109,8 @@ func (v *Verifier) Run(ctx context.Context) Verification {
 		return out
 	}
 	eval := v.Runner.Run(ctx, v.Workspace.Dir, v.ArtifactDir, 300*time.Second, testEnv,
-		"go", "run", "./cmd/repaircheck", "-fault", v.Fault, "-out", "/out", "-dsn", v.Runner.DSN())
+		"go", "run", "./cmd/repaircheck", "-fault", v.Fault, "-out", "/out", "-dsn", v.Runner.DSN(),
+		"-base-revision", v.BaseRevision, "-patch-digest", v.PatchDigest)
 	eval.Step = "eval"
 	out.Steps = append(out.Steps, eval)
 
@@ -153,7 +159,7 @@ func Feedback(attempt int, v Verification) string {
 			}
 			continue
 		}
-		fmt.Fprintf(&b, "\n[%s] exit=%d timed_out=%v\n%s\n", s.Step, s.ExitCode, s.TimedOut, tail(s.Output, 4096))
+		fmt.Fprintf(&b, "\n[%s] exit=%d timed_out=%v\n%s\n", s.Step, s.ExitCode, s.TimedOut, redactText(tail(s.Output, 4096)))
 	}
 	b.WriteString("\nProduce a NEW complete patch that fixes the root cause. Do not repeat the same edit; the verifier will run it again from scratch.\n")
 	return b.String()
