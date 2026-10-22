@@ -109,11 +109,11 @@ export interface Run {
 }
 
 export interface CaseMeta {
-  ID: string;
-  Family: string;
-  Title: string;
-  Mode: string;
-  Exposed: boolean;
+  id: string;
+  family: string;
+  title: string;
+  mode: string;
+  exposed: boolean;
 }
 
 export interface CaseRow {
@@ -170,7 +170,7 @@ export interface Dataset {
 export const data = raw as unknown as Dataset;
 
 export function caseById(id: string): CaseRow | undefined {
-  return data.cases.find((c) => c.case.ID === id);
+  return data.cases.find((c) => c.case.id === id);
 }
 
 export function runFor(id: string, condition: string): Run | undefined {

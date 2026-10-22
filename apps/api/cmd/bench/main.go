@@ -28,6 +28,7 @@ func main() {
 	freeze := flag.Bool("freeze", false, "write the corpus freeze file and exit")
 	dsn := flag.String("dsn", "", "benchmark PostgreSQL DSN (default: derive *_test from DATABASE_URL)")
 	webonly := flag.Bool("webonly", false, "regenerate the workbench data from an existing results.json and exit")
+	sanitize := flag.Bool("sanitize", false, "rewrite results.json through the public-safe encoder without running cases")
 	resume := flag.Bool("resume", false, "merge this invocation into an existing results.json")
 	flag.Parse()
 
@@ -44,6 +45,26 @@ func main() {
 			fatal(err)
 		}
 		fmt.Printf("frozen: benchmark=%s digest=%s base=%s\n", "waypoint-m5-heldout-v1", bench.Digest(), baseSHA)
+		return
+	}
+
+	if *sanitize {
+		outDir := filepath.Join(root, *out)
+		raw, err := os.ReadFile(filepath.Join(outDir, "results.json"))
+		if err != nil {
+			fatal(err)
+		}
+		var ds bench.Dataset
+		if err := json.Unmarshal(raw, &ds); err != nil {
+			fatal(err)
+		}
+		if err := writeResults(outDir, &ds); err != nil {
+			fatal(err)
+		}
+		if err := writeWebData(filepath.Join(root, *web), outDir, &ds); err != nil {
+			fatal(err)
+		}
+		fmt.Println("results sanitized; web data regenerated")
 		return
 	}
 
@@ -148,31 +169,13 @@ func writeResults(outDir string, ds *bench.Dataset) error {
 	return os.WriteFile(filepath.Join(outDir, "results.json"), append(data, '\n'), 0o600)
 }
 
-// webRun is the compact artifact the read-only workbench renders.
-type webRun struct {
-	bench.Result
-	Report       *repair.Report  `json:"report,omitempty"`
-	Diff         string          `json:"diff,omitempty"`
-	PreEval      json.RawMessage `json:"pre_eval,omitempty"`
-	Eval         json.RawMessage `json:"eval,omitempty"`
-	Diag         json.RawMessage `json:"diagnosis_reply,omitempty"`
-	Patch        json.RawMessage `json:"patch_reply,omitempty"`
-	Observations json.RawMessage `json:"observations,omitempty"`
-}
-
-type webDoc struct {
-	bench.Dataset
-	Views map[string]map[string]*webRun `json:"views"`
-}
-
 func writeWebData(webDir, outDir string, ds *bench.Dataset) error {
-	doc := webDoc{Dataset: *ds, Views: map[string]map[string]*webRun{}}
+	views := map[string]map[string]*bench.PublicRun{}
 	for _, cr := range ds.Cases {
-		doc.Views[cr.Case.ID] = map[string]*webRun{}
+		views[cr.Case.ID] = map[string]*bench.PublicRun{}
 		for cond, r := range cr.Runs {
-			v := &webRun{Result: r}
+			v := &bench.PublicRun{PublicResult: bench.PublicResultFrom(r)}
 			base := filepath.Join(outDir, "cases", cr.Case.ID, cond)
-			// B1/B2 reports are written by the repair pipeline; B0 has only a result.
 			if data, err := os.ReadFile(filepath.Join(base, "report.json")); err == nil {
 				var rep repair.Report
 				if json.Unmarshal(data, &rep) == nil {
@@ -197,9 +200,12 @@ func writeWebData(webDir, outDir string, ds *bench.Dataset) error {
 			if data, err := os.ReadFile(filepath.Join(outDir, "cases", cr.Case.ID, "pre-repair", "observations.json")); err == nil {
 				v.Observations = data
 			}
-			doc.Views[cr.Case.ID][cond] = v
+			views[cr.Case.ID][cond] = v
 		}
 	}
+	// Explicit sanitized projection: the workbench never receives mutations,
+	// reference fixes, expected categories or host paths.
+	doc := bench.Project(ds, views)
 	if err := os.MkdirAll(webDir, 0o755); err != nil {
 		return err
 	}

@@ -19,7 +19,7 @@ import {
 export const instant = false;
 
 export function generateStaticParams() {
-  return data.cases.map((row) => ({ id: row.case.ID }));
+  return data.cases.map((row) => ({ id: row.case.id }));
 }
 
 function Mono({ children }: { children: React.ReactNode }) {
@@ -146,13 +146,13 @@ export default async function Page({
           <Link href="/" className="text-[11px] text-faint hover:text-ink">
             ← Incidents
           </Link>
-          <h1 className="mt-1.5 text-xl font-semibold tracking-tight">{row.case.Title}</h1>
+          <h1 className="mt-1.5 text-xl font-semibold tracking-tight">{row.case.title}</h1>
           <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-faint">
-            <Mono>{row.case.ID}</Mono>
+            <Mono>{row.case.id}</Mono>
             <span className="text-line-strong">/</span>
-            <span>{row.case.Family}</span>
+            <span>{row.case.family}</span>
             <span className="text-line-strong">/</span>
-            <span>{row.case.Exposed ? "exposed reference" : "held-out"}</span>
+            <span>{row.case.exposed ? "exposed reference" : "held-out"}</span>
             <span className="text-line-strong">/</span>
             <span>tier F</span>
           </div>
@@ -331,11 +331,11 @@ export default async function Page({
           </Panel>
 
           <Panel title="Human decision">
-            <DecisionForm caseId={row.case.ID} condition={active} />
+            <DecisionForm caseId={row.case.id} condition={active} />
             <p className="mt-3 border-t border-line pt-2 text-[10px] leading-4 text-faint">
-              The console is read-only for payment state. Accepting records a review
-              decision locally; it never merges, deploys, captures, refunds, or retries a
-              payment.
+              The console is read-only for payment state. Recording is disabled unless an
+              operator configures a reviewer token; a recorded decision is a local note and
+              never merges, deploys, captures, refunds, or retries a payment.
             </p>
           </Panel>
         </div>

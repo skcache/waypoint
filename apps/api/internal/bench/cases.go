@@ -17,28 +17,28 @@ type Mutation struct {
 // Case is one held-out defect. Only the fields in ModelFacing() may reach the
 // model; everything else is evaluator/human-only.
 type Case struct {
-	ID           string
-	Family       string
-	Title        string
-	BaseRevision string
-	Journey      string
-	Mutations    []Mutation
+	ID           string     `json:"id"`
+	Family       string     `json:"family"`
+	Title        string     `json:"title"`
+	BaseRevision string     `json:"base_revision,omitempty"`
+	Journey      string     `json:"-"`
+	Mutations    []Mutation `json:"-"`
 	// GateFault selects the writable surface ("" = service.go, "F3" adds
 	// webhook.go). It is not shown to the model.
-	GateFault string
+	GateFault string `json:"-"`
 	// Mode is the acceptance mode: verified (a safe verified capture) or
 	// refused (no unverified capture claimed).
-	Mode string
+	Mode string `json:"mode"`
 	// ExpectedCategory is the human-only diagnosis category used to score
 	// diagnosis accuracy.
-	ExpectedCategory string
+	ExpectedCategory string `json:"-"`
 	// ReferenceFix is the inverse mutation, kept for human review only.
-	ReferenceFix []Mutation
+	ReferenceFix []Mutation `json:"-"`
 	// Exposed marks a case whose mechanism already appeared in model-facing M3
 	// or M4 evidence. Exposed cases are reported separately.
-	Exposed bool
+	Exposed bool `json:"exposed"`
 	// Facts are the evidence facts allowed into the prompt (whitelist).
-	Facts []string
+	Facts []string `json:"-"`
 }
 
 // Cases is the frozen M5 corpus (v1). The first five are held-out; H7 is an

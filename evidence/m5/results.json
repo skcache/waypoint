@@ -35,35 +35,11 @@
   "cases": [
     {
       "case": {
-        "ID": "H1-identity-rewrite",
-        "Family": "idempotency-identity",
-        "Title": "A retry rewrites the durable capture request id",
-        "BaseRevision": "",
-        "Journey": "H1-identity-rewrite",
-        "Mutations": [
-          {
-            "Path": "apps/api/internal/merchant/service.go",
-            "Old": "\t\tclaimed, err := s.store.BeginCaptureRetry(ctx, order.ID, active.ID, s.instanceID, s.leaseTTL)\n\t\tif err != nil {\n\t\t\treturn Operation{}, err\n\t\t}\n\t\treturn claimed, nil",
-            "New": "\t\tclaimed, err := s.store.BeginCaptureRetry(ctx, order.ID, active.ID, s.instanceID, s.leaseTTL)\n\t\tif err != nil {\n\t\t\treturn Operation{}, err\n\t\t}\n\t\tclaimed.ProviderRequestID += \"-retry\"\n\t\treturn claimed, nil"
-          }
-        ],
-        "GateFault": "",
-        "Mode": "verified",
-        "ExpectedCategory": "identity",
-        "ReferenceFix": [
-          {
-            "Path": "apps/api/internal/merchant/service.go",
-            "Old": "\t\tclaimed.ProviderRequestID += \"-retry\"\n\t\treturn claimed, nil",
-            "New": "\t\treturn claimed, nil"
-          }
-        ],
-        "Exposed": false,
-        "Facts": [
-          "final_status",
-          "capture_status",
-          "capture_error",
-          "provider_capture_effects"
-        ]
+        "id": "H1-identity-rewrite",
+        "family": "idempotency-identity",
+        "title": "A retry rewrites the durable capture request id",
+        "mode": "verified",
+        "exposed": false
       },
       "mutation_sha": "92a0e659ec2bf1b7cbc173d345e10230f9378b40",
       "pre_repair": {
@@ -92,8 +68,7 @@
           "latency_ms": 0,
           "prompt_tokens": 0,
           "completion_tokens": 0,
-          "error": "B0 has no patch capability; it cannot repair code and is not scored as a repair system",
-          "artifacts": "/Users/21sk/waypoint/evidence/m5/cases/H1-identity-rewrite/pre-repair"
+          "error": "B0 has no patch capability; it cannot repair code and is not scored as a repair system"
         },
         "B1": {
           "case_id": "H1-identity-rewrite",
@@ -110,8 +85,7 @@
           "latency_ms": 116048,
           "prompt_tokens": 17866,
           "completion_tokens": 6093,
-          "estimated_usd": 0.0126714,
-          "artifacts": "/Users/21sk/waypoint/evidence/m5/cases/H1-identity-rewrite/B1"
+          "estimated_usd": 0.0126714
         },
         "B2": {
           "case_id": "H1-identity-rewrite",
@@ -128,52 +102,17 @@
           "latency_ms": 95865,
           "prompt_tokens": 17730,
           "completion_tokens": 4794,
-          "estimated_usd": 0.0110718,
-          "artifacts": "/Users/21sk/waypoint/evidence/m5/cases/H1-identity-rewrite/B2"
+          "estimated_usd": 0.0110718
         }
       }
     },
     {
       "case": {
-        "ID": "H2-webhook-conflict",
-        "Family": "webhook-fulfillment",
-        "Title": "A conflicting duplicate event id is treated as a new capture event",
-        "BaseRevision": "",
-        "Journey": "H2-webhook-conflict",
-        "Mutations": [
-          {
-            "Path": "apps/api/internal/merchant/webhook.go",
-            "Old": "VALUES ($1::uuid, 'FULFILL', $2, $3)",
-            "New": "VALUES ($1::uuid, $2, $2, $3)"
-          },
-          {
-            "Path": "apps/api/internal/merchant/webhook.go",
-            "Old": "if ev.CaptureID == \"\" || ev.CaptureID != verifiedCapture {",
-            "New": "if ev.CaptureID == \"\" {\n\t\t\t_ = verifiedCapture"
-          }
-        ],
-        "GateFault": "F3",
-        "Mode": "verified",
-        "ExpectedCategory": "fulfillment",
-        "ReferenceFix": [
-          {
-            "Path": "apps/api/internal/merchant/webhook.go",
-            "Old": "VALUES ($1::uuid, $2, $2, $3)",
-            "New": "VALUES ($1::uuid, 'FULFILL', $2, $3)"
-          },
-          {
-            "Path": "apps/api/internal/merchant/webhook.go",
-            "Old": "if ev.CaptureID == \"\" {",
-            "New": "if ev.CaptureID == \"\" || ev.CaptureID != verifiedCapture {"
-          }
-        ],
-        "Exposed": false,
-        "Facts": [
-          "final_status",
-          "fulfillment_effects",
-          "conflict_rejected",
-          "conflict_error"
-        ]
+        "id": "H2-webhook-conflict",
+        "family": "webhook-fulfillment",
+        "title": "A conflicting duplicate event id is treated as a new capture event",
+        "mode": "verified",
+        "exposed": false
       },
       "mutation_sha": "dfef311407bd16debfa2a6ce639c7db8de261328",
       "pre_repair": {
@@ -202,8 +141,7 @@
           "latency_ms": 0,
           "prompt_tokens": 0,
           "completion_tokens": 0,
-          "error": "B0 has no patch capability; it cannot repair code and is not scored as a repair system",
-          "artifacts": "/Users/21sk/waypoint/evidence/m5/cases/H2-webhook-conflict/pre-repair"
+          "error": "B0 has no patch capability; it cannot repair code and is not scored as a repair system"
         },
         "B1": {
           "case_id": "H2-webhook-conflict",
@@ -220,8 +158,7 @@
           "latency_ms": 287,
           "prompt_tokens": 0,
           "completion_tokens": 0,
-          "error": "the model call failed: llm: UNAVAILABLE (HTTP 402): the provider did not complete the request",
-          "artifacts": "/Users/21sk/waypoint/evidence/m5/cases/H2-webhook-conflict/B1"
+          "error": "the model call failed: llm: UNAVAILABLE (HTTP 402): the provider did not complete the request"
         },
         "B2": {
           "case_id": "H2-webhook-conflict",
@@ -238,41 +175,17 @@
           "latency_ms": 333,
           "prompt_tokens": 0,
           "completion_tokens": 0,
-          "error": "the model call failed: llm: UNAVAILABLE (HTTP 402): the provider did not complete the request",
-          "artifacts": "/Users/21sk/waypoint/evidence/m5/cases/H2-webhook-conflict/B2"
+          "error": "the model call failed: llm: UNAVAILABLE (HTTP 402): the provider did not complete the request"
         }
       }
     },
     {
       "case": {
-        "ID": "H3-currency-mismatch",
-        "Family": "monetary-evidence",
-        "Title": "Capture verification ignores the provider currency",
-        "BaseRevision": "",
-        "Journey": "H3-currency-mismatch",
-        "Mutations": [
-          {
-            "Path": "apps/api/internal/merchant/service.go",
-            "Old": "c.Amount.CurrencyCode == order.Currency \u0026\u0026 c.Amount.Value == expected",
-            "New": "c.Amount.Value == expected"
-          }
-        ],
-        "GateFault": "",
-        "Mode": "refused",
-        "ExpectedCategory": "monetary",
-        "ReferenceFix": [
-          {
-            "Path": "apps/api/internal/merchant/service.go",
-            "Old": "if c.Status == paypal.CaptureStatusCompleted \u0026\u0026 c.ID != \"\" \u0026\u0026\n\t\t\tc.Amount.Value == expected {",
-            "New": "if c.Status == paypal.CaptureStatusCompleted \u0026\u0026 c.ID != \"\" \u0026\u0026\n\t\t\tc.Amount.CurrencyCode == order.Currency \u0026\u0026 c.Amount.Value == expected {"
-          }
-        ],
-        "Exposed": false,
-        "Facts": [
-          "final_status",
-          "capture_status",
-          "capture_error"
-        ]
+        "id": "H3-currency-mismatch",
+        "family": "monetary-evidence",
+        "title": "Capture verification ignores the provider currency",
+        "mode": "refused",
+        "exposed": false
       },
       "mutation_sha": "a621f13702b3ac3bea995b1dea5646b265acd822",
       "pre_repair": {
@@ -300,41 +213,17 @@
           "latency_ms": 0,
           "prompt_tokens": 0,
           "completion_tokens": 0,
-          "error": "B0 has no patch capability; it cannot repair code and is not scored as a repair system",
-          "artifacts": "/Users/21sk/waypoint/evidence/m5/cases/H3-currency-mismatch/pre-repair"
+          "error": "B0 has no patch capability; it cannot repair code and is not scored as a repair system"
         }
       }
     },
     {
       "case": {
-        "ID": "H4-pending-capture",
-        "Family": "response-interpretation",
-        "Title": "Any capture status is treated as completed",
-        "BaseRevision": "",
-        "Journey": "H4-pending-capture",
-        "Mutations": [
-          {
-            "Path": "apps/api/internal/merchant/service.go",
-            "Old": "if c.Status == paypal.CaptureStatusCompleted \u0026\u0026 c.ID != \"\" \u0026\u0026",
-            "New": "if c.Status != \"\" \u0026\u0026 c.ID != \"\" \u0026\u0026"
-          }
-        ],
-        "GateFault": "",
-        "Mode": "refused",
-        "ExpectedCategory": "status",
-        "ReferenceFix": [
-          {
-            "Path": "apps/api/internal/merchant/service.go",
-            "Old": "if c.Status != \"\" \u0026\u0026 c.ID != \"\" \u0026\u0026",
-            "New": "if c.Status == paypal.CaptureStatusCompleted \u0026\u0026 c.ID != \"\" \u0026\u0026"
-          }
-        ],
-        "Exposed": false,
-        "Facts": [
-          "final_status",
-          "capture_status",
-          "capture_error"
-        ]
+        "id": "H4-pending-capture",
+        "family": "response-interpretation",
+        "title": "Any capture status is treated as completed",
+        "mode": "refused",
+        "exposed": false
       },
       "mutation_sha": "36d3df7a6c6e32d500c0f12f20c2654f09c1eea8",
       "pre_repair": {
@@ -362,51 +251,17 @@
           "latency_ms": 0,
           "prompt_tokens": 0,
           "completion_tokens": 0,
-          "error": "B0 has no patch capability; it cannot repair code and is not scored as a repair system",
-          "artifacts": "/Users/21sk/waypoint/evidence/m5/cases/H4-pending-capture/pre-repair"
+          "error": "B0 has no patch capability; it cannot repair code and is not scored as a repair system"
         }
       }
     },
     {
       "case": {
-        "ID": "H5-early-fulfillment",
-        "Family": "webhook-fulfillment",
-        "Title": "An early capture event fulfills before local verification",
-        "BaseRevision": "",
-        "Journey": "H5-early-fulfillment",
-        "Mutations": [
-          {
-            "Path": "apps/api/internal/merchant/webhook.go",
-            "Old": "\t\tif status != StatusCapturedVerified {\n\t\t\t// Early event: durable receipt only. A later redelivery, after the\n\t\t\t// merchant has verified the capture, can still fulfill.\n\t\t\tbreak\n\t\t}",
-            "New": "\t\t_ = status"
-          },
-          {
-            "Path": "apps/api/internal/merchant/webhook.go",
-            "Old": "if ev.CaptureID == \"\" || ev.CaptureID != verifiedCapture {",
-            "New": "if ev.CaptureID == \"\" {\n\t\t\t_ = verifiedCapture"
-          }
-        ],
-        "GateFault": "F3",
-        "Mode": "verified",
-        "ExpectedCategory": "fulfillment",
-        "ReferenceFix": [
-          {
-            "Path": "apps/api/internal/merchant/webhook.go",
-            "Old": "\t\t_ = status",
-            "New": "\t\tif status != StatusCapturedVerified {\n\t\t\tbreak\n\t\t}"
-          },
-          {
-            "Path": "apps/api/internal/merchant/webhook.go",
-            "Old": "if ev.CaptureID == \"\" {\n\t\t\t_ = verifiedCapture",
-            "New": "if ev.CaptureID == \"\" || ev.CaptureID != verifiedCapture {"
-          }
-        ],
-        "Exposed": false,
-        "Facts": [
-          "final_status",
-          "fulfillment_effects_early",
-          "fulfillment_effects"
-        ]
+        "id": "H5-early-fulfillment",
+        "family": "webhook-fulfillment",
+        "title": "An early capture event fulfills before local verification",
+        "mode": "verified",
+        "exposed": false
       },
       "mutation_sha": "ffb578fd805873f9258f2783886e5a385b406701",
       "pre_repair": {
@@ -434,42 +289,17 @@
           "latency_ms": 0,
           "prompt_tokens": 0,
           "completion_tokens": 0,
-          "error": "B0 has no patch capability; it cannot repair code and is not scored as a repair system",
-          "artifacts": "/Users/21sk/waypoint/evidence/m5/cases/H5-early-fulfillment/pre-repair"
+          "error": "B0 has no patch capability; it cannot repair code and is not scored as a repair system"
         }
       }
     },
     {
       "case": {
-        "ID": "H6-ambiguous-reconcile",
-        "Family": "ambiguity-reconciliation",
-        "Title": "Reconciliation turns an ambiguous capture into a definite rejection",
-        "BaseRevision": "",
-        "Journey": "H6-ambiguous-reconcile",
-        "Mutations": [
-          {
-            "Path": "apps/api/internal/merchant/service.go",
-            "Old": "\t} else {\n\t\tif err := s.store.AppendEvent(ctx, orderID, \"PAYPAL\", \"RECONCILIATION_INCONCLUSIVE\", detail, s.evidenceTier()); err != nil {\n\t\t\treturn Order{}, err\n\t\t}\n\t\tif err := s.store.TouchLastChecked(ctx, active.ID); err != nil {\n\t\t\treturn Order{}, err\n\t\t}\n\t}",
-            "New": "\t} else {\n\t\tif _, err := s.store.MarkCaptureRejected(ctx, orderID, active.ID, active.Fence, detail, s.evidenceTier()); err != nil {\n\t\t\treturn Order{}, err\n\t\t}\n\t}"
-          }
-        ],
-        "GateFault": "",
-        "Mode": "refused",
-        "ExpectedCategory": "ambiguity",
-        "ReferenceFix": [
-          {
-            "Path": "apps/api/internal/merchant/service.go",
-            "Old": "\t} else {\n\t\tif _, err := s.store.MarkCaptureRejected(ctx, orderID, active.ID, active.Fence, detail, s.evidenceTier()); err != nil {\n\t\t\treturn Order{}, err\n\t\t}\n\t}",
-            "New": "\t} else {\n\t\tif err := s.store.AppendEvent(ctx, orderID, \"PAYPAL\", \"RECONCILIATION_INCONCLUSIVE\", detail, s.evidenceTier()); err != nil {\n\t\t\treturn Order{}, err\n\t\t}\n\t\tif err := s.store.TouchLastChecked(ctx, active.ID); err != nil {\n\t\t\treturn Order{}, err\n\t\t}\n\t}"
-          }
-        ],
-        "Exposed": false,
-        "Facts": [
-          "final_status",
-          "capture_status",
-          "reconcile_error",
-          "capture_error"
-        ]
+        "id": "H6-ambiguous-reconcile",
+        "family": "ambiguity-reconciliation",
+        "title": "Reconciliation turns an ambiguous capture into a definite rejection",
+        "mode": "refused",
+        "exposed": false
       },
       "mutation_sha": "6b492027dd0a45d318355f707be40475d4ad1c1d",
       "pre_repair": {
@@ -497,41 +327,17 @@
           "latency_ms": 0,
           "prompt_tokens": 0,
           "completion_tokens": 0,
-          "error": "B0 has no patch capability; it cannot repair code and is not scored as a repair system",
-          "artifacts": "/Users/21sk/waypoint/evidence/m5/cases/H6-ambiguous-reconcile/pre-repair"
+          "error": "B0 has no patch capability; it cannot repair code and is not scored as a repair system"
         }
       }
     },
     {
       "case": {
-        "ID": "H7-webhook-duplicate-exposed",
-        "Family": "webhook-fulfillment",
-        "Title": "Duplicate delivery creates a second fulfillment (M4 mechanism, exposed)",
-        "BaseRevision": "",
-        "Journey": "H7-webhook-duplicate-exposed",
-        "Mutations": [
-          {
-            "Path": "apps/api/internal/merchant/webhook.go",
-            "Old": "VALUES ($1::uuid, 'FULFILL', $2, $3)",
-            "New": "VALUES ($1::uuid, $2, $2, $3)"
-          }
-        ],
-        "GateFault": "F3",
-        "Mode": "verified",
-        "ExpectedCategory": "fulfillment",
-        "ReferenceFix": [
-          {
-            "Path": "apps/api/internal/merchant/webhook.go",
-            "Old": "VALUES ($1::uuid, $2, $2, $3)",
-            "New": "VALUES ($1::uuid, 'FULFILL', $2, $3)"
-          }
-        ],
-        "Exposed": true,
-        "Facts": [
-          "final_status",
-          "fulfillment_effects",
-          "evt_cap_1_deliveries"
-        ]
+        "id": "H7-webhook-duplicate-exposed",
+        "family": "webhook-fulfillment",
+        "title": "Duplicate delivery creates a second fulfillment (M4 mechanism, exposed)",
+        "mode": "verified",
+        "exposed": true
       },
       "mutation_sha": "eb43d6423a8111d1d4ecad25055a5c018f721821",
       "pre_repair": {
@@ -561,8 +367,7 @@
           "latency_ms": 0,
           "prompt_tokens": 0,
           "completion_tokens": 0,
-          "error": "B0 has no patch capability; it cannot repair code and is not scored as a repair system",
-          "artifacts": "/Users/21sk/waypoint/evidence/m5/cases/H7-webhook-duplicate-exposed/pre-repair"
+          "error": "B0 has no patch capability; it cannot repair code and is not scored as a repair system"
         }
       }
     }

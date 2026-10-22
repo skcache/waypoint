@@ -16,10 +16,10 @@ const conditionLabel: Record<string, string> = {
 };
 
 export default function Page() {
-  const heldOut = data.cases.filter((c) => !c.case.Exposed);
-  const families = Array.from(new Set(heldOut.map((c) => c.case.Family)));
+  const heldOut = data.cases.filter((c) => !c.case.exposed);
+  const families = Array.from(new Set(heldOut.map((c) => c.case.family)));
   const byFamily = families.map((family) => {
-    const rows = heldOut.filter((c) => c.case.Family === family);
+    const rows = heldOut.filter((c) => c.case.family === family);
     const accepted = rows.filter((c) => c.runs.B2?.accepted).length;
     return { family, total: rows.length, accepted };
   });
@@ -144,15 +144,15 @@ export default function Page() {
                     <span className="text-[11px] text-muted">not run</span>
                   );
                 return (
-                  <tr key={row.case.ID} className="border-b border-line/70 last:border-0">
+                  <tr key={row.case.id} className="border-b border-line/70 last:border-0">
                     <td className="px-4 py-3">
-                      <Link href={`/incidents/${encodeURIComponent(row.case.ID)}?cond=B2`} className="block">
+                      <Link href={`/incidents/${encodeURIComponent(row.case.id)}?cond=B2`} className="block">
                         <span className="block text-[12px] font-medium text-ink hover:text-accent">
-                          {row.case.Title}
+                          {row.case.title}
                         </span>
                         <span className="mono mt-0.5 block text-[10px] text-faint">
-                          {row.case.ID} · {row.case.Family}
-                          {row.case.Exposed ? " · exposed" : ""}
+                          {row.case.id} · {row.case.family}
+                          {row.case.exposed ? " · exposed" : ""}
                         </span>
                       </Link>
                     </td>

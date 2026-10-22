@@ -61,7 +61,8 @@ type Result struct {
 	CompletionTokens int      `json:"completion_tokens"`
 	EstimatedUSD     *float64 `json:"estimated_usd,omitempty"`
 	Error            string   `json:"error,omitempty"`
-	Artifacts        string   `json:"artifacts"`
+	// Artifacts is evaluator-local and never serialized (absolute host path).
+	Artifacts string `json:"-"`
 }
 
 // CaseReport bundles the corpus metadata with its runs.

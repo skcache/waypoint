@@ -26,7 +26,7 @@ function Verdict({ value }: { value?: string }) {
 }
 
 export default function Page() {
-  const heldOut = data.cases.filter((c) => !c.case.Exposed);
+  const heldOut = data.cases.filter((c) => !c.case.exposed);
   const b2 = data.totals.by_condition?.B2;
   const attempts = heldOut.reduce((n, c) => n + (c.runs.B2?.attempts ?? 0), 0);
   return (
@@ -102,24 +102,24 @@ export default function Page() {
                 const b2run = row.runs.B2 ?? row.runs.B1;
                 return (
                   <tr
-                    key={row.case.ID}
+                    key={row.case.id}
                     className="group border-b border-line/70 last:border-0 hover:bg-background/60"
                   >
                     <td className="px-4 py-3">
                       <Link
-                        href={`/incidents/${encodeURIComponent(row.case.ID)}`}
+                        href={`/incidents/${encodeURIComponent(row.case.id)}`}
                         className="block"
                       >
                         <span className="block text-[13px] font-medium text-ink group-hover:text-accent">
-                          {row.case.Title}
+                          {row.case.title}
                         </span>
                         <span className="mono mt-0.5 block text-[11px] text-faint">
-                          {row.case.ID}
-                          {row.case.Exposed ? " · exposed reference" : ""}
+                          {row.case.id}
+                          {row.case.exposed ? " · exposed reference" : ""}
                         </span>
                       </Link>
                     </td>
-                    <td className="px-4 py-3 text-xs text-muted">{row.case.Family}</td>
+                    <td className="px-4 py-3 text-xs text-muted">{row.case.family}</td>
                     <td className="px-4 py-3">
                       <Verdict value={row.pre_repair.verdict} />
                       <span className="mono mt-0.5 block text-[11px] text-faint">
