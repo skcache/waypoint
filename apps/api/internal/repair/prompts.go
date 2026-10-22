@@ -34,6 +34,11 @@ const patchSchema = `{
 func DiagnosisSystemPrompt() string          { return diagnosisSystem() }
 func DiagnosisUserPrompt(ev Evidence) string { return diagnosisUser(ev) }
 
+// PatchSystemPromptForTests exposes the static patch instructions so the
+// benchmark can assert that no case id, mutation or reference fix leaks into
+// model-visible text. It is not used by the pipeline itself.
+func PatchSystemPromptForTests() string { return patchSystem(DefaultAllowlist()) }
+
 // diagnosisSystem is fixed text: the evidence is inserted as data and the model
 // is told, in the system role, that data can never change the task.
 func diagnosisSystem() string {

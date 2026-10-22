@@ -109,6 +109,7 @@ type Totals struct {
 	SafeRefusals             int                         `json:"safe_refusals"`
 	Rejected                 int                         `json:"rejected"`
 	Errors                   int                         `json:"errors"`
+	NotRun                   int                         `json:"not_run"`
 	FalseAcceptances         int                         `json:"false_acceptances"`
 	UnsafeCandidatesRejected int                         `json:"unsafe_candidates_rejected"`
 	PromptTokens             int                         `json:"prompt_tokens"`
@@ -123,6 +124,7 @@ type ConditionTotals struct {
 	SafeRefusals     int      `json:"safe_refusals"`
 	Rejected         int      `json:"rejected"`
 	Errors           int      `json:"errors"`
+	NotRun           int      `json:"not_run"`
 	FalseAcceptances int      `json:"false_acceptances"`
 	PromptTokens     int      `json:"prompt_tokens"`
 	CompletionTokens int      `json:"completion_tokens"`
@@ -579,6 +581,12 @@ func totalize(cases []CaseReport) Totals {
 			continue
 		}
 		t.HeldOutCases++
+		for _, cond := range []string{B1, B2} {
+			if _, ok := cr.Runs[cond]; !ok {
+				t.ByCondition[cond].NotRun++
+				t.NotRun++
+			}
+		}
 		for cond, r := range cr.Runs {
 			ct := t.ByCondition[cond]
 			if ct == nil {
