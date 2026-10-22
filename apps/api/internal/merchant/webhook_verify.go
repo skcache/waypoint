@@ -13,6 +13,11 @@ import (
 // verification. The handler must reject it without touching durable state.
 var ErrUnauthenticatedWebhook = errors.New("merchant: webhook failed authenticity verification")
 
+// ErrConflictingWebhook means an authenticated delivery reused a durable event
+// id with different content (payload digest, order or capture identity). The
+// original receipt is never redefined; the conflicting delivery is rejected.
+var ErrConflictingWebhook = errors.New("merchant: webhook event id conflicts with an existing authenticated receipt")
+
 // WebhookEvent is one authenticated delivery, already parsed by a verifier.
 // Handlers must treat every field as untrusted input that only became
 // actionable because the verifier accepted the raw payload.

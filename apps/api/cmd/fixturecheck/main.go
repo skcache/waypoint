@@ -25,6 +25,7 @@ type evidenceFile struct {
 
 func main() {
 	fault := flag.String("fault", "F1", "fixture defect to exercise (F1 or F4)")
+	caseID := flag.String("case", "", "M5 benchmark case id (overrides -fault)")
 	out := flag.String("out", "", "directory for observations.json (required)")
 	dsn := flag.String("dsn", os.Getenv("TEST_DATABASE_URL"), "PostgreSQL test DSN (database name must end in _test)")
 	flag.Parse()
@@ -32,13 +33,13 @@ func main() {
 		fmt.Fprintln(os.Stderr, "usage: fixturecheck -fault F1|F4 -out <dir> [-dsn dsn]")
 		os.Exit(2)
 	}
-	if err := run(context.Background(), *fault, *out, *dsn); err != nil {
+	if err := run(context.Background(), *fault, *caseID, *out, *dsn); err != nil {
 		fmt.Fprintln(os.Stderr, "fixturecheck:", err)
 		os.Exit(1)
 	}
 }
 
-func run(ctx context.Context, fault, outDir, dsn string) error {
+func run(ctx context.Context, fault, caseID, outDir, dsn string) error {
 	h, err := replay.OpenHarness(ctx, dsn)
 	if err != nil {
 		return err
@@ -47,9 +48,16 @@ func run(ctx context.Context, fault, outDir, dsn string) error {
 	if err := h.ResetFixtureState(ctx); err != nil {
 		return err
 	}
-	run, err := replay.RunFixtureFault(ctx, h, fault)
-	if err != nil {
-		return err
+	var run replay.FixtureRun
+	var err2 error
+	if caseID != "" {
+		run, err2 = replay.RunCaseJourney(ctx, h, caseID)
+		fault = caseID
+	} else {
+		run, err2 = replay.RunFixtureFault(ctx, h, fault)
+	}
+	if err2 != nil {
+		return err2
 	}
 	obs := make([]oracle.ProviderObs, 0, len(run.Observations))
 	for _, o := range run.Observations {

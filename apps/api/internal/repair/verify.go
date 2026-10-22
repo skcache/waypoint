@@ -18,6 +18,7 @@ type Verifier struct {
 	Workspace   *Workspace
 	Runner      Runner
 	Fault       string
+	CaseID      string
 	ArtifactDir string
 	Changed     []string
 	// BaseRevision is the exact commit the candidate was applied to (resolved
@@ -88,18 +89,21 @@ func (v *Verifier) Run(ctx context.Context) Verification {
 	// 3. Trusted regressions (tests live outside the writable surface, so a
 	// candidate cannot edit them into passing).
 	testArgs := []string{"test", "-count=1", "-timeout", "240s"}
-	switch v.Fault {
-	case "F1":
+	switch {
+	case v.CaseID != "":
+		// Benchmark cases use their own trusted gate tags; the base suite is
+		// still run so a candidate cannot regress ordinary behavior.
+	case v.Fault == "F1":
 		// The fixture intentionally contains the F1 defect, so its correctness
 		// gate lives behind the f1_repair tag; pre-repair reproduction is a
 		// separate (fault_reproduction) test run against the pinned base.
 		testArgs = append(testArgs, "-tags", "f1_repair")
-	case "F2":
+	case v.Fault == "F2":
 		// M4 correctness gates live behind per-family tags: the base revision
 		// deliberately wires the defective policy/handler, and an F2 candidate
 		// must not be judged by the F3 gate (or vice versa).
 		testArgs = append(testArgs, "-tags", "m4_f2")
-	case "F3":
+	case v.Fault == "F3":
 		testArgs = append(testArgs, "-tags", "m4_f3")
 	}
 	testArgs = append(testArgs, "./internal/merchant/", "./internal/domain/")
@@ -119,8 +123,15 @@ func (v *Verifier) Run(ctx context.Context) Verification {
 	// 4a. Candidate-linked fixture run. It records ONLY provider observations.
 	// Any eval.json it may have forged is deleted before the judge runs.
 	_ = os.Remove(filepath.Join(v.ArtifactDir, "eval.json"))
+	fixtureArgs := []string{"run", "./cmd/fixturecheck"}
+	if v.CaseID != "" {
+		fixtureArgs = append(fixtureArgs, "-case", v.CaseID)
+	} else {
+		fixtureArgs = append(fixtureArgs, "-fault", v.Fault)
+	}
+	fixtureArgs = append(fixtureArgs, "-out", "/out", "-dsn", v.Runner.DSN())
 	fixture := v.Runner.Run(ctx, v.Workspace.Dir, v.ArtifactDir, 300*time.Second, testEnv,
-		"go", "run", "./cmd/fixturecheck", "-fault", v.Fault, "-out", "/out", "-dsn", v.Runner.DSN())
+		"go", fixtureArgs...)
 	fixture.Step = "fixture"
 	out.Steps = append(out.Steps, fixture)
 	if !fixture.Passed() {
@@ -131,10 +142,16 @@ func (v *Verifier) Run(ctx context.Context) Verification {
 	// so candidate code cannot run in this process, forge its output, or exit
 	// it early. It re-reads the journal itself and writes eval.json on every
 	// path.
-	judge := v.Runner.RunTrusted(ctx, v.Workspace.Dir, v.ArtifactDir, 300*time.Second, testEnv,
-		"go", "run", "./cmd/judgecheck", "-fault", v.Fault,
-		"-in", "/out/observations.json", "-out", "/out", "-dsn", v.Runner.DSN(),
+	judgeArgs := []string{"run", "./cmd/judgecheck"}
+	if v.CaseID != "" {
+		judgeArgs = append(judgeArgs, "-case", v.CaseID)
+	} else {
+		judgeArgs = append(judgeArgs, "-fault", v.Fault)
+	}
+	judgeArgs = append(judgeArgs, "-in", "/out/observations.json", "-out", "/out", "-dsn", v.Runner.DSN(),
 		"-base-revision", v.BaseRevision, "-patch-digest", v.PatchDigest)
+	judge := v.Runner.RunTrusted(ctx, v.Workspace.Dir, v.ArtifactDir, 300*time.Second, testEnv,
+		"go", judgeArgs...)
 	judge.Step = "judge"
 	out.Steps = append(out.Steps, judge)
 

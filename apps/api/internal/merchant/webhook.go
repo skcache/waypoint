@@ -47,7 +47,7 @@ func (s *Service) applyWebhookEvent(ctx context.Context, ev WebhookEvent) error 
 	if err != nil {
 		return err
 	}
-	if err := s.recordWebhookReceipt(ctx, tx, ev, orderID); err != nil {
+	if err := s.recordWebhookReceipt(ctx, tx, ev, orderID, true); err != nil {
 		return err
 	}
 
@@ -100,7 +100,7 @@ func (s *Service) legacyApplyWebhookEvent(ctx context.Context, ev WebhookEvent) 
 	if err != nil {
 		return err
 	}
-	if err := s.recordWebhookReceipt(ctx, tx, ev, orderID); err != nil {
+	if err := s.recordWebhookReceipt(ctx, tx, ev, orderID, false); err != nil {
 		return err
 	}
 	if orderID == "" {
@@ -142,18 +142,38 @@ func (s *Service) webhookOrder(ctx context.Context, tx pgx.Tx, providerOrderID s
 	return id, status, nil
 }
 
-func (s *Service) recordWebhookReceipt(ctx context.Context, tx pgx.Tx, ev WebhookEvent, orderID string) error {
+func (s *Service) recordWebhookReceipt(ctx context.Context, tx pgx.Tx, ev WebhookEvent, orderID string, strict bool) error {
 	digest := sha256.Sum256(ev.Raw)
 	var id string
-	err := tx.QueryRow(ctx, `
+	query := `
 		INSERT INTO merchant_webhook_events
 			(event_id, event_type, order_id, provider_order_id, provider_capture_id, payload_digest, authenticated, tier)
 		VALUES ($1, $2, NULLIF($3, '')::uuid, $4, $5, $6, true, $7)
 		ON CONFLICT (event_id) DO UPDATE
 			SET deliveries = merchant_webhook_events.deliveries + 1,
 			    last_received_at = now()
-		RETURNING event_id`,
+		RETURNING event_id`
+	if strict {
+		// A redelivery may only bump the counter. If the same event id arrives
+		// with different bytes, order or capture identity, the original
+		// authenticated receipt must not be redefined.
+		query = `
+		INSERT INTO merchant_webhook_events
+			(event_id, event_type, order_id, provider_order_id, provider_capture_id, payload_digest, authenticated, tier)
+		VALUES ($1, $2, NULLIF($3, '')::uuid, $4, $5, $6, true, $7)
+		ON CONFLICT (event_id) DO UPDATE
+			SET deliveries = merchant_webhook_events.deliveries + 1,
+			    last_received_at = now()
+			WHERE merchant_webhook_events.payload_digest = EXCLUDED.payload_digest
+			  AND merchant_webhook_events.provider_capture_id IS NOT DISTINCT FROM EXCLUDED.provider_capture_id
+			  AND merchant_webhook_events.order_id IS NOT DISTINCT FROM EXCLUDED.order_id
+		RETURNING event_id`
+	}
+	err := tx.QueryRow(ctx, query,
 		ev.ID, ev.Type, orderID, ev.ProviderOrderID, ev.CaptureID, hex.EncodeToString(digest[:]), s.evidenceTier()).Scan(&id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrConflictingWebhook
+	}
 	if err != nil {
 		return fmt.Errorf("merchant: record webhook receipt: %w", err)
 	}

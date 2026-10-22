@@ -144,6 +144,7 @@ type Report struct {
 	SchemaVersion  int       `json:"schema_version"`
 	IncidentID     string    `json:"incident_id"`
 	Fault          string    `json:"fault_family"`
+	CaseID         string    `json:"case_id,omitempty"`
 	Mode           string    `json:"mode"`
 	EvidenceTier   string    `json:"evidence_tier"`
 	BaseRevision   string    `json:"base_revision"`

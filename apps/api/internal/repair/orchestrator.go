@@ -14,9 +14,12 @@ import (
 
 // Options configures one bounded repair run.
 type Options struct {
-	RepoRoot         string
-	BaseRef          string
-	Fault            string
+	RepoRoot string
+	BaseRef  string
+	Fault    string
+	// CaseID selects an M5 benchmark journey in the trusted verifier. It never
+	// reaches the model prompt; the report may name it for human review.
+	CaseID           string
 	OutDir           string
 	Mode             string // "oracle" (feedback loop) or "baseline" (single shot)
 	MaxAttempts      int
@@ -57,6 +60,7 @@ func Run(ctx context.Context, opts Options) *Report {
 		SchemaVersion:         1,
 		IncidentID:            opts.IncidentID,
 		Fault:                 opts.Fault,
+		CaseID:                opts.CaseID,
 		Mode:                  opts.Mode,
 		EvidenceTier:          "F",
 		BaseRevision:          opts.Revision,
@@ -187,7 +191,7 @@ func Run(ctx context.Context, opts Options) *Report {
 				_ = os.WriteFile(filepath.Join(dir, "patch.diff"), []byte(diff), 0o600)
 			}
 			v := (&Verifier{
-				Workspace: ws, Runner: runner, Fault: opts.Fault, ArtifactDir: dir,
+				Workspace: ws, Runner: runner, Fault: opts.Fault, CaseID: opts.CaseID, ArtifactDir: dir,
 				Changed: changed, BaseRevision: opts.Revision, PatchDigest: a.PatchDigest,
 			}).Run(ctx)
 			a.Steps = v.Steps
@@ -420,6 +424,7 @@ func NotConfigured(opts Options, cause error) *Report {
 		SchemaVersion:         1,
 		IncidentID:            opts.IncidentID,
 		Fault:                 opts.Fault,
+		CaseID:                opts.CaseID,
 		Mode:                  opts.Mode,
 		EvidenceTier:          "F",
 		BaseRevision:          opts.Revision,

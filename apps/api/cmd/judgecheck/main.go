@@ -40,6 +40,7 @@ type evalOut struct {
 
 func main() {
 	fault := flag.String("fault", "F1", "fixture defect that was exercised")
+	caseID := flag.String("case", "", "M5 benchmark case id (overrides -fault acceptance)")
 	in := flag.String("in", "", "observations.json produced by the fixture run (required)")
 	out := flag.String("out", "", "directory for eval.json and the proof bundle (required)")
 	dsn := flag.String("dsn", os.Getenv("TEST_DATABASE_URL"), "PostgreSQL test DSN")
@@ -50,13 +51,29 @@ func main() {
 		fmt.Fprintln(os.Stderr, "usage: judgecheck -fault F1|F4 -in <observations.json> -out <dir> [-dsn dsn] [-base-revision sha] [-patch-digest sha256:…]")
 		os.Exit(2)
 	}
-	if err := run(context.Background(), *fault, *in, *out, *dsn, *baseRevision, *patchDigest); err != nil {
+	if err := run(context.Background(), *fault, *caseID, *in, *out, *dsn, *baseRevision, *patchDigest); err != nil {
 		fmt.Fprintln(os.Stderr, "judgecheck:", err)
 		os.Exit(1)
 	}
 }
 
-func run(ctx context.Context, fault, in, outDir, dsn, baseRevision, patchDigest string) error {
+type casePolicy struct {
+	Mode         string // verified | refused
+	Status       string // required final order status
+	CaptureOp    string // none | unknown | any
+	Fulfillments int    // -1 = not checked
+}
+
+var casePolicies = map[string]casePolicy{
+	"H1-identity-rewrite":    {"verified", "CAPTURED_VERIFIED", "any", -1},
+	"H2-webhook-conflict":    {"verified", "CAPTURED_VERIFIED", "any", 1},
+	"H3-currency-mismatch":   {"refused", "CAPTURE_OUTCOME_UNKNOWN", "unknown", -1},
+	"H4-pending-capture":     {"refused", "CAPTURE_OUTCOME_UNKNOWN", "unknown", -1},
+	"H5-approval-bypass":     {"refused", "ORDER_CREATED", "none", -1},
+	"H6-ambiguous-reconcile": {"refused", "CAPTURE_OUTCOME_UNKNOWN", "unknown", -1},
+}
+
+func run(ctx context.Context, fault, caseID, in, outDir, dsn, baseRevision, patchDigest string) error {
 	if err := os.MkdirAll(outDir, 0o700); err != nil {
 		return err
 	}
@@ -142,6 +159,10 @@ func run(ctx context.Context, fault, in, outDir, dsn, baseRevision, patchDigest 
 	claimed := claimCaptureID(local.Operations)
 	provider := providerCaptureID(of.Observations)
 	status := statusOf(ev)
+	policy, hasPolicy := casePolicies[caseID]
+	if caseID != "" && !hasPolicy {
+		return write(ev, res, false, "unknown benchmark case policy: "+caseID, of.OrderID, claimed, provider)
+	}
 	fulfillments := 0
 	for _, f := range local.Fulfillments {
 		if f.OrderID == of.OrderID {
@@ -151,6 +172,23 @@ func run(ctx context.Context, fault, in, outDir, dsn, baseRevision, patchDigest 
 	i6 := invariantStatus(res, "I6")
 	reason := ""
 	accepted := false
+	if hasPolicy && policy.Mode == "refused" {
+		opState, opCount := captureOpState(local.Operations)
+		switch {
+		case status != policy.Status:
+			reason = fmt.Sprintf("safe-refusal case ended in %s, want %s", status, policy.Status)
+		case policy.CaptureOp == "none" && opCount != 0:
+			reason = fmt.Sprintf("safe-refusal case created %d capture operations, want none", opCount)
+		case policy.CaptureOp == "unknown" && (opCount != 1 || opState != "UNKNOWN"):
+			reason = fmt.Sprintf("safe-refusal case left capture op state %s (%d ops), want exactly one UNKNOWN", opState, opCount)
+		case res.Verdict == oracle.VerdictUnsafe:
+			reason = "safe-refusal case is still UNSAFE; counterexample: " + firstCounterexample(res)
+		default:
+			accepted = true
+			reason = "the defect was refused safely: no unverified capture was claimed and the unresolved state is explicit"
+		}
+		return write(ev, res, accepted, reason, of.OrderID, claimed, provider)
+	}
 	switch {
 	case len(local.Orders) == 0:
 		reason = "the durable journal contains no order for the fixture run"
@@ -164,6 +202,8 @@ func run(ctx context.Context, fault, in, outDir, dsn, baseRevision, patchDigest 
 		reason = "no applied provider capture observation carries a capture id"
 	case claimed != provider:
 		reason = fmt.Sprintf("the journal certifies capture %q but the provider issued %q", claimed, provider)
+	case hasPolicy && policy.Fulfillments >= 0 && fulfillments != policy.Fulfillments:
+		reason = fmt.Sprintf("the merchant recorded %d fulfillment effects, want exactly %d", fulfillments, policy.Fulfillments)
 	case fault == "F3" && fulfillments != 1:
 		reason = fmt.Sprintf("the merchant recorded %d fulfillment effects for the payment, want exactly 1", fulfillments)
 	default:
@@ -179,6 +219,19 @@ func run(ctx context.Context, fault, in, outDir, dsn, baseRevision, patchDigest 
 		}
 	}
 	return write(ev, res, accepted, reason, of.OrderID, claimed, provider)
+}
+
+func captureOpState(ops []oracle.LocalOp) (string, int) {
+	state := ""
+	count := 0
+	for _, op := range ops {
+		if op.Type != "CAPTURE" {
+			continue
+		}
+		count++
+		state = op.Status
+	}
+	return state, count
 }
 
 func statusOf(ev *oracle.Evidence) string {

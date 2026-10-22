@@ -31,6 +31,9 @@ const (
 	FaultDropResponseAfterMutation FaultMode = "drop_response_after_mutation"
 	// FaultDefiniteRefusal: the provider refuses without processing (4xx).
 	FaultDefiniteRefusal FaultMode = "definite_refusal"
+	// FaultAmbiguousError: the provider refuses to process but the error is
+	// ambiguous (HTTP 5xx), so the merchant must not treat it as definite.
+	FaultAmbiguousError FaultMode = "ambiguous_error"
 )
 
 // FaultSchedule selects faults per provider method.
@@ -99,6 +102,9 @@ type ScriptedProvider struct {
 	// that does not match the authorized order (the I6 mismatch family).
 	CaptureAmountOverride   string
 	CaptureCurrencyOverride string
+	// CaptureStatusOverride models an asynchronous capture state (for example
+	// PENDING) in the response while the capture effect exists.
+	CaptureStatusOverride string
 
 	observations []Observation
 	seq          int
@@ -331,6 +337,9 @@ func (p *ScriptedProvider) CaptureOrder(ctx context.Context, orderID, requestID 
 		p.byCapture[requestID] = capID
 		po.captureID = capID
 		po.captureState = paypal.CaptureStatusCompleted
+		if p.CaptureStatusOverride != "" {
+			po.captureState = p.CaptureStatusOverride
+		}
 		po.captureAmount = po.amountValue
 		po.captureCurrency = po.currency
 		if p.CaptureAmountOverride != "" {
@@ -363,6 +372,10 @@ func (p *ScriptedProvider) CaptureOrder(ctx context.Context, orderID, requestID 
 	}
 
 	switch p.schedule.Capture {
+	case FaultAmbiguousError:
+		obs.ResponseDropped = false
+		p.record(obs)
+		return nil, &paypal.APIError{StatusCode: 503, Name: "SERVICE_UNAVAILABLE"}
 	case FaultDropResponseAfterMutation:
 		obs.ResponseDropped = true
 		p.record(obs)
