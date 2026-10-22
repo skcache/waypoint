@@ -50,10 +50,10 @@ func TestOracleScopeGuard(t *testing.T) {
 	}
 }
 
-// The frozen registry must always contain exactly I1–I12 — a missing or
+// The frozen registry must always contain exactly I1–I14 — a missing or
 // reordered invariant is a policy regression, not a test tweak.
 func TestInvariantRegistryIsComplete(t *testing.T) {
-	want := []string{"I1", "I2", "I3", "I4", "I5", "I6", "I7", "I8", "I9", "I10", "I11", "I12"}
+	want := []string{"I1", "I2", "I3", "I4", "I5", "I6", "I7", "I8", "I9", "I10", "I11", "I12", "I13", "I14"}
 	if len(oracle.Invariants) != len(want) {
 		t.Fatalf("registry has %d invariants, want %d", len(oracle.Invariants), len(want))
 	}

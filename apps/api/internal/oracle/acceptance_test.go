@@ -104,9 +104,9 @@ func TestOracleSuiteAgainstDeclaredExpectations(t *testing.T) {
 				t.Fatalf("verdict = %s, scenario declares %s", result.Verdict, sc.ExpectedVerdict)
 			}
 
-			// Every result lists all twelve invariants — NA, never invented.
-			if len(result.Invariants) != 12 {
-				t.Fatalf("invariant count = %d, want 12", len(result.Invariants))
+			// Every result lists all fourteen invariants — NA, never invented.
+			if len(result.Invariants) != 14 {
+				t.Fatalf("invariant count = %d, want 14", len(result.Invariants))
 			}
 			for _, inv := range result.Invariants {
 				switch inv.Status {
@@ -178,7 +178,7 @@ func TestOracleSuiteAgainstDeclaredExpectations(t *testing.T) {
 			if back.SchemaVersion != oracle.BundleSchemaVersion || back.Verdict != result.Verdict {
 				t.Fatalf("bundle mismatch: schema=%d verdict=%s", back.SchemaVersion, back.Verdict)
 			}
-			if len(back.Invariants) != 12 || back.Applied {
+			if len(back.Invariants) != 14 || back.Applied {
 				t.Fatalf("bundle invariants=%d applied=%v", len(back.Invariants), back.Applied)
 			}
 			if back.FixtureRevision == "" || back.FixtureRevision == "unknown" {

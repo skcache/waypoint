@@ -85,3 +85,73 @@ func TestPipelineRepairsF2WithABoundaryDouble(t *testing.T) {
 		t.Fatalf("eval = %+v, want oracle VERIFIED", att.Eval)
 	}
 }
+
+func diagnosisReplyF3() string {
+	d := map[string]any{
+		"root_cause":          "the legacy webhook handler keys fulfillment by event id and writes event status onto the order",
+		"mechanism":           "every distinct event id describing the same capture inserts a separate fulfillment effect, and a late ORDER.APPROVED event overwrites CAPTURED_VERIFIED, so redelivery and reordering change financial state",
+		"suspected_files":     []string{"apps/api/internal/merchant/webhook.go"},
+		"supporting_evidence": []string{"EV-1", "EV-2"},
+		"invariants_at_risk":  []string{"I8", "I13", "I14"},
+		"proposed_fix":        "use one stable fulfillment key per order and never mutate payment state from an event payload",
+		"confidence_reasons":  []string{"the journal shows two fulfillment rows and a verified capture rolled back to APPROVED after webhook delivery"},
+		"uncertainties":       []string{"the verifier is a trusted fixture verifier (tier F), not a PayPal signature check"},
+	}
+	data, _ := json.Marshal(d)
+	return string(data)
+}
+
+func fixF3PatchReply() string {
+	oldStatus := "if _, err := tx.Exec(ctx, `UPDATE merchant_orders SET status = $2, updated_at = now() WHERE id = $1::uuid`, orderID, StatusApproved); err != nil {\n\t\t\treturn err\n\t\t}"
+	p := map[string]any{
+		"summary": "deduplicate fulfillment by order and stop event-driven status writes",
+		"edits": []map[string]any{
+			{
+				"path":      "apps/api/internal/merchant/webhook.go",
+				"old_text":  "VALUES ($1::uuid, $2, $2, $3)",
+				"new_text":  "VALUES ($1::uuid, 'FULFILL', $2, $3)",
+				"rationale": "one stable effect key per order makes several events for one capture produce one fulfillment",
+			},
+			{
+				"path":      "apps/api/internal/merchant/webhook.go",
+				"old_text":  oldStatus,
+				"new_text":  "// Events never advance payment state; the provider read is authoritative.\n\t\t_ = orderID",
+				"rationale": "an older approval event must not rewind a verified capture",
+			},
+		},
+	}
+	data, _ := json.Marshal(p)
+	return string(data)
+}
+
+// TestPipelineRepairsF3WithABoundaryDouble runs the webhook/fulfillment family
+// through the pipeline. Duplicate, second-id, late and concurrent deliveries
+// stay active in the candidate worktree; acceptance requires one fulfillment
+// effect on a still-verified order.
+func TestPipelineRepairsF3WithABoundaryDouble(t *testing.T) {
+	_, _, ev := pipelineFixture(t, "F3")
+	root := repoRoot(t)
+	before, err := repair.RepoStatus(root)
+	if err != nil {
+		t.Fatalf("status: %v", err)
+	}
+	allow := repair.AllowlistForFault("F3")
+	out := tempOut(t)
+	model := &scriptedModel{replies: []string{diagnosisReplyF3(), fixF3PatchReply()}}
+	rep := repair.Run(context.Background(), repair.Options{
+		RepoRoot: root, BaseRef: "HEAD", Fault: "F3", OutDir: out, Runner: sharedSandbox(t),
+		Mode: "oracle", MaxAttempts: 1, Model: model, Evidence: ev,
+		Allow: allow, RepoStatusBefore: before,
+		Revision: "test-revision", RevisionSource: "test", IncidentID: ev.IncidentID,
+	})
+	if rep.Status != repair.StatusAccepted {
+		t.Fatalf("status = %s, want ACCEPTED; attempts=%d last=%+v", rep.Status, len(rep.Attempts), lastAttempt(rep))
+	}
+	att := rep.Attempts[0]
+	if !strings.Contains(att.Diff, "'FULFILL'") {
+		t.Fatalf("diff does not show the stable effect key:\n%s", att.Diff)
+	}
+	if att.Eval == nil || att.Eval.OracleVerdict != string(oracle.VerdictVerified) {
+		t.Fatalf("eval = %+v, want oracle VERIFIED", att.Eval)
+	}
+}

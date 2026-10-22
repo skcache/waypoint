@@ -57,6 +57,10 @@ type Service struct {
 	// an unreadable 2xx response as "may have applied"; the fixture can wire
 	// the legacy policy to reproduce the F2 integration defect.
 	ambiguity ambiguityPolicy
+	// webhooks verifies provider event authenticity; applyWebhook is the
+	// selected event handler (canonical, or the fixture's legacy defect).
+	webhooks     WebhookVerifier
+	applyWebhook func(context.Context, WebhookEvent) error
 	// providerTier labels the provenance of provider-derived journal events.
 	// The real Sandbox client is tier R; when a scripted fixture provider is
 	// wired (the replay harness), the tier is F so the journal never claims
@@ -71,7 +75,7 @@ func NewService(store *Store, api OrdersAPI, fault, incidentDir string) *Service
 	if fault == "" {
 		fault = FaultNone
 	}
-	return &Service{
+	s := &Service{
 		store:             store,
 		api:               api,
 		fault:             fault,
@@ -82,7 +86,16 @@ func NewService(store *Store, api OrdersAPI, fault, incidentDir string) *Service
 		ambiguity:         canonicalAmbiguity{},
 		providerTier:      TierReal,
 	}
+	s.applyWebhook = s.applyWebhookEvent
+	return s
 }
+
+// SetWebhookVerifier installs the authenticity boundary used by HandleWebhook.
+func (s *Service) SetWebhookVerifier(v WebhookVerifier) { s.webhooks = v }
+
+// UseLegacyWebhook wires the historical event handler. Like UseLegacyAmbiguity
+// it exists only so the fixture can reproduce a seeded application defect.
+func (s *Service) UseLegacyWebhook() { s.applyWebhook = s.legacyApplyWebhookEvent }
 
 // UseLegacyAmbiguity wires the historical (defective) capture-ambiguity
 // policy. It exists so the fixture can reproduce the F2 defect; production

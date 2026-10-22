@@ -3,7 +3,7 @@
 // fixture and its provider evidence.
 //
 // Trust boundary (normative): the AI component is never the authority deciding
-// financial correctness. This package evaluates invariants I1–I12 as ordinary
+// financial correctness. This package evaluates invariants I1–I14 as ordinary
 // deterministic Go code over durable evidence only:
 //
 //   - local PostgreSQL journal rows, read with this package's OWN SQL
@@ -83,6 +83,36 @@ type LocalOp struct {
 	UpdatedAt          time.Time
 }
 
+// LocalFulfillment mirrors one merchant_fulfillment_effects row: an actual
+// business effect (not a status claim). The oracle reads these itself.
+type LocalFulfillment struct {
+	ID        int64
+	OrderID   string
+	EffectKey string
+	EventID   string
+	Tier      string
+	CreatedAt time.Time
+}
+
+// LocalWebhookEvent mirrors one durable webhook receipt. Authenticated is the
+// verifier's decision recorded at receipt time; Tier says which verifier
+// (R = real signed provider event, F = trusted fixture event).
+type LocalWebhookEvent struct {
+	ID                int64
+	EventID           string
+	EventType         string
+	OrderID           string
+	ProviderOrderID   string
+	ProviderCaptureID string
+	PayloadDigest     string
+	Authenticated     bool
+	Processed         bool
+	Deliveries        int
+	Tier              string
+	FirstReceivedAt   time.Time
+	LastReceivedAt    time.Time
+}
+
 // LocalEvent mirrors one append-only merchant_events row.
 type LocalEvent struct {
 	ID        int64
@@ -145,14 +175,16 @@ type ScenarioMeta struct {
 // Evidence is the complete input to evaluation. Constructed by the harness
 // (replay) plus this package's own SQL loader; never by fixture service code.
 type Evidence struct {
-	Scenario   ScenarioMeta
-	Candidate  string
-	Orders     []LocalOrder
-	Operations []LocalOp
-	Events     []LocalEvent
-	Provider   []ProviderObs
-	Faults     []FaultEvent
-	Facts      map[string]string
+	Scenario      ScenarioMeta
+	Candidate     string
+	Orders        []LocalOrder
+	Operations    []LocalOp
+	Events        []LocalEvent
+	Fulfillments  []LocalFulfillment
+	WebhookEvents []LocalWebhookEvent
+	Provider      []ProviderObs
+	Faults        []FaultEvent
+	Facts         map[string]string
 }
 
 // order returns the order with the given id.

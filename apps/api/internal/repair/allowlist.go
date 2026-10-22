@@ -48,7 +48,6 @@ func AllowlistForFault(fault string) Allowlist {
 		a.Existing["ambiguity.go"] = true
 	case "F3":
 		a.Existing["webhook.go"] = true
-		a.Existing["webhook_store.go"] = true
 	}
 	return a
 }
@@ -59,11 +58,12 @@ var newFilePattern = regexp.MustCompile(`^[a-z][a-z0-9_]*\.go$`)
 // trusted pieces the verifier depends on or the fixture's durable identity
 // logic.
 var reserved = map[string]bool{
-	"store.go":        true,
-	"types.go":        true,
-	"incident.go":     true,
-	"store_test.go":   true,
-	"service_test.go": true,
+	"store.go":          true,
+	"types.go":          true,
+	"incident.go":       true,
+	"store_test.go":     true,
+	"service_test.go":   true,
+	"webhook_verify.go": true,
 }
 
 // Validate checks a candidate path BEFORE anything is written.

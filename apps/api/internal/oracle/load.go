@@ -17,9 +17,11 @@ import (
 // LocalEvidence is the durable slice of Evidence, read straight from
 // PostgreSQL by the oracle.
 type LocalEvidence struct {
-	Orders     []LocalOrder
-	Operations []LocalOp
-	Events     []LocalEvent
+	Orders        []LocalOrder
+	Operations    []LocalOp
+	Events        []LocalEvent
+	Fulfillments  []LocalFulfillment
+	WebhookEvents []LocalWebhookEvent
 }
 
 // LoadLocal reads merchant_orders, merchant_operations and merchant_events
@@ -99,6 +101,48 @@ func LoadLocal(ctx context.Context, pool *pgxpool.Pool, orderIDs []string) (Loca
 		}
 		e.Detail = string(detail)
 		out.Events = append(out.Events, e)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return LocalEvidence{}, err
+	}
+
+	rows, err = tx.Query(ctx, `
+		SELECT id, order_id::text, effect_key, event_id, tier, created_at
+		  FROM merchant_fulfillment_effects WHERE order_id = ANY($1::uuid[]) ORDER BY id`, orderIDs)
+	if err != nil {
+		return LocalEvidence{}, fmt.Errorf("oracle: read fulfillments: %w", err)
+	}
+	for rows.Next() {
+		var f LocalFulfillment
+		if err := rows.Scan(&f.ID, &f.OrderID, &f.EffectKey, &f.EventID, &f.Tier, &f.CreatedAt); err != nil {
+			rows.Close()
+			return LocalEvidence{}, err
+		}
+		out.Fulfillments = append(out.Fulfillments, f)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return LocalEvidence{}, err
+	}
+
+	rows, err = tx.Query(ctx, `
+		SELECT id, event_id, event_type, coalesce(order_id::text, ''), coalesce(provider_order_id, ''),
+		       coalesce(provider_capture_id, ''), payload_digest, authenticated, processed, deliveries,
+		       tier, first_received_at, last_received_at
+		  FROM merchant_webhook_events WHERE order_id = ANY($1::uuid[]) ORDER BY id`, orderIDs)
+	if err != nil {
+		return LocalEvidence{}, fmt.Errorf("oracle: read webhook receipts: %w", err)
+	}
+	for rows.Next() {
+		var w LocalWebhookEvent
+		if err := rows.Scan(&w.ID, &w.EventID, &w.EventType, &w.OrderID, &w.ProviderOrderID,
+			&w.ProviderCaptureID, &w.PayloadDigest, &w.Authenticated, &w.Processed, &w.Deliveries,
+			&w.Tier, &w.FirstReceivedAt, &w.LastReceivedAt); err != nil {
+			rows.Close()
+			return LocalEvidence{}, err
+		}
+		out.WebhookEvents = append(out.WebhookEvents, w)
 	}
 	rows.Close()
 	if err := rows.Err(); err != nil {

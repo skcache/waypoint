@@ -37,8 +37,11 @@ type FixtureRun struct {
 // provider response is dropped: the only defect under test is the fixture's
 // own code path, which is exactly what a candidate patch changes.
 func RunFixtureFault(ctx context.Context, h *Harness, fault string) (FixtureRun, error) {
-	if fault == merchant.FaultF2 {
+	switch fault {
+	case merchant.FaultF2:
 		return runF2(ctx, h)
+	case merchant.FaultF3:
+		return runF3(ctx, h)
 	}
 	provider := NewScriptedProvider(h.Pool, FaultSchedule{})
 	svc := merchant.NewService(h.Store, provider, fault, "")

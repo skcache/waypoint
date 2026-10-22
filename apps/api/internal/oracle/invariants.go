@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -58,7 +59,7 @@ func parseAmountExact(s string) (int64, bool) {
 	return major*100 + minor, true
 }
 
-// Invariants is the frozen I1–I12 registry, in order.
+// Invariants is the frozen I1–I14 registry, in order.
 var Invariants = []invariant{
 	{ID: "I1", Title: "Integer minor units with explicit currency; no floating-point amounts", Check: checkI1},
 	{ID: "I2", Title: "Captured amount/currency bound to the server-side order", Check: checkI2},
@@ -72,6 +73,8 @@ var Invariants = []invariant{
 	{ID: "I10", Title: "Refund success claims require a verified refund resource", Check: checkI10},
 	{ID: "I11", Title: "Unsafe or inconclusive verification never auto-applies", Check: checkI11},
 	{ID: "I12", Title: "Evidence provenance is explicit (R/F/S)", Check: checkI12},
+	{ID: "I13", Title: "At most one fulfillment effect per legitimate payment", Check: checkI13},
+	{ID: "I14", Title: "Fulfillment requires authenticated, verified capture evidence", Check: checkI14},
 }
 
 // RunInvariants runs every invariant against the evidence. Combining the
@@ -991,4 +994,107 @@ func captureIDs(list []ProviderObs) []string {
 // provider refusal (or a definitive non-effect).
 func (o ProviderObs) DroppedOrRefused() bool {
 	return o.DefiniteRefusal && !o.ResponseDropped && !o.Applied
+}
+
+// I13: one legitimate payment may produce at most one fulfillment effect. The
+// count comes from the durable effects table, not from a status claim or an
+// API response, so duplicate webhook delivery and duplicate event ids for the
+// same capture are visible here even when the merchant returns 200.
+func checkI13(ev *Evidence) InvariantResult {
+	if len(ev.Fulfillments) == 0 {
+		return result(StatusNotApplicable, "no fulfillment effects in evidence")
+	}
+	byOrder := map[string][]LocalFulfillment{}
+	for _, f := range ev.Fulfillments {
+		byOrder[f.OrderID] = append(byOrder[f.OrderID], f)
+	}
+	orderIDs := make([]string, 0, len(byOrder))
+	for id := range byOrder {
+		orderIDs = append(orderIDs, id)
+	}
+	sort.Strings(orderIDs)
+	for _, id := range orderIDs {
+		list := byOrder[id]
+		if len(list) > 1 {
+			keys := make([]string, 0, len(list))
+			for _, f := range list {
+				keys = append(keys, f.EffectKey+" ("+f.EventID+")")
+			}
+			return InvariantResult{
+				Status:  StatusFail,
+				Summary: fmt.Sprintf("the merchant recorded %d fulfillment effects for one payment", len(list)),
+				Counterexample: map[string]any{
+					"order_id": id, "effect_count": len(list), "effects": keys,
+				},
+			}
+		}
+	}
+	return result(StatusPass, "at most one fulfillment effect per payment")
+}
+
+// I14: a fulfillment effect is authorized only by an authenticated event that
+// names the capture the merchant independently verified. Tier F here means a
+// trusted fixture event checked by the fixture verifier — not a PayPal
+// signature — and the oracle never upgrades that provenance.
+func checkI14(ev *Evidence) InvariantResult {
+	if len(ev.Fulfillments) == 0 {
+		return result(StatusNotApplicable, "no fulfillment effects in evidence")
+	}
+	for _, f := range ev.Fulfillments {
+		o := ev.order(f.OrderID)
+		if o == nil {
+			return InvariantResult{
+				Status:         StatusFail,
+				Summary:        "a fulfillment effect references an order that does not exist locally",
+				Counterexample: map[string]any{"order_id": f.OrderID, "event_id": f.EventID},
+			}
+		}
+		if o.Status != "CAPTURED_VERIFIED" {
+			return InvariantResult{
+				Status:         StatusFail,
+				Summary:        "a fulfillment effect exists for an order that is not CAPTURED_VERIFIED",
+				Counterexample: map[string]any{"order_id": f.OrderID, "final_status": o.Status, "event_id": f.EventID},
+			}
+		}
+		var verified *LocalOp
+		for _, op := range ev.captureOps(f.OrderID) {
+			if op.Status == "SUCCEEDED" && op.ProviderCaptureID != "" {
+				cp := op
+				verified = &cp
+				break
+			}
+		}
+		if verified == nil {
+			return InvariantResult{
+				Status:         StatusFail,
+				Summary:        "a fulfillment effect has no successful, capture-identified operation behind it",
+				Counterexample: map[string]any{"order_id": f.OrderID, "event_id": f.EventID},
+			}
+		}
+		backed := false
+		for _, w := range ev.WebhookEvents {
+			if w.EventID == f.EventID && w.Authenticated && w.ProviderCaptureID == verified.ProviderCaptureID {
+				backed = true
+				break
+			}
+		}
+		if !backed {
+			return InvariantResult{
+				Status:  StatusFail,
+				Summary: "a fulfillment effect is not backed by an authenticated event naming the verified capture",
+				Counterexample: map[string]any{
+					"order_id": f.OrderID, "event_id": f.EventID,
+					"verified_capture_id": verified.ProviderCaptureID,
+				},
+			}
+		}
+		if f.Tier != "R" && f.Tier != "F" && f.Tier != "S" {
+			return InvariantResult{
+				Status:         StatusFail,
+				Summary:        "a fulfillment effect carries no explicit evidence tier",
+				Counterexample: map[string]any{"order_id": f.OrderID, "tier": f.Tier},
+			}
+		}
+	}
+	return result(StatusPass, "every fulfillment effect is backed by an authenticated event naming the verified capture")
 }

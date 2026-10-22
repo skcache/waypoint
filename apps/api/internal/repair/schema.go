@@ -55,7 +55,7 @@ func decodeStrict(text string, target any) error {
 
 var knownInvariants = map[string]bool{
 	"I1": true, "I2": true, "I3": true, "I4": true, "I5": true, "I6": true,
-	"I7": true, "I8": true, "I9": true, "I10": true, "I11": true, "I12": true,
+	"I7": true, "I8": true, "I9": true, "I10": true, "I11": true, "I12": true, "I13": true, "I14": true,
 }
 
 // ParseDiagnosis validates the investigator's structured output against the

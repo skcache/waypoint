@@ -129,17 +129,25 @@ func run(ctx context.Context, fault, in, outDir, dsn, baseRevision, patchDigest 
 			Family: fault, Description: "checkout → approval → capture under the Docker sandbox",
 			EvidenceTier: "F",
 		},
-		Candidate:  "candidate",
-		Orders:     local.Orders,
-		Operations: local.Operations,
-		Events:     local.Events,
-		Provider:   of.Observations,
+		Candidate:     "candidate",
+		Orders:        local.Orders,
+		Operations:    local.Operations,
+		Events:        local.Events,
+		Fulfillments:  local.Fulfillments,
+		WebhookEvents: local.WebhookEvents,
+		Provider:      of.Observations,
 	}
 	res := oracle.Evaluate(ev)
 
 	claimed := claimCaptureID(local.Operations)
 	provider := providerCaptureID(of.Observations)
 	status := statusOf(ev)
+	fulfillments := 0
+	for _, f := range local.Fulfillments {
+		if f.OrderID == of.OrderID {
+			fulfillments++
+		}
+	}
 	i6 := invariantStatus(res, "I6")
 	reason := ""
 	accepted := false
@@ -156,9 +164,14 @@ func run(ctx context.Context, fault, in, outDir, dsn, baseRevision, patchDigest 
 		reason = "no applied provider capture observation carries a capture id"
 	case claimed != provider:
 		reason = fmt.Sprintf("the journal certifies capture %q but the provider issued %q", claimed, provider)
+	case fault == "F3" && fulfillments != 1:
+		reason = fmt.Sprintf("the merchant recorded %d fulfillment effects for the payment, want exactly 1", fulfillments)
 	default:
 		accepted = true
 		reason = "provider-issued capture identity, amount, currency and terminal status match the journal; the oracle verified the tested scenario"
+		if fault == "F3" {
+			reason = "exactly one fulfillment effect is backed by an authenticated capture event; the oracle verified the tested scenario"
+		}
 	}
 	if !accepted {
 		if cp := firstCounterexample(res); cp != "" {
