@@ -454,6 +454,25 @@ func checkI5(ev *Evidence) InvariantResult {
 			}
 		}
 	}
+	// (c2) an operational error that neither applied the mutation nor refused
+	// it definitively (for example a 503 with no provider-side effect) is
+	// ambiguous. Closing that attempt as REJECTED without provider evidence of
+	// a refusal is the same violation as (c), reached from the opposite side.
+	for _, obs := range ev.Provider {
+		if obs.Method != "capture" || obs.Applied || obs.ResponseDropped || obs.DefiniteRefusal {
+			continue
+		}
+		if op := ev.opByRequest(obs.RequestID); op != nil && op.Status == "REJECTED" {
+			return InvariantResult{
+				Status:  StatusFail,
+				Summary: "an ambiguous provider error was locally resolved as REJECTED with no definite provider refusal",
+				Counterexample: map[string]any{
+					"request_id": obs.RequestID, "operation_id": op.ID, "provider_status": obs.OrderStatus,
+				},
+			}
+		}
+	}
+
 	// (d) no definite-failure claim may contradict applied provider evidence.
 	for _, obs := range ev.Provider {
 		if obs.Method != "capture" || !obs.Applied {
