@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "incident_id": "M5-INC-H3-currency-mismatch",
+  "fault_family": "benchmark",
+  "case_id": "H3-currency-mismatch",
+  "mode": "oracle",
+  "evidence_tier": "F",
+  "base_revision": "a621f13702b3ac3bea995b1dea5646b265acd822",
+  "revision_source": "bench-mutation",
+  "started_at": "2026-10-22T18:17:40.314968Z",
+  "finished_at": "2026-10-22T18:17:40.404156Z",
+  "status": "ERROR",
+  "error": "the model call failed: llm: REJECTED (HTTP 404): the provider rejected the request",
+  "attempts": null,
+  "final_ladder": {
+    "diagnosis_produced": false,
+    "patch_generated": false,
+    "patch_applied": false,
+    "build_passed": false,
+    "tests_passed": false,
+    "accepted_for_human_review": false
+  },
+  "model_calls": [
+    {
+      "purpose": "",
+      "model": "minimax/minimax-m3.1-flash:free",
+      "latency_ms": 0,
+      "prompt_bytes": 0,
+      "response_bytes": 0,
+      "usage_reported": false
+    }
+  ],
+  "usage_reported": false,
+  "applied_to_developer_tree": false,
+  "deployed": false,
+  "human_approval_required": true,
+  "limitations": [
+    "All provider interaction in this run is deterministic scripted-fixture instrumentation (tier F). No real PayPal Sandbox transaction was executed by the repair pipeline.",
+    "The verifier judges behavior, not intent: a candidate that deletes the injected fault switch instead of fixing the underlying behavior can still pass if the resulting behavior is correct. Read the diff with that in mind.",
+    "Resource bounds are wall-clock timeouts, capped output and an advisory Go memory limit (GOMEMLIMIT); there is no hard OS memory cgroup on this platform.",
+    "Token usage is recorded only when the provider reports it; cost is not computed without a pricing source.",
+    "The model proposes; the independent oracle and the fixture acceptance rules decide. VERIFIED_FOR_TESTED_SCENARIOS covers only the scenario that actually executed.",
+    "Nothing was applied to the developer's working tree, committed, pushed, merged or deployed. A human owns any integration decision.",
+    "the model call failed: llm: REJECTED (HTTP 404): the provider rejected the request",
+    "No repair candidate passed independent verification in this run; the incident remains open."
+  ]
+}

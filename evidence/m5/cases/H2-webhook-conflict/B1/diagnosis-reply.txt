@@ -1,0 +1,31 @@
+{
+  "root_cause": "The capture-sealing / incident-artifact path records the order's monetary identity from a zero-valued source instead of the persisted order, so a capture the provider completed for 12.34 USD is journaled locally as total_minor 0 with an empty currency and no claimed capture id.",
+  "mechanism": "EV-2 shows the create call carried sent_amount 12.34 USD and was applied (order_status CREATED), and EV-5 shows the capture call carried sent_amount 12.34 USD and returned capture_id CAP-SCRIPT-0001 with capture_status COMPLETED and capture_amount 12.34 USD. EV-1 describes the same order (477b2ace-aceb-4c97-ab03-3878aae5beaa) as CAPTURED_VERIFIED with the matching provider_capture_id CAP-SCRIPT-0001, yet reports total_minor 0, currency \"\", and claimed_capture_id \"\". The provider-side flow is clean (no dropped response, no definite refusal, no stale read, no idempotent replay in EV-2..EV-5), so the divergence is on the local side: the sealed record and the artifact it feeds do not carry the amount, currency, or capture identity that the provider actually captured. Any downstream consumer of the local journal (reconciliation, refund, fulfillment, dispute evidence) therefore sees a 0-minor-unit, currency-less capture while the provider holds a 12.34 USD capture, and the artifact cannot tie the local claim to the provider capture id.",
+  "suspected_files": [
+    "apps/api/internal/merchant/service.go"
+  ],
+  "supporting_evidence": [
+    "EV-1",
+    "EV-2",
+    "EV-5"
+  ],
+  "invariants_at_risk": [
+    "I6"
+  ],
+  "proposed_fix": "Make the capture seal and the incident artifact derive amount, currency, and capture id from the same persisted order/operation row that was sent to and echoed by the provider, rather than from a freshly constructed or partially populated value; add a seal-time assertion that the local amount/currency equal the provider's captured amount/currency and the local operation's provider_capture_id equals the provider's capture id, and on mismatch mark the capture unresolved (unknown/reconciliation) instead of sealing CAPTURED_VERIFIED with zeroed monetary fields.",
+  "confidence_reasons": [
+    "EV-2 and EV-5 both show the provider receiving and completing 12.34 USD for order_ref ORD-SCRIPT-0001, so the provider-side amount is unambiguous and well-formed.",
+    "EV-1 names the same order id and the same provider_capture_id (CAP-SCRIPT-0001) as EV-5, so the artifact and the capture observation refer to one checkout, not two.",
+    "The only fields that disagree between EV-1 and EV-2/EV-5 are the monetary ones (total_minor 0 vs 12.34, currency \"\" vs USD) plus the empty claimed_capture_id, which localizes the defect to how the local record/artifact is populated rather than to the provider interaction.",
+    "EV-2..EV-5 report response_dropped=false, definite_refusal=false, stale_read=false and idempotent_replay=false, so the usual ambiguity/retry explanations for a local/provider divergence are not supported here.",
+    "The sent amounts in EV-2 and EV-5 are the well-formed string \"12.34\", so the float-formatting fault described in the source comments is not active in this incident."
+  ],
+  "uncertainties": [
+    "The evidence cannot establish where the zeroed amount originates: order creation/persistence, the capture seal, or the artifact renderer; the store and artifact-writer code are not in the supplied sources.",
+    "The invariant catalogue is not in the evidence, so the mapping of this divergence to a specific invariant id (I6) is inferred from the schema example, not confirmed.",
+    "The fixture is tier F (scripted), so the observations are scripted interactions rather than a real Sandbox run; they cannot establish that money actually moved or that the provider's live behavior matches the script.",
+    "The evidence does not include the catalog price or quantity, so it cannot independently establish which amount (0 or 12.34 USD) is the intended charge.",
+    "It cannot be determined whether the empty claimed_capture_id in EV-1 is a genuine local gap or a sanitization artifact, since other identity fields in the same artifact are populated.",
+    "No webhook events appear in the evidence, so the webhook-handling paths cannot be implicated or exonerated from this evidence alone."
+  ]
+}

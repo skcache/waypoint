@@ -1,0 +1,65 @@
+{
+  "base_sha": "8e29636fb0347d8f56abf9d3a166f7c6c51bd20d",
+  "benchmark_id": "waypoint-m5-heldout-v1",
+  "cases": [
+    {
+      "id": "H1-identity-rewrite",
+      "family": "idempotency-identity",
+      "title": "A retry rewrites the durable capture request id",
+      "journey": "H1-identity-rewrite",
+      "mode": "verified",
+      "exposed": false
+    },
+    {
+      "id": "H2-webhook-conflict",
+      "family": "webhook-fulfillment",
+      "title": "A conflicting duplicate event id is treated as a new capture event",
+      "journey": "H2-webhook-conflict",
+      "mode": "verified",
+      "exposed": false
+    },
+    {
+      "id": "H3-currency-mismatch",
+      "family": "monetary-evidence",
+      "title": "Capture verification ignores the provider currency",
+      "journey": "H3-currency-mismatch",
+      "mode": "refused",
+      "exposed": false
+    },
+    {
+      "id": "H4-pending-capture",
+      "family": "response-interpretation",
+      "title": "Any capture status is treated as completed",
+      "journey": "H4-pending-capture",
+      "mode": "refused",
+      "exposed": false
+    },
+    {
+      "id": "H5-early-fulfillment",
+      "family": "webhook-fulfillment",
+      "title": "An early capture event fulfills before local verification",
+      "journey": "H5-early-fulfillment",
+      "mode": "verified",
+      "exposed": false
+    },
+    {
+      "id": "H6-ambiguous-reconcile",
+      "family": "ambiguity-reconciliation",
+      "title": "Reconciliation turns an ambiguous capture into a definite rejection",
+      "journey": "H6-ambiguous-reconcile",
+      "mode": "refused",
+      "exposed": false
+    },
+    {
+      "id": "H7-webhook-duplicate-exposed",
+      "family": "webhook-fulfillment",
+      "title": "Duplicate delivery creates a second fulfillment (M4 mechanism, exposed)",
+      "journey": "H7-webhook-duplicate-exposed",
+      "mode": "verified",
+      "exposed": true
+    }
+  ],
+  "digest": "sha256:8a094d39caf50e704468899aef5abab2b7e6ffb194de6d48dabc57a40412c7f6",
+  "note": "Frozen before hosted evaluation. Reference fixes and expected categories are evaluator-only and never enter model prompts.",
+  "schema_version": 1
+}

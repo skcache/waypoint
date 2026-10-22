@@ -1,0 +1,31 @@
+{
+  "root_cause": "The capture retry path in beginCaptureAttempt mints a new provider identity by appending \"-retry\" to the durable request id instead of re-sending the original request id, so the provider does not recognize the retry as an idempotent replay and definitively refuses it while the original capture has already applied.",
+  "mechanism": "The first capture call (EV-5) applied provider-side: mutation_applied=true, order_status=COMPLETED, capture_id=CAP-SCRIPT-0001, capture_status=COMPLETED, capture_amount=12.34 USD — but its response was dropped (response_dropped=true), so the client could not seal the result and the operation stayed unresolved. On the retry (EV-7) the code reuses the operation row but rewrites the request id to \"32005aae-832c-437a-a9e7-de1d81b78abc-retry\", which is a different provider identity than the one that already captured. The provider therefore reports idempotent_replay=false and definite_refusal=true with mutation_applied=false, because the order is already captured under the original id. The result is a split-brain financial state: the provider holds a completed 12.34 USD capture (CAP-SCRIPT-0001) while the local order remains APPROVED (EV-1) and the incident artifact carries no usable amount (total_minor=0, currency empty). The mutated id was also not durably committed before the outbound call (request_id_durable_before_call=false in EV-7), so the identity actually sent to the provider is not recoverable from the journal.",
+  "suspected_files": [
+    "apps/api/internal/merchant/service.go"
+  ],
+  "supporting_evidence": [
+    "EV-5",
+    "EV-7",
+    "EV-1",
+    "EV-6"
+  ],
+  "invariants_at_risk": [
+    "I4",
+    "I6"
+  ],
+  "proposed_fix": "In beginCaptureAttempt, stop mutating the durable request id on retry: reuse the original operation's ProviderRequestID verbatim (remove the `claimed.ProviderRequestID += \"-retry\"` rewrite) so a repeated capture is a true same-id replay, and persist/confirm that id durably before the outbound call. Additionally, treat a definite refusal that follows an ambiguous capture outcome as non-conclusive: before returning the order to APPROVED, reconcile against provider capture evidence (matching capture id/amount/currency) so an already-applied capture is sealed as CAPTURED_VERIFIED rather than left APPROVED.",
+  "confidence_reasons": [
+    "EV-5 shows the first capture mutated provider state and produced a completed capture (CAP-SCRIPT-0001, 12.34 USD) while its response was dropped, which is exactly the ambiguous-outcome condition the retry path is meant to resolve.",
+    "EV-7 shows the retry carried a different request id (suffixed \"-retry\"), was not durably recorded before the call, applied no mutation, and was definitively refused — consistent with the provider seeing a new capture request against an already-captured order rather than an idempotent replay.",
+    "EV-1 shows the local order still APPROVED while a provider_capture_id (CAP-SCRIPT-0001) is present, i.e. captured funds with no matching local verified state.",
+    "EV-6 shows a read returning APPROVED after the capture observation, so the local/read view never converged on the completed capture."
+  ],
+  "uncertainties": [
+    "Evidence tier is F (scripted fixture), so the provider's real idempotency and refusal behavior is simulated and cannot be confirmed from this evidence.",
+    "EV-6 (read returning APPROVED after EV-5 reported order_status COMPLETED with stale_read=false) is internally inconsistent and cannot be explained by the supplied evidence.",
+    "EV-1 reports total_minor=0 and an empty currency while EV-2/EV-5/EV-7 sent 12.34 USD; it is not determinable whether this is redaction of the artifact or a genuine loss of the local amount record.",
+    "The invariant identifiers beyond I4 (which the source explicitly ties to durable-before-send) are not defined in the supplied evidence, so the mapping of I6 to a specific rule is inferred, not established.",
+    "The evidence does not show whether any reconciliation path ran after the refusal, so the current persisted state of the operation row is unknown."
+  ]
+}

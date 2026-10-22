@@ -1,0 +1,19 @@
+diff --git a/apps/api/internal/merchant/service.go b/apps/api/internal/merchant/service.go
+index 82e6e95..10b2845 100644
+--- a/apps/api/internal/merchant/service.go
++++ b/apps/api/internal/merchant/service.go
+@@ -546,7 +546,13 @@ func (s *Service) beginCaptureAttempt(ctx context.Context, order Order) (Operati
+ 		if err != nil {
+ 			return Operation{}, err
+ 		}
+-		claimed.ProviderRequestID += "-retry"
++		// A retry MUST re-send the ORIGINAL request id verbatim: the provider
++		// treats a repeated id as an idempotent replay and returns the original
++		// result. Minting a new identity (e.g. a "-retry" suffix) is seen as a
++		// fresh capture against an already-captured order and is definitively
++		// refused, leaving provider funds captured while the local order stays
++		// APPROVED. The id is already durable on the operation row, so the id
++		// sent outbound matches the journaled identity.
+ 		return claimed, nil
+ 	}
+ 

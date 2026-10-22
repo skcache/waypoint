@@ -1,0 +1,219 @@
+{
+  "schema_version": 1,
+  "incident_id": "M5-INC-H1-identity-rewrite",
+  "fault_family": "benchmark",
+  "case_id": "H1-identity-rewrite",
+  "mode": "oracle",
+  "evidence_tier": "F",
+  "base_revision": "92a0e659ec2bf1b7cbc173d345e10230f9378b40",
+  "revision_source": "bench-mutation",
+  "candidate_sandbox": "docker image golang:1.27-alpine; internal network wp-net-ee9dd977ed3f; disposable postgres wp-db-53f2525c8588; non-root uid 501; memory 2g; cpus 2; pids 256; read-only root; read-only module cache; separate pristine judge cache",
+  "started_at": "2026-10-22T18:12:14.787249Z",
+  "finished_at": "2026-10-22T18:13:50.081435Z",
+  "status": "ACCEPTED_FOR_HUMAN_REVIEW",
+  "diagnosis": {
+    "root_cause": "The capture retry path in beginCaptureAttempt mints a new provider identity by appending \"-retry\" to the durable request id instead of re-sending the original request id, so the provider does not recognize the retry as an idempotent replay and definitively refuses it while the original capture has already applied.",
+    "mechanism": "The first capture call (EV-5) applied provider-side: mutation_applied=true, order_status=COMPLETED, capture_id=CAP-SCRIPT-0001, capture_status=COMPLETED, capture_amount=12.34 USD — but its response was dropped (response_dropped=true), so the client could not seal the result and the operation stayed unresolved. On the retry (EV-7) the code reuses the operation row but rewrites the request id to \"32005aae-832c-437a-a9e7-de1d81b78abc-retry\", which is a different provider identity than the one that already captured. The provider therefore reports idempotent_replay=false and definite_refusal=true with mutation_applied=false, because the order is already captured under the original id. The result is a split-brain financial state: the provider holds a completed 12.34 USD capture (CAP-SCRIPT-0001) while the local order remains APPROVED (EV-1) and the incident artifact carries no usable amount (total_minor=0, currency empty). The mutated id was also not durably committed before the outbound call (request_id_durable_before_call=false in EV-7), so the identity actually sent to the provider is not recoverable from the journal.",
+    "suspected_files": [
+      "apps/api/internal/merchant/service.go"
+    ],
+    "supporting_evidence": [
+      "EV-5",
+      "EV-7",
+      "EV-1",
+      "EV-6"
+    ],
+    "invariants_at_risk": [
+      "I4",
+      "I6"
+    ],
+    "proposed_fix": "In beginCaptureAttempt, stop mutating the durable request id on retry: reuse the original operation's ProviderRequestID verbatim (remove the `claimed.ProviderRequestID += \"-retry\"` rewrite) so a repeated capture is a true same-id replay, and persist/confirm that id durably before the outbound call. Additionally, treat a definite refusal that follows an ambiguous capture outcome as non-conclusive: before returning the order to APPROVED, reconcile against provider capture evidence (matching capture id/amount/currency) so an already-applied capture is sealed as CAPTURED_VERIFIED rather than left APPROVED.",
+    "confidence_reasons": [
+      "EV-5 shows the first capture mutated provider state and produced a completed capture (CAP-SCRIPT-0001, 12.34 USD) while its response was dropped, which is exactly the ambiguous-outcome condition the retry path is meant to resolve.",
+      "EV-7 shows the retry carried a different request id (suffixed \"-retry\"), was not durably recorded before the call, applied no mutation, and was definitively refused — consistent with the provider seeing a new capture request against an already-captured order rather than an idempotent replay.",
+      "EV-1 shows the local order still APPROVED while a provider_capture_id (CAP-SCRIPT-0001) is present, i.e. captured funds with no matching local verified state.",
+      "EV-6 shows a read returning APPROVED after the capture observation, so the local/read view never converged on the completed capture."
+    ],
+    "uncertainties": [
+      "Evidence tier is F (scripted fixture), so the provider's real idempotency and refusal behavior is simulated and cannot be confirmed from this evidence.",
+      "EV-6 (read returning APPROVED after EV-5 reported order_status COMPLETED with stale_read=false) is internally inconsistent and cannot be explained by the supplied evidence.",
+      "EV-1 reports total_minor=0 and an empty currency while EV-2/EV-5/EV-7 sent 12.34 USD; it is not determinable whether this is redaction of the artifact or a genuine loss of the local amount record.",
+      "The invariant identifiers beyond I4 (which the source explicitly ties to durable-before-send) are not defined in the supplied evidence, so the mapping of I6 to a specific rule is inferred, not established.",
+      "The evidence does not show whether any reconciliation path ran after the refusal, so the current persisted state of the operation row is unknown."
+    ]
+  },
+  "attempts": [
+    {
+      "number": 1,
+      "started_at": "2026-10-22T18:12:52.033602Z",
+      "finished_at": "2026-10-22T18:13:50.081407Z",
+      "ladder": {
+        "diagnosis_produced": true,
+        "patch_generated": true,
+        "patch_applied": true,
+        "build_passed": true,
+        "tests_passed": true,
+        "oracle_verdict": "VERIFIED_FOR_TESTED_SCENARIOS",
+        "accepted_for_human_review": true
+      },
+      "patch": {
+        "summary": "The capture retry path in beginCaptureAttempt rewrote the durable provider request id by appending \"-retry\", minting a new provider identity. The provider therefore saw a fresh capture against an already-captured order and definitively refused it, leaving provider funds captured (CAP-SCRIPT-0001) while the local order stayed APPROVED. The fix removes the id mutation so a retry re-sends the original request id verbatim, which the provider recognizes as an idempotent replay and returns the original completed capture for, allowing captureEvidence to seal CAPTURED_VERIFIED.",
+        "edits": [
+          {
+            "path": "apps/api/internal/merchant/service.go",
+            "old_text": "\t\tclaimed, err := s.store.BeginCaptureRetry(ctx, order.ID, active.ID, s.instanceID, s.leaseTTL)\n\t\tif err != nil {\n\t\t\treturn Operation{}, err\n\t\t}\n\t\tclaimed.ProviderRequestID += \"-retry\"\n\t\treturn claimed, nil",
+            "new_text": "\t\tclaimed, err := s.store.BeginCaptureRetry(ctx, order.ID, active.ID, s.instanceID, s.leaseTTL)\n\t\tif err != nil {\n\t\t\treturn Operation{}, err\n\t\t}\n\t\t// A retry MUST re-send the ORIGINAL request id verbatim: the provider\n\t\t// treats a repeated id as an idempotent replay and returns the original\n\t\t// result. Minting a new identity (e.g. a \"-retry\" suffix) is seen as a\n\t\t// fresh capture against an already-captured order and is definitively\n\t\t// refused, leaving provider funds captured while the local order stays\n\t\t// APPROVED. The id is already durable on the operation row, so the id\n\t\t// sent outbound matches the journaled identity.\n\t\treturn claimed, nil",
+            "rationale": "Removing the in-memory request-id rewrite makes the retry a true same-id replay of the durable operation identity, so the provider returns the original applied capture instead of refusing a new capture request. This restores the durable-before-outbound identity invariant (the sent id equals the persisted id) and lets the existing captureEvidence path seal the already-applied capture as CAPTURED_VERIFIED rather than leaving a split-brain APPROVED state."
+          }
+        ]
+      },
+      "diff": "diff --git a/apps/api/internal/merchant/service.go b/apps/api/internal/merchant/service.go\nindex 82e6e95..10b2845 100644\n--- a/apps/api/internal/merchant/service.go\n+++ b/apps/api/internal/merchant/service.go\n@@ -546,7 +546,13 @@ func (s *Service) beginCaptureAttempt(ctx context.Context, order Order) (Operati\n \t\tif err != nil {\n \t\t\treturn Operation{}, err\n \t\t}\n-\t\tclaimed.ProviderRequestID += \"-retry\"\n+\t\t// A retry MUST re-send the ORIGINAL request id verbatim: the provider\n+\t\t// treats a repeated id as an idempotent replay and returns the original\n+\t\t// result. Minting a new identity (e.g. a \"-retry\" suffix) is seen as a\n+\t\t// fresh capture against an already-captured order and is definitively\n+\t\t// refused, leaving provider funds captured while the local order stays\n+\t\t// APPROVED. The id is already durable on the operation row, so the id\n+\t\t// sent outbound matches the journaled identity.\n \t\treturn claimed, nil\n \t}\n \n",
+      "patch_digest": "sha256:3bc26a90e1913b0874d9c88c219b57328a555a684f7e75f1c442cd86df6eb105",
+      "changed_files": [
+        "apps/api/internal/merchant/service.go"
+      ],
+      "steps": [
+        {
+          "step": "gofmt",
+          "command": [
+            "gofmt",
+            "-l",
+            "internal/merchant/service.go"
+          ],
+          "exit_code": 0,
+          "timed_out": false,
+          "duration_ms": 307,
+          "output": "",
+          "output_truncated": false
+        },
+        {
+          "step": "build",
+          "command": [
+            "go",
+            "build",
+            "./..."
+          ],
+          "exit_code": 0,
+          "timed_out": false,
+          "duration_ms": 18388,
+          "output": "",
+          "output_truncated": false
+        },
+        {
+          "step": "tests",
+          "command": [
+            "go",
+            "test",
+            "-count=1",
+            "-timeout",
+            "240s",
+            "./internal/merchant/",
+            "./internal/domain/"
+          ],
+          "exit_code": 0,
+          "timed_out": false,
+          "duration_ms": 6185,
+          "output": "ok  \tgithub.com/skcache/waypoint/apps/api/internal/merchant\t2.059s\nok  \tgithub.com/skcache/waypoint/apps/api/internal/domain\t0.003s\n",
+          "output_truncated": false
+        },
+        {
+          "step": "fixture",
+          "command": [
+            "go",
+            "run",
+            "./cmd/fixturecheck",
+            "-case",
+            "H1-identity-rewrite",
+            "-out",
+            "/out",
+            "-dsn",
+            "[REDACTED]"
+          ],
+          "exit_code": 0,
+          "timed_out": false,
+          "duration_ms": 1105,
+          "output": "2026/10/22 18:13:36 INFO merchant checkout: local order committed, calling provider order_id=e7120a41-f538-40ce-95aa-bf31f588be14 trace_id=2154b001-c2b5-4019-8ac7-2e0d85981af5 request_id=5efd246a-8a9b-415e-a564-4ca808691f5b total_minor=1234 fault=none\n2026/10/22 18:13:36 WARN provider order created without an approval URL order_id=e7120a41-f538-40ce-95aa-bf31f588be14\n2026/10/22 18:13:36 INFO merchant capture verified order_id=e7120a41-f538-40ce-95aa-bf31f588be14 capture_id=CAP-SCRIPT-0001 trace_id=2154b001-c2b5-4019-8ac7-2e0d85981af5\n",
+          "output_truncated": false
+        },
+        {
+          "step": "judge",
+          "command": [
+            "go",
+            "run",
+            "./cmd/judgecheck",
+            "-case",
+            "H1-identity-rewrite",
+            "-in",
+            "/out/observations.json",
+            "-out",
+            "/out",
+            "-dsn",
+            "[REDACTED]",
+            "-base-revision",
+            "92a0e659ec2bf1b7cbc173d345e10230f9378b40",
+            "-patch-digest",
+            "sha256:3bc26a90e1913b0874d9c88c219b57328a555a684f7e75f1c442cd86df6eb105"
+          ],
+          "exit_code": 0,
+          "timed_out": false,
+          "duration_ms": 13739,
+          "output": "judge: ACCEPTED — provider-issued capture identity, amount, currency and terminal status match the journal; the oracle verified the tested scenario\n",
+          "output_truncated": false
+        }
+      ],
+      "eval": {
+        "accepted": true,
+        "reason": "provider-issued capture identity, amount, currency and terminal status match the journal; the oracle verified the tested scenario",
+        "order_status": "CAPTURED_VERIFIED",
+        "claimed_capture_id": "CAP-SCRIPT-0001",
+        "provider_capture_id": "CAP-SCRIPT-0001"
+      }
+    }
+  ],
+  "final_ladder": {
+    "diagnosis_produced": true,
+    "patch_generated": true,
+    "patch_applied": true,
+    "build_passed": true,
+    "tests_passed": true,
+    "oracle_verdict": "VERIFIED_FOR_TESTED_SCENARIOS",
+    "accepted_for_human_review": true
+  },
+  "model_calls": [
+    {
+      "purpose": "diagnosis",
+      "model": "deepseek/deepseek-v4.1-flash",
+      "latency_ms": 33830,
+      "prompt_bytes": 33763,
+      "response_bytes": 4140,
+      "prompt_tokens": 9185,
+      "completion_tokens": 3132,
+      "usage_reported": true
+    },
+    {
+      "purpose": "patch",
+      "model": "deepseek/deepseek-v4.1-flash",
+      "latency_ms": 18107,
+      "prompt_bytes": 33671,
+      "response_bytes": 2127,
+      "prompt_tokens": 8545,
+      "completion_tokens": 1662,
+      "usage_reported": true
+    }
+  ],
+  "prompt_tokens": 17730,
+  "completion_tokens": 4794,
+  "usage_reported": true,
+  "patch_digest": "sha256:3bc26a90e1913b0874d9c88c219b57328a555a684f7e75f1c442cd86df6eb105",
+  "applied_to_developer_tree": false,
+  "deployed": false,
+  "human_approval_required": true,
+  "limitations": [
+    "All provider interaction in this run is deterministic scripted-fixture instrumentation (tier F). No real PayPal Sandbox transaction was executed by the repair pipeline.",
+    "The verifier judges behavior, not intent: a candidate that deletes the injected fault switch instead of fixing the underlying behavior can still pass if the resulting behavior is correct. Read the diff with that in mind.",
+    "Resource bounds are wall-clock timeouts, capped output and an advisory Go memory limit (GOMEMLIMIT); there is no hard OS memory cgroup on this platform.",
+    "Token usage is recorded only when the provider reports it; cost is not computed without a pricing source.",
+    "The model proposes; the independent oracle and the fixture acceptance rules decide. VERIFIED_FOR_TESTED_SCENARIOS covers only the scenario that actually executed.",
+    "Nothing was applied to the developer's working tree, committed, pushed, merged or deployed. A human owns any integration decision."
+  ]
+}

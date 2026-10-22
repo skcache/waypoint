@@ -1,0 +1,11 @@
+{
+  "summary": "Remove the retry-branch mutation that appended \"-retry\" to the durable capture request id. A retry of an unresolved capture must replay the ORIGINAL request id verbatim so the provider returns the original result (idempotent same-id replay) instead of definitively refusing a mutated id and leaving a completed provider-side capture uncertified locally.",
+  "edits": [
+    {
+      "path": "apps/api/internal/merchant/service.go",
+      "old_text": "\t\tclaimed, err := s.store.BeginCaptureRetry(ctx, order.ID, active.ID, s.instanceID, s.leaseTTL)\n\t\tif err != nil {\n\t\t\treturn Operation{}, err\n\t\t}\n\t\tclaimed.ProviderRequestID += \"-retry\"\n\t\treturn claimed, nil",
+      "new_text": "\t\tclaimed, err := s.store.BeginCaptureRetry(ctx, order.ID, active.ID, s.instanceID, s.leaseTTL)\n\t\tif err != nil {\n\t\t\treturn Operation{}, err\n\t\t}\n\t\t// The retry MUST reuse the original, already-durable request id\n\t\t// verbatim: same-id replay is what makes the provider return the\n\t\t// original result instead of treating this as a new capture. The\n\t\t// identity is never rewritten here.\n\t\treturn claimed, nil",
+      "rationale": "The appended \"-retry\" suffix changed the id sent on the wire away from the durably committed one, so the provider did not recognize a repeat of the original capture request, refused it definitively, and the service moved the order back to APPROVED while a COMPLETED capture still existed provider-side (the precondition for a later double capture). Returning the operation with its original ProviderRequestID restores true same-id idempotent replay; the existing preflight GetOrder/completeCapture check in Capture already certifies an already-completed capture before anything is sent."
+    }
+  ]
+}

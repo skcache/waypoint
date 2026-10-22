@@ -1,0 +1,143 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-10-22T18:12:13.967004042Z",
+  "scenario_id": "candidate-F1",
+  "scenario_title": "Candidate fixture journey (F1)",
+  "scenario_family": "F1",
+  "candidate": "candidate",
+  "verdict": "VERIFIED_FOR_TESTED_SCENARIOS",
+  "expected_verdict": "",
+  "fixture_revision": "92a0e659ec2bf1b7cbc173d345e10230f9378b40",
+  "revision_source": "orchestrator-base",
+  "oracle_version": "waypoint-oracle-m2.0.2",
+  "evidence_tiers": [
+    "F"
+  ],
+  "invariants": [
+    {
+      "id": "I1",
+      "title": "Integer minor units with explicit currency; no floating-point amounts",
+      "status": "PASS",
+      "summary": "all local amounts are minor-unit integers with explicit currency; all provider-bound amounts are exact two-decimal renderings"
+    },
+    {
+      "id": "I2",
+      "title": "Captured amount/currency bound to the server-side order",
+      "status": "PASS",
+      "summary": "every outbound operation carried exactly the server-side order amount and currency"
+    },
+    {
+      "id": "I3",
+      "title": "Browser approval is not capture; COMPLETED requires capture evidence",
+      "status": "PASS",
+      "summary": "every capture attempt is preceded by an observed buyer approval belonging to the same order"
+    },
+    {
+      "id": "I4",
+      "title": "Operation identity and request id durable before the outbound call",
+      "status": "PASS",
+      "summary": "every outbound mutation was preceded by its durable operation row (probed before the call); no capture identity was replaced while an earlier attempt remained unresolved"
+    },
+    {
+      "id": "I5",
+      "title": "Ambiguity is never interpreted as definite failure",
+      "status": "PASS",
+      "summary": "no ambiguity was converted to failure; no new identity followed an ambiguous outcome; no false failure contradicts provider evidence"
+    },
+    {
+      "id": "I6",
+      "title": "Completed-capture claims require matching provider evidence",
+      "status": "PASS",
+      "summary": "every completed-capture claim is corroborated by matching provider evidence (order, amount, currency, COMPLETED status)"
+    },
+    {
+      "id": "I7",
+      "title": "One logical order, at most one fulfillment effect and one capture pathway",
+      "status": "PASS",
+      "summary": "at most one applied capture effect per logical order; no duplicate capture pathway; idempotent replays returned the original capture"
+    },
+    {
+      "id": "I8",
+      "title": "Verified capture cannot silently roll back to pending/failed",
+      "status": "PASS",
+      "summary": "every capture confirmation is terminal in the journal and in the final order status"
+    },
+    {
+      "id": "I9",
+      "title": "Local/provider divergence is explicit, never silently papered over",
+      "status": "PASS",
+      "summary": "every significant local state carries its explicit journal event"
+    },
+    {
+      "id": "I10",
+      "title": "Refund success claims require a verified refund resource",
+      "status": "NOT_APPLICABLE",
+      "summary": "no refund activity in the executed scenarios (refunds are not required for M2)"
+    },
+    {
+      "id": "I11",
+      "title": "Unsafe or inconclusive verification never auto-applies",
+      "status": "PASS",
+      "summary": "M2 performs no apply/deploy step and exposes no patch-application mechanism; the verdict is an advisory output only (automatic-apply prevention for a future pipeline is out of M2 scope)"
+    },
+    {
+      "id": "I12",
+      "title": "Evidence provenance is explicit (R/F/S)",
+      "status": "PASS",
+      "summary": "provenance is explicit across provider observations and the journal; scripted interactions are labelled F, never R"
+    },
+    {
+      "id": "I13",
+      "title": "At most one fulfillment effect per legitimate payment",
+      "status": "NOT_APPLICABLE",
+      "summary": "no fulfillment effects in evidence"
+    },
+    {
+      "id": "I14",
+      "title": "Fulfillment requires authenticated, verified capture evidence",
+      "status": "NOT_APPLICABLE",
+      "summary": "no fulfillment effects in evidence"
+    }
+  ],
+  "skips": [
+    {
+      "id": "I10",
+      "title": "Refund success claims require a verified refund resource",
+      "status": "NOT_APPLICABLE",
+      "summary": "no refund activity in the executed scenarios (refunds are not required for M2)"
+    },
+    {
+      "id": "I13",
+      "title": "At most one fulfillment effect per legitimate payment",
+      "status": "NOT_APPLICABLE",
+      "summary": "no fulfillment effects in evidence"
+    },
+    {
+      "id": "I14",
+      "title": "Fulfillment requires authenticated, verified capture evidence",
+      "status": "NOT_APPLICABLE",
+      "summary": "no fulfillment effects in evidence"
+    }
+  ],
+  "counterexamples": null,
+  "patch_digest": "sha256:450e52aef9f271f9b8ad8ccd012244de09e2fb6316ce214d22acf32f625eeda2",
+  "evidence_digest_sha256": "ab0eda5a320a2780a8dc48d0aee0ed55ac19959c609ba36c53b7a48d0ce28f69",
+  "evidence_counts": {
+    "events": 7,
+    "fault_events": 0,
+    "operations": 2,
+    "orders": 1,
+    "provider_observations": 6
+  },
+  "paypal_sandbox": {
+    "verified": false,
+    "note": "No real PayPal Sandbox execution is included: all provider interactions in this bundle are deterministic scripted-fixture observations (tier F). The M1 tier-R capture evidence is recorded separately in the private progress log and is not re-executed."
+  },
+  "applied": false,
+  "limitations": [
+    "Verdict scope: candidate \"candidate\" under scenario \"candidate-F1\" only; it says nothing about unexecuted scenarios, unseen code paths, or production traffic.",
+    "Evidence tier: F. Scenario evidence is deterministic fixture instrumentation; it is not a real PayPal Sandbox execution.",
+    "Provider interactions are scripted-fixture observations (tier F); previously recorded real Sandbox evidence (tier R) is referenced by the M1 record but is not re-executed here.",
+    "No deployed system was modified. I11 is scoped to M2 reality: this milestone has no apply/deploy mechanism at all, so the check confirms only that no such action occurred and that verdicts are advisory outputs; enforcement against a future patch-application pipeline is not claimed."
+  ]
+}

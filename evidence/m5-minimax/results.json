@@ -1,0 +1,184 @@
+{
+  "schema_version": 1,
+  "benchmark_id": "waypoint-m5-heldout-v1",
+  "digest": "sha256:8a094d39caf50e704468899aef5abab2b7e6ffb194de6d48dabc57a40412c7f6",
+  "frozen_at": "2026-10-22T18:17:37Z",
+  "base_sha": "fa7b3283c861875134ef6c639eb498bb0755f0a7",
+  "model": {
+    "id": "minimax/minimax-m3.1-flash:free",
+    "base_url": "https://openrouter.ai/api/v1",
+    "max_output_tokens": 16000,
+    "temperature": "0",
+    "cost_note": "Estimated from the provider's published per-token rates; pricing is not reported by the API call itself."
+  },
+  "conditions": [
+    {
+      "id": "B0",
+      "description": "Deterministic rules over the incident evidence; diagnosis only, no patch capability",
+      "max_attempts": 0,
+      "oracle_feedback": false
+    },
+    {
+      "id": "B1",
+      "description": "Single diagnosis + single patch, no oracle feedback",
+      "max_attempts": 1,
+      "oracle_feedback": false
+    },
+    {
+      "id": "B2",
+      "description": "Same initial attempt, then bounded retries with independent failure evidence",
+      "max_attempts": 2,
+      "oracle_feedback": true
+    }
+  ],
+  "cases": [
+    {
+      "case": {
+        "ID": "H3-currency-mismatch",
+        "Family": "monetary-evidence",
+        "Title": "Capture verification ignores the provider currency",
+        "BaseRevision": "",
+        "Journey": "H3-currency-mismatch",
+        "Mutations": [
+          {
+            "Path": "apps/api/internal/merchant/service.go",
+            "Old": "c.Amount.CurrencyCode == order.Currency \u0026\u0026 c.Amount.Value == expected",
+            "New": "c.Amount.Value == expected"
+          }
+        ],
+        "GateFault": "",
+        "Mode": "refused",
+        "ExpectedCategory": "monetary",
+        "ReferenceFix": [
+          {
+            "Path": "apps/api/internal/merchant/service.go",
+            "Old": "if c.Status == paypal.CaptureStatusCompleted \u0026\u0026 c.ID != \"\" \u0026\u0026\n\t\t\tc.Amount.Value == expected {",
+            "New": "if c.Status == paypal.CaptureStatusCompleted \u0026\u0026 c.ID != \"\" \u0026\u0026\n\t\t\tc.Amount.CurrencyCode == order.Currency \u0026\u0026 c.Amount.Value == expected {"
+          }
+        ],
+        "Exposed": false,
+        "Facts": [
+          "final_status",
+          "capture_status",
+          "capture_error"
+        ]
+      },
+      "mutation_sha": "a621f13702b3ac3bea995b1dea5646b265acd822",
+      "pre_repair": {
+        "accepted": false,
+        "reason": "safe-refusal case ended in CAPTURED_VERIFIED, want CAPTURE_OUTCOME_UNKNOWN",
+        "order_status": "CAPTURED_VERIFIED",
+        "verdict": "UNSAFE",
+        "failing": [
+          "I6: order 9b325848-7bc2-422e-82df-8b4df879fe83 claims capture CAP-SCRIPT-0001 for 12.34 USD, but the provider evidence shows \"12.34\" \"CAD\""
+        ]
+      },
+      "runs": {
+        "B0": {
+          "case_id": "H3-currency-mismatch",
+          "condition": "B0",
+          "status": "DIAGNOSIS_ONLY",
+          "accepted": false,
+          "diagnosis_category": "monetary",
+          "diagnosis_correct": true,
+          "patch_applied": false,
+          "build_passed": false,
+          "tests_passed": false,
+          "oracle_verdict": "UNSAFE",
+          "attempts": 0,
+          "latency_ms": 0,
+          "prompt_tokens": 0,
+          "completion_tokens": 0,
+          "error": "B0 has no patch capability; it cannot repair code and is not scored as a repair system",
+          "artifacts": "/Users/21sk/waypoint/evidence/m5-minimax/cases/H3-currency-mismatch/pre-repair"
+        },
+        "B1": {
+          "case_id": "H3-currency-mismatch",
+          "condition": "B1",
+          "status": "ERROR",
+          "accepted": false,
+          "diagnosis_category": "unknown",
+          "diagnosis_correct": false,
+          "patch_applied": false,
+          "build_passed": false,
+          "tests_passed": false,
+          "oracle_verdict": "",
+          "attempts": 0,
+          "latency_ms": 260,
+          "prompt_tokens": 0,
+          "completion_tokens": 0,
+          "error": "the model call failed: llm: REJECTED (HTTP 404): the provider rejected the request",
+          "artifacts": "/Users/21sk/waypoint/evidence/m5-minimax/cases/H3-currency-mismatch/B1"
+        },
+        "B2": {
+          "case_id": "H3-currency-mismatch",
+          "condition": "B2",
+          "status": "ERROR",
+          "accepted": false,
+          "diagnosis_category": "unknown",
+          "diagnosis_correct": false,
+          "patch_applied": false,
+          "build_passed": false,
+          "tests_passed": false,
+          "oracle_verdict": "",
+          "attempts": 0,
+          "latency_ms": 90,
+          "prompt_tokens": 0,
+          "completion_tokens": 0,
+          "error": "the model call failed: llm: REJECTED (HTTP 404): the provider rejected the request",
+          "artifacts": "/Users/21sk/waypoint/evidence/m5-minimax/cases/H3-currency-mismatch/B2"
+        }
+      }
+    }
+  ],
+  "totals": {
+    "held_out_cases": 1,
+    "safe_accepted": 0,
+    "verified_accepted": 0,
+    "safe_refusals": 0,
+    "rejected": 0,
+    "errors": 2,
+    "false_acceptances": 0,
+    "unsafe_candidates_rejected": 0,
+    "prompt_tokens": 0,
+    "completion_tokens": 0,
+    "by_condition": {
+      "B0": {
+        "safe_accepted": 0,
+        "verified_accepted": 0,
+        "safe_refusals": 0,
+        "rejected": 0,
+        "errors": 0,
+        "false_acceptances": 0,
+        "prompt_tokens": 0,
+        "completion_tokens": 0
+      },
+      "B1": {
+        "safe_accepted": 0,
+        "verified_accepted": 0,
+        "safe_refusals": 0,
+        "rejected": 0,
+        "errors": 1,
+        "false_acceptances": 0,
+        "prompt_tokens": 0,
+        "completion_tokens": 0
+      },
+      "B2": {
+        "safe_accepted": 0,
+        "verified_accepted": 0,
+        "safe_refusals": 0,
+        "rejected": 0,
+        "errors": 1,
+        "false_acceptances": 0,
+        "prompt_tokens": 0,
+        "completion_tokens": 0
+      }
+    }
+  },
+  "notes": [
+    "This is a small held-out corpus, not a statistical benchmark. Counts are raw; no significance is claimed.",
+    "Zero observed false acceptances does not establish a zero real-world failure probability.",
+    "All provider interaction is tier F (scripted fixture). No PayPal transaction or signed webhook was used.",
+    "Exposed cases are reported separately and excluded from held-out totals."
+  ]
+}

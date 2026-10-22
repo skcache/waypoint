@@ -1,0 +1,11 @@
+{
+  "summary": "The capture retry path in beginCaptureAttempt rewrote the durable provider request id by appending \"-retry\", minting a new provider identity. The provider therefore saw a fresh capture against an already-captured order and definitively refused it, leaving provider funds captured (CAP-SCRIPT-0001) while the local order stayed APPROVED. The fix removes the id mutation so a retry re-sends the original request id verbatim, which the provider recognizes as an idempotent replay and returns the original completed capture for, allowing captureEvidence to seal CAPTURED_VERIFIED.",
+  "edits": [
+    {
+      "path": "apps/api/internal/merchant/service.go",
+      "old_text": "\t\tclaimed, err := s.store.BeginCaptureRetry(ctx, order.ID, active.ID, s.instanceID, s.leaseTTL)\n\t\tif err != nil {\n\t\t\treturn Operation{}, err\n\t\t}\n\t\tclaimed.ProviderRequestID += \"-retry\"\n\t\treturn claimed, nil",
+      "new_text": "\t\tclaimed, err := s.store.BeginCaptureRetry(ctx, order.ID, active.ID, s.instanceID, s.leaseTTL)\n\t\tif err != nil {\n\t\t\treturn Operation{}, err\n\t\t}\n\t\t// A retry MUST re-send the ORIGINAL request id verbatim: the provider\n\t\t// treats a repeated id as an idempotent replay and returns the original\n\t\t// result. Minting a new identity (e.g. a \"-retry\" suffix) is seen as a\n\t\t// fresh capture against an already-captured order and is definitively\n\t\t// refused, leaving provider funds captured while the local order stays\n\t\t// APPROVED. The id is already durable on the operation row, so the id\n\t\t// sent outbound matches the journaled identity.\n\t\treturn claimed, nil",
+      "rationale": "Removing the in-memory request-id rewrite makes the retry a true same-id replay of the durable operation identity, so the provider returns the original applied capture instead of refusing a new capture request. This restores the durable-before-outbound identity invariant (the sent id equals the persisted id) and lets the existing captureEvidence path seal the already-applied capture as CAPTURED_VERIFIED rather than leaving a split-brain APPROVED state."
+    }
+  ]
+}

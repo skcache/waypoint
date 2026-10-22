@@ -1,0 +1,30 @@
+{
+  "root_cause": "The merchant never binds the outbound provider amount/currency to the durable order record: the order's recorded financial identity (total_minor, currency) can be zero/empty while the amounts actually sent and captured are 12.34 USD, and the capture is still sealed as CAPTURED_VERIFIED.",
+  "mechanism": "Checkout/Capture render the payload from the in-memory order object (s.amountValue(order.TotalMinor), order.Currency) and, after the call, verify only the provider echo against that same recomputed value; nothing requires total_minor > 0 or a non-empty currency, and nothing reconciles the amount back onto the persisted/exported record. The result is one provider-side capture of 12.34 USD (CAP-SCRIPT-0001, status COMPLETED) coexisting with a local order artifact reporting total_minor=0 and currency=\"\", sealed as CAPTURED_VERIFIED with no capture_error/checkout_error. Downstream reconciliation would therefore treat a real 12.34 USD debit as a zero-value, currency-less order, i.e. a local/provider monetary divergence that the sealing path never detected.",
+  "suspected_files": [
+    "apps/api/internal/merchant/service.go"
+  ],
+  "supporting_evidence": [
+    "EV-1",
+    "EV-2",
+    "EV-5"
+  ],
+  "invariants_at_risk": [
+    "I6"
+  ],
+  "proposed_fix": "Make the durable order row the single source of truth for money: derive CreateOrderInput/CaptureOrder amounts and CurrencyCode only from persisted order fields; add a hard preflight guard that refuses to send any create or capture when total_minor <= 0 or currency is empty (marking the order ambiguous/reconciliation-required instead of sending); after capture, assert the provider capture amount/currency equals the persisted order total/currency and fail into CAPTURE_OUTCOME_UNKNOWN on mismatch; and emit the incident artifact's total_minor/currency from those same persisted fields so the recorded local amount can never disagree with the provider-sent/captured amount.",
+  "confidence_reasons": [
+    "EV-2 shows exactly one create mutation (mutation_applied=true, idempotent_replay=false, sent_amount=12.34, sent_currency=USD), and EV-5 shows exactly one capture mutation of the same 12.34 USD returning capture_id CAP-SCRIPT-0001 with capture_status COMPLETED — so 12.34 USD demonstrably reached the provider twice in this checkout.",
+    "EV-1 describes this same capture (provider_capture_id=CAP-SCRIPT-0001) yet records total_minor=0 and currency=\"\", so the merchant's own record of the transaction's money disagrees with the provider's record of the money it captured.",
+    "EV-1 shows order_status=CAPTURED_VERIFIED with empty capture_error and checkout_error, so the divergence was not surfaced as a failure — the verification path compared the provider echo to the in-memory computed value and sealed the order without ever checking it against the persisted zero/empty financial fields.",
+    "EV-3 and EV-4 show the provider reads were non-stale and unremarkable (APPROVED, no dropped responses, no refusals), so no provider-side ambiguity or dropped-response path explains a missing local amount; the divergence is on the merchant's own amount/currency binding."
+  ],
+  "uncertainties": [
+    "Evidence tier F: these are scripted-fixture observations, not a real Sandbox run, so the amounts prove only what the fixture emitted, not live PayPal behavior.",
+    "The evidence cannot establish whether the zero/empty values come from the persisted order row or from the incident-artifact serialization of it — both would produce EV-1 as shown.",
+    "No store/order-creation code (CreateLocalOrder, the incident-artifact writer) or schema is in the supplied sources, so the exact field that loses the amount cannot be confirmed; service.go is implicated by the call/verification path, not proven.",
+    "The invariant numbering (I6) is not present in the supplied evidence; I6 is cited as the amount/currency-fidelity invariant, and this mapping is inferred, not verified.",
+    "No webhook, ledger, or settlement evidence is supplied (webhook.go is present but no webhook events appear), so the downstream consequence of the 0-vs-12.34 mismatch cannot be measured.",
+    "The fixture's fault_family is 'benchmark' and the incident artifact carries default-empty fields (claimed_capture_id, capture_error, checkout_error), so it cannot be ruled out that some empty/zero values are unfilled harness defaults rather than a defect — which is why the diagnosis is stated as a falsifiable claim: it fails if the persisted order row demonstrably held total_minor=1234 and currency=USD at capture time."
+  ]
+}

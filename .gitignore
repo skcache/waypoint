@@ -57,3 +57,4 @@ pgdata/
 # OS and editor noise
 .DS_Store
 .idea/
+.decisions.jsonl

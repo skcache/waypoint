@@ -1,0 +1,16 @@
+diff --git a/apps/api/internal/merchant/service.go b/apps/api/internal/merchant/service.go
+index 82e6e95..e522a70 100644
+--- a/apps/api/internal/merchant/service.go
++++ b/apps/api/internal/merchant/service.go
+@@ -546,7 +546,10 @@ func (s *Service) beginCaptureAttempt(ctx context.Context, order Order) (Operati
+ 		if err != nil {
+ 			return Operation{}, err
+ 		}
+-		claimed.ProviderRequestID += "-retry"
++		// The retry MUST reuse the original, already-durable request id
++		// verbatim: same-id replay is what makes the provider return the
++		// original result instead of treating this as a new capture. The
++		// identity is never rewritten here.
+ 		return claimed, nil
+ 	}
+ 

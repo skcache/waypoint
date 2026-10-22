@@ -1,0 +1,627 @@
+{
+  "schema_version": 1,
+  "benchmark_id": "waypoint-m5-heldout-v1",
+  "digest": "sha256:8a094d39caf50e704468899aef5abab2b7e6ffb194de6d48dabc57a40412c7f6",
+  "frozen_at": "2026-10-22T18:20:48Z",
+  "base_sha": "fa7b3283c861875134ef6c639eb498bb0755f0a7",
+  "model": {
+    "id": "deepseek/deepseek-v4.1-flash",
+    "base_url": "https://openrouter.ai/api/v1",
+    "max_output_tokens": 16000,
+    "temperature": "0",
+    "cost_note": "Estimated from the provider's published per-token rates; pricing is not reported by the API call itself.",
+    "rate_table": "$0.30/M prompt, $1.20/M completion (OpenRouter list price at freeze time)"
+  },
+  "conditions": [
+    {
+      "id": "B0",
+      "description": "Deterministic rules over the incident evidence; diagnosis only, no patch capability",
+      "max_attempts": 0,
+      "oracle_feedback": false
+    },
+    {
+      "id": "B1",
+      "description": "Single diagnosis + single patch, no oracle feedback",
+      "max_attempts": 1,
+      "oracle_feedback": false
+    },
+    {
+      "id": "B2",
+      "description": "Same initial attempt, then bounded retries with independent failure evidence",
+      "max_attempts": 2,
+      "oracle_feedback": true
+    }
+  ],
+  "cases": [
+    {
+      "case": {
+        "ID": "H1-identity-rewrite",
+        "Family": "idempotency-identity",
+        "Title": "A retry rewrites the durable capture request id",
+        "BaseRevision": "",
+        "Journey": "H1-identity-rewrite",
+        "Mutations": [
+          {
+            "Path": "apps/api/internal/merchant/service.go",
+            "Old": "\t\tclaimed, err := s.store.BeginCaptureRetry(ctx, order.ID, active.ID, s.instanceID, s.leaseTTL)\n\t\tif err != nil {\n\t\t\treturn Operation{}, err\n\t\t}\n\t\treturn claimed, nil",
+            "New": "\t\tclaimed, err := s.store.BeginCaptureRetry(ctx, order.ID, active.ID, s.instanceID, s.leaseTTL)\n\t\tif err != nil {\n\t\t\treturn Operation{}, err\n\t\t}\n\t\tclaimed.ProviderRequestID += \"-retry\"\n\t\treturn claimed, nil"
+          }
+        ],
+        "GateFault": "",
+        "Mode": "verified",
+        "ExpectedCategory": "identity",
+        "ReferenceFix": [
+          {
+            "Path": "apps/api/internal/merchant/service.go",
+            "Old": "\t\tclaimed.ProviderRequestID += \"-retry\"\n\t\treturn claimed, nil",
+            "New": "\t\treturn claimed, nil"
+          }
+        ],
+        "Exposed": false,
+        "Facts": [
+          "final_status",
+          "capture_status",
+          "capture_error",
+          "provider_capture_effects"
+        ]
+      },
+      "mutation_sha": "92a0e659ec2bf1b7cbc173d345e10230f9378b40",
+      "pre_repair": {
+        "accepted": false,
+        "reason": "order did not reach CAPTURED_VERIFIED (status APPROVED); counterexample: I4: an outbound provider call happened before the operation identity was durably committed",
+        "order_status": "APPROVED",
+        "verdict": "UNSAFE",
+        "failing": [
+          "I4: an outbound provider call happened before the operation identity was durably committed",
+          "I5: after an ambiguous capture outcome, a NEW capture identity was issued (the ambiguity was treated as failure)"
+        ]
+      },
+      "runs": {
+        "B0": {
+          "case_id": "H1-identity-rewrite",
+          "condition": "B0",
+          "status": "DIAGNOSIS_ONLY",
+          "accepted": false,
+          "diagnosis_category": "identity",
+          "diagnosis_correct": true,
+          "patch_applied": false,
+          "build_passed": false,
+          "tests_passed": false,
+          "oracle_verdict": "UNSAFE",
+          "attempts": 0,
+          "latency_ms": 0,
+          "prompt_tokens": 0,
+          "completion_tokens": 0,
+          "error": "B0 has no patch capability; it cannot repair code and is not scored as a repair system",
+          "artifacts": "/Users/21sk/waypoint/evidence/m5/cases/H1-identity-rewrite/pre-repair"
+        },
+        "B1": {
+          "case_id": "H1-identity-rewrite",
+          "condition": "B1",
+          "status": "REPAIRED",
+          "accepted": true,
+          "diagnosis_category": "authorization",
+          "diagnosis_correct": false,
+          "patch_applied": true,
+          "build_passed": true,
+          "tests_passed": true,
+          "oracle_verdict": "VERIFIED_FOR_TESTED_SCENARIOS",
+          "attempts": 1,
+          "latency_ms": 116048,
+          "prompt_tokens": 17866,
+          "completion_tokens": 6093,
+          "estimated_usd": 0.0126714,
+          "artifacts": "/Users/21sk/waypoint/evidence/m5/cases/H1-identity-rewrite/B1"
+        },
+        "B2": {
+          "case_id": "H1-identity-rewrite",
+          "condition": "B2",
+          "status": "REPAIRED",
+          "accepted": true,
+          "diagnosis_category": "authorization",
+          "diagnosis_correct": false,
+          "patch_applied": true,
+          "build_passed": true,
+          "tests_passed": true,
+          "oracle_verdict": "VERIFIED_FOR_TESTED_SCENARIOS",
+          "attempts": 1,
+          "latency_ms": 95865,
+          "prompt_tokens": 17730,
+          "completion_tokens": 4794,
+          "estimated_usd": 0.0110718,
+          "artifacts": "/Users/21sk/waypoint/evidence/m5/cases/H1-identity-rewrite/B2"
+        }
+      }
+    },
+    {
+      "case": {
+        "ID": "H2-webhook-conflict",
+        "Family": "webhook-fulfillment",
+        "Title": "A conflicting duplicate event id is treated as a new capture event",
+        "BaseRevision": "",
+        "Journey": "H2-webhook-conflict",
+        "Mutations": [
+          {
+            "Path": "apps/api/internal/merchant/webhook.go",
+            "Old": "VALUES ($1::uuid, 'FULFILL', $2, $3)",
+            "New": "VALUES ($1::uuid, $2, $2, $3)"
+          },
+          {
+            "Path": "apps/api/internal/merchant/webhook.go",
+            "Old": "if ev.CaptureID == \"\" || ev.CaptureID != verifiedCapture {",
+            "New": "if ev.CaptureID == \"\" {\n\t\t\t_ = verifiedCapture"
+          }
+        ],
+        "GateFault": "F3",
+        "Mode": "verified",
+        "ExpectedCategory": "fulfillment",
+        "ReferenceFix": [
+          {
+            "Path": "apps/api/internal/merchant/webhook.go",
+            "Old": "VALUES ($1::uuid, $2, $2, $3)",
+            "New": "VALUES ($1::uuid, 'FULFILL', $2, $3)"
+          },
+          {
+            "Path": "apps/api/internal/merchant/webhook.go",
+            "Old": "if ev.CaptureID == \"\" {",
+            "New": "if ev.CaptureID == \"\" || ev.CaptureID != verifiedCapture {"
+          }
+        ],
+        "Exposed": false,
+        "Facts": [
+          "final_status",
+          "fulfillment_effects",
+          "conflict_rejected",
+          "conflict_error"
+        ]
+      },
+      "mutation_sha": "dfef311407bd16debfa2a6ce639c7db8de261328",
+      "pre_repair": {
+        "accepted": false,
+        "reason": "oracle verdict is UNSAFE, not VERIFIED_FOR_TESTED_SCENARIOS; counterexample: I13: the merchant recorded 2 fulfillment effects for one payment",
+        "order_status": "CAPTURED_VERIFIED",
+        "verdict": "UNSAFE",
+        "failing": [
+          "I13: the merchant recorded 2 fulfillment effects for one payment",
+          "I14: a fulfillment effect is not backed by an authenticated event naming the verified capture"
+        ]
+      },
+      "runs": {
+        "B0": {
+          "case_id": "H2-webhook-conflict",
+          "condition": "B0",
+          "status": "DIAGNOSIS_ONLY",
+          "accepted": false,
+          "diagnosis_category": "fulfillment",
+          "diagnosis_correct": true,
+          "patch_applied": false,
+          "build_passed": false,
+          "tests_passed": false,
+          "oracle_verdict": "UNSAFE",
+          "attempts": 0,
+          "latency_ms": 0,
+          "prompt_tokens": 0,
+          "completion_tokens": 0,
+          "error": "B0 has no patch capability; it cannot repair code and is not scored as a repair system",
+          "artifacts": "/Users/21sk/waypoint/evidence/m5/cases/H2-webhook-conflict/pre-repair"
+        },
+        "B1": {
+          "case_id": "H2-webhook-conflict",
+          "condition": "B1",
+          "status": "ERROR",
+          "accepted": false,
+          "diagnosis_category": "unknown",
+          "diagnosis_correct": false,
+          "patch_applied": false,
+          "build_passed": false,
+          "tests_passed": false,
+          "oracle_verdict": "",
+          "attempts": 0,
+          "latency_ms": 287,
+          "prompt_tokens": 0,
+          "completion_tokens": 0,
+          "error": "the model call failed: llm: UNAVAILABLE (HTTP 402): the provider did not complete the request",
+          "artifacts": "/Users/21sk/waypoint/evidence/m5/cases/H2-webhook-conflict/B1"
+        },
+        "B2": {
+          "case_id": "H2-webhook-conflict",
+          "condition": "B2",
+          "status": "ERROR",
+          "accepted": false,
+          "diagnosis_category": "unknown",
+          "diagnosis_correct": false,
+          "patch_applied": false,
+          "build_passed": false,
+          "tests_passed": false,
+          "oracle_verdict": "",
+          "attempts": 0,
+          "latency_ms": 333,
+          "prompt_tokens": 0,
+          "completion_tokens": 0,
+          "error": "the model call failed: llm: UNAVAILABLE (HTTP 402): the provider did not complete the request",
+          "artifacts": "/Users/21sk/waypoint/evidence/m5/cases/H2-webhook-conflict/B2"
+        }
+      }
+    },
+    {
+      "case": {
+        "ID": "H3-currency-mismatch",
+        "Family": "monetary-evidence",
+        "Title": "Capture verification ignores the provider currency",
+        "BaseRevision": "",
+        "Journey": "H3-currency-mismatch",
+        "Mutations": [
+          {
+            "Path": "apps/api/internal/merchant/service.go",
+            "Old": "c.Amount.CurrencyCode == order.Currency \u0026\u0026 c.Amount.Value == expected",
+            "New": "c.Amount.Value == expected"
+          }
+        ],
+        "GateFault": "",
+        "Mode": "refused",
+        "ExpectedCategory": "monetary",
+        "ReferenceFix": [
+          {
+            "Path": "apps/api/internal/merchant/service.go",
+            "Old": "if c.Status == paypal.CaptureStatusCompleted \u0026\u0026 c.ID != \"\" \u0026\u0026\n\t\t\tc.Amount.Value == expected {",
+            "New": "if c.Status == paypal.CaptureStatusCompleted \u0026\u0026 c.ID != \"\" \u0026\u0026\n\t\t\tc.Amount.CurrencyCode == order.Currency \u0026\u0026 c.Amount.Value == expected {"
+          }
+        ],
+        "Exposed": false,
+        "Facts": [
+          "final_status",
+          "capture_status",
+          "capture_error"
+        ]
+      },
+      "mutation_sha": "a621f13702b3ac3bea995b1dea5646b265acd822",
+      "pre_repair": {
+        "accepted": false,
+        "reason": "safe-refusal case ended in CAPTURED_VERIFIED, want CAPTURE_OUTCOME_UNKNOWN",
+        "order_status": "CAPTURED_VERIFIED",
+        "verdict": "UNSAFE",
+        "failing": [
+          "I6: order f018bdff-0306-4a5b-9feb-82f9761d7704 claims capture CAP-SCRIPT-0001 for 12.34 USD, but the provider evidence shows \"12.34\" \"CAD\""
+        ]
+      },
+      "runs": {
+        "B0": {
+          "case_id": "H3-currency-mismatch",
+          "condition": "B0",
+          "status": "DIAGNOSIS_ONLY",
+          "accepted": false,
+          "diagnosis_category": "monetary",
+          "diagnosis_correct": true,
+          "patch_applied": false,
+          "build_passed": false,
+          "tests_passed": false,
+          "oracle_verdict": "UNSAFE",
+          "attempts": 0,
+          "latency_ms": 0,
+          "prompt_tokens": 0,
+          "completion_tokens": 0,
+          "error": "B0 has no patch capability; it cannot repair code and is not scored as a repair system",
+          "artifacts": "/Users/21sk/waypoint/evidence/m5/cases/H3-currency-mismatch/pre-repair"
+        }
+      }
+    },
+    {
+      "case": {
+        "ID": "H4-pending-capture",
+        "Family": "response-interpretation",
+        "Title": "Any capture status is treated as completed",
+        "BaseRevision": "",
+        "Journey": "H4-pending-capture",
+        "Mutations": [
+          {
+            "Path": "apps/api/internal/merchant/service.go",
+            "Old": "if c.Status == paypal.CaptureStatusCompleted \u0026\u0026 c.ID != \"\" \u0026\u0026",
+            "New": "if c.Status != \"\" \u0026\u0026 c.ID != \"\" \u0026\u0026"
+          }
+        ],
+        "GateFault": "",
+        "Mode": "refused",
+        "ExpectedCategory": "status",
+        "ReferenceFix": [
+          {
+            "Path": "apps/api/internal/merchant/service.go",
+            "Old": "if c.Status != \"\" \u0026\u0026 c.ID != \"\" \u0026\u0026",
+            "New": "if c.Status == paypal.CaptureStatusCompleted \u0026\u0026 c.ID != \"\" \u0026\u0026"
+          }
+        ],
+        "Exposed": false,
+        "Facts": [
+          "final_status",
+          "capture_status",
+          "capture_error"
+        ]
+      },
+      "mutation_sha": "36d3df7a6c6e32d500c0f12f20c2654f09c1eea8",
+      "pre_repair": {
+        "accepted": false,
+        "reason": "safe-refusal case ended in CAPTURED_VERIFIED, want CAPTURE_OUTCOME_UNKNOWN",
+        "order_status": "CAPTURED_VERIFIED",
+        "verdict": "UNSAFE",
+        "failing": [
+          "I6: order 357f44c0-68d6-4a11-8018-4fa309ba5bd9 claims capture CAP-SCRIPT-0001 as completed, but the provider shows status \"PENDING\" for it"
+        ]
+      },
+      "runs": {
+        "B0": {
+          "case_id": "H4-pending-capture",
+          "condition": "B0",
+          "status": "DIAGNOSIS_ONLY",
+          "accepted": false,
+          "diagnosis_category": "status",
+          "diagnosis_correct": true,
+          "patch_applied": false,
+          "build_passed": false,
+          "tests_passed": false,
+          "oracle_verdict": "UNSAFE",
+          "attempts": 0,
+          "latency_ms": 0,
+          "prompt_tokens": 0,
+          "completion_tokens": 0,
+          "error": "B0 has no patch capability; it cannot repair code and is not scored as a repair system",
+          "artifacts": "/Users/21sk/waypoint/evidence/m5/cases/H4-pending-capture/pre-repair"
+        }
+      }
+    },
+    {
+      "case": {
+        "ID": "H5-early-fulfillment",
+        "Family": "webhook-fulfillment",
+        "Title": "An early capture event fulfills before local verification",
+        "BaseRevision": "",
+        "Journey": "H5-early-fulfillment",
+        "Mutations": [
+          {
+            "Path": "apps/api/internal/merchant/webhook.go",
+            "Old": "\t\tif status != StatusCapturedVerified {\n\t\t\t// Early event: durable receipt only. A later redelivery, after the\n\t\t\t// merchant has verified the capture, can still fulfill.\n\t\t\tbreak\n\t\t}",
+            "New": "\t\t_ = status"
+          },
+          {
+            "Path": "apps/api/internal/merchant/webhook.go",
+            "Old": "if ev.CaptureID == \"\" || ev.CaptureID != verifiedCapture {",
+            "New": "if ev.CaptureID == \"\" {\n\t\t\t_ = verifiedCapture"
+          }
+        ],
+        "GateFault": "F3",
+        "Mode": "verified",
+        "ExpectedCategory": "fulfillment",
+        "ReferenceFix": [
+          {
+            "Path": "apps/api/internal/merchant/webhook.go",
+            "Old": "\t\t_ = status",
+            "New": "\t\tif status != StatusCapturedVerified {\n\t\t\tbreak\n\t\t}"
+          },
+          {
+            "Path": "apps/api/internal/merchant/webhook.go",
+            "Old": "if ev.CaptureID == \"\" {\n\t\t\t_ = verifiedCapture",
+            "New": "if ev.CaptureID == \"\" || ev.CaptureID != verifiedCapture {"
+          }
+        ],
+        "Exposed": false,
+        "Facts": [
+          "final_status",
+          "fulfillment_effects_early",
+          "fulfillment_effects"
+        ]
+      },
+      "mutation_sha": "ffb578fd805873f9258f2783886e5a385b406701",
+      "pre_repair": {
+        "accepted": false,
+        "reason": "oracle verdict is UNSAFE, not VERIFIED_FOR_TESTED_SCENARIOS; counterexample: I14: a fulfillment effect was created before the merchant verified the capture",
+        "order_status": "CAPTURED_VERIFIED",
+        "verdict": "UNSAFE",
+        "failing": [
+          "I14: a fulfillment effect was created before the merchant verified the capture"
+        ]
+      },
+      "runs": {
+        "B0": {
+          "case_id": "H5-early-fulfillment",
+          "condition": "B0",
+          "status": "DIAGNOSIS_ONLY",
+          "accepted": false,
+          "diagnosis_category": "fulfillment",
+          "diagnosis_correct": true,
+          "patch_applied": false,
+          "build_passed": false,
+          "tests_passed": false,
+          "oracle_verdict": "UNSAFE",
+          "attempts": 0,
+          "latency_ms": 0,
+          "prompt_tokens": 0,
+          "completion_tokens": 0,
+          "error": "B0 has no patch capability; it cannot repair code and is not scored as a repair system",
+          "artifacts": "/Users/21sk/waypoint/evidence/m5/cases/H5-early-fulfillment/pre-repair"
+        }
+      }
+    },
+    {
+      "case": {
+        "ID": "H6-ambiguous-reconcile",
+        "Family": "ambiguity-reconciliation",
+        "Title": "Reconciliation turns an ambiguous capture into a definite rejection",
+        "BaseRevision": "",
+        "Journey": "H6-ambiguous-reconcile",
+        "Mutations": [
+          {
+            "Path": "apps/api/internal/merchant/service.go",
+            "Old": "\t} else {\n\t\tif err := s.store.AppendEvent(ctx, orderID, \"PAYPAL\", \"RECONCILIATION_INCONCLUSIVE\", detail, s.evidenceTier()); err != nil {\n\t\t\treturn Order{}, err\n\t\t}\n\t\tif err := s.store.TouchLastChecked(ctx, active.ID); err != nil {\n\t\t\treturn Order{}, err\n\t\t}\n\t}",
+            "New": "\t} else {\n\t\tif _, err := s.store.MarkCaptureRejected(ctx, orderID, active.ID, active.Fence, detail, s.evidenceTier()); err != nil {\n\t\t\treturn Order{}, err\n\t\t}\n\t}"
+          }
+        ],
+        "GateFault": "",
+        "Mode": "refused",
+        "ExpectedCategory": "ambiguity",
+        "ReferenceFix": [
+          {
+            "Path": "apps/api/internal/merchant/service.go",
+            "Old": "\t} else {\n\t\tif _, err := s.store.MarkCaptureRejected(ctx, orderID, active.ID, active.Fence, detail, s.evidenceTier()); err != nil {\n\t\t\treturn Order{}, err\n\t\t}\n\t}",
+            "New": "\t} else {\n\t\tif err := s.store.AppendEvent(ctx, orderID, \"PAYPAL\", \"RECONCILIATION_INCONCLUSIVE\", detail, s.evidenceTier()); err != nil {\n\t\t\treturn Order{}, err\n\t\t}\n\t\tif err := s.store.TouchLastChecked(ctx, active.ID); err != nil {\n\t\t\treturn Order{}, err\n\t\t}\n\t}"
+          }
+        ],
+        "Exposed": false,
+        "Facts": [
+          "final_status",
+          "capture_status",
+          "reconcile_error",
+          "capture_error"
+        ]
+      },
+      "mutation_sha": "6b492027dd0a45d318355f707be40475d4ad1c1d",
+      "pre_repair": {
+        "accepted": false,
+        "reason": "safe-refusal case ended in APPROVED, want CAPTURE_OUTCOME_UNKNOWN",
+        "order_status": "APPROVED",
+        "verdict": "UNSAFE",
+        "failing": [
+          "I5: an ambiguous provider error was locally resolved as REJECTED with no definite provider refusal"
+        ]
+      },
+      "runs": {
+        "B0": {
+          "case_id": "H6-ambiguous-reconcile",
+          "condition": "B0",
+          "status": "DIAGNOSIS_ONLY",
+          "accepted": false,
+          "diagnosis_category": "ambiguity",
+          "diagnosis_correct": true,
+          "patch_applied": false,
+          "build_passed": false,
+          "tests_passed": false,
+          "oracle_verdict": "UNSAFE",
+          "attempts": 0,
+          "latency_ms": 0,
+          "prompt_tokens": 0,
+          "completion_tokens": 0,
+          "error": "B0 has no patch capability; it cannot repair code and is not scored as a repair system",
+          "artifacts": "/Users/21sk/waypoint/evidence/m5/cases/H6-ambiguous-reconcile/pre-repair"
+        }
+      }
+    },
+    {
+      "case": {
+        "ID": "H7-webhook-duplicate-exposed",
+        "Family": "webhook-fulfillment",
+        "Title": "Duplicate delivery creates a second fulfillment (M4 mechanism, exposed)",
+        "BaseRevision": "",
+        "Journey": "H7-webhook-duplicate-exposed",
+        "Mutations": [
+          {
+            "Path": "apps/api/internal/merchant/webhook.go",
+            "Old": "VALUES ($1::uuid, 'FULFILL', $2, $3)",
+            "New": "VALUES ($1::uuid, $2, $2, $3)"
+          }
+        ],
+        "GateFault": "F3",
+        "Mode": "verified",
+        "ExpectedCategory": "fulfillment",
+        "ReferenceFix": [
+          {
+            "Path": "apps/api/internal/merchant/webhook.go",
+            "Old": "VALUES ($1::uuid, $2, $2, $3)",
+            "New": "VALUES ($1::uuid, 'FULFILL', $2, $3)"
+          }
+        ],
+        "Exposed": true,
+        "Facts": [
+          "final_status",
+          "fulfillment_effects",
+          "evt_cap_1_deliveries"
+        ]
+      },
+      "mutation_sha": "eb43d6423a8111d1d4ecad25055a5c018f721821",
+      "pre_repair": {
+        "accepted": false,
+        "reason": "order did not reach CAPTURED_VERIFIED (status APPROVED); counterexample: I8: final order status rolled back from a verified capture",
+        "order_status": "APPROVED",
+        "verdict": "UNSAFE",
+        "failing": [
+          "I8: final order status rolled back from a verified capture",
+          "I13: the merchant recorded 2 fulfillment effects for one payment",
+          "I14: a fulfillment effect exists for an order that is not CAPTURED_VERIFIED"
+        ]
+      },
+      "runs": {
+        "B0": {
+          "case_id": "H7-webhook-duplicate-exposed",
+          "condition": "B0",
+          "status": "DIAGNOSIS_ONLY",
+          "accepted": false,
+          "diagnosis_category": "fulfillment",
+          "diagnosis_correct": true,
+          "patch_applied": false,
+          "build_passed": false,
+          "tests_passed": false,
+          "oracle_verdict": "UNSAFE",
+          "attempts": 0,
+          "latency_ms": 0,
+          "prompt_tokens": 0,
+          "completion_tokens": 0,
+          "error": "B0 has no patch capability; it cannot repair code and is not scored as a repair system",
+          "artifacts": "/Users/21sk/waypoint/evidence/m5/cases/H7-webhook-duplicate-exposed/pre-repair"
+        }
+      }
+    }
+  ],
+  "totals": {
+    "held_out_cases": 6,
+    "safe_accepted": 2,
+    "verified_accepted": 2,
+    "safe_refusals": 0,
+    "rejected": 0,
+    "errors": 2,
+    "not_run": 8,
+    "false_acceptances": 0,
+    "unsafe_candidates_rejected": 0,
+    "prompt_tokens": 35596,
+    "completion_tokens": 10887,
+    "estimated_usd": 0.0237432,
+    "by_condition": {
+      "B0": {
+        "safe_accepted": 0,
+        "verified_accepted": 0,
+        "safe_refusals": 0,
+        "rejected": 0,
+        "errors": 0,
+        "not_run": 0,
+        "false_acceptances": 0,
+        "prompt_tokens": 0,
+        "completion_tokens": 0
+      },
+      "B1": {
+        "safe_accepted": 1,
+        "verified_accepted": 1,
+        "safe_refusals": 0,
+        "rejected": 0,
+        "errors": 1,
+        "not_run": 4,
+        "false_acceptances": 0,
+        "prompt_tokens": 17866,
+        "completion_tokens": 6093,
+        "estimated_usd": 0.0126714
+      },
+      "B2": {
+        "safe_accepted": 1,
+        "verified_accepted": 1,
+        "safe_refusals": 0,
+        "rejected": 0,
+        "errors": 1,
+        "not_run": 4,
+        "false_acceptances": 0,
+        "prompt_tokens": 17730,
+        "completion_tokens": 4794,
+        "estimated_usd": 0.0110718
+      }
+    }
+  },
+  "notes": [
+    "This is a small held-out corpus, not a statistical benchmark. Counts are raw; no significance is claimed.",
+    "Zero observed false acceptances does not establish a zero real-world failure probability.",
+    "All provider interaction is tier F (scripted fixture). No PayPal transaction or signed webhook was used.",
+    "Exposed cases are reported separately and excluded from held-out totals."
+  ]
+}
