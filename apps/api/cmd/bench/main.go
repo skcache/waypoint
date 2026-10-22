@@ -27,6 +27,8 @@ func main() {
 	condition := flag.String("condition", "", "B0, B1, B2, or empty for all")
 	freeze := flag.Bool("freeze", false, "write the corpus freeze file and exit")
 	dsn := flag.String("dsn", "", "benchmark PostgreSQL DSN (default: derive *_test from DATABASE_URL)")
+	webonly := flag.Bool("webonly", false, "regenerate the workbench data from an existing results.json and exit")
+	resume := flag.Bool("resume", false, "merge this invocation into an existing results.json")
 	flag.Parse()
 
 	root, err := repoRoot(*repo)
@@ -45,6 +47,22 @@ func main() {
 		return
 	}
 
+	if *webonly {
+		outDir := filepath.Join(root, *out)
+		raw, err := os.ReadFile(filepath.Join(outDir, "results.json"))
+		if err != nil {
+			fatal(err)
+		}
+		var ds bench.Dataset
+		if err := json.Unmarshal(raw, &ds); err != nil {
+			fatal(err)
+		}
+		if err := writeWebData(filepath.Join(root, *web), outDir, &ds); err != nil {
+			fatal(err)
+		}
+		fmt.Println("web data regenerated")
+		return
+	}
 	dsnValue := *dsn
 	if dsnValue == "" {
 		dsnValue, err = deriveBenchDSN()
@@ -63,7 +81,7 @@ func main() {
 	opts := bench.Options{
 		RepoRoot: root, BaseSHA: baseSHA, OutDir: filepath.Join(root, *out),
 		WebDataDir: filepath.Join(root, *web), DSN: dsnValue, Model: cfg,
-		Condition: *condition, CaseIDs: ids, MaxAttemptsB2: 2,
+		Condition: *condition, CaseIDs: ids, MaxAttemptsB2: 2, Resume: *resume,
 	}
 	ds, err := bench.Run(context.Background(), opts)
 	if err != nil {
@@ -133,12 +151,13 @@ func writeResults(outDir string, ds *bench.Dataset) error {
 // webRun is the compact artifact the read-only workbench renders.
 type webRun struct {
 	bench.Result
-	Report  *repair.Report  `json:"report,omitempty"`
-	Diff    string          `json:"diff,omitempty"`
-	PreEval json.RawMessage `json:"pre_eval,omitempty"`
-	Eval    json.RawMessage `json:"eval,omitempty"`
-	Diag    json.RawMessage `json:"diagnosis_reply,omitempty"`
-	Patch   json.RawMessage `json:"patch_reply,omitempty"`
+	Report       *repair.Report  `json:"report,omitempty"`
+	Diff         string          `json:"diff,omitempty"`
+	PreEval      json.RawMessage `json:"pre_eval,omitempty"`
+	Eval         json.RawMessage `json:"eval,omitempty"`
+	Diag         json.RawMessage `json:"diagnosis_reply,omitempty"`
+	Patch        json.RawMessage `json:"patch_reply,omitempty"`
+	Observations json.RawMessage `json:"observations,omitempty"`
 }
 
 type webDoc struct {
@@ -174,6 +193,9 @@ func writeWebData(webDir, outDir string, ds *bench.Dataset) error {
 			}
 			if data, err := os.ReadFile(filepath.Join(outDir, "cases", cr.Case.ID, "pre-repair", "eval.json")); err == nil {
 				v.PreEval = data
+			}
+			if data, err := os.ReadFile(filepath.Join(outDir, "cases", cr.Case.ID, "pre-repair", "observations.json")); err == nil {
+				v.Observations = data
 			}
 			doc.Views[cr.Case.ID][cond] = v
 		}

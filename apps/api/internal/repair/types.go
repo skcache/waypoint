@@ -153,6 +153,7 @@ type Report struct {
 	StartedAt      time.Time `json:"started_at"`
 	FinishedAt     time.Time `json:"finished_at"`
 	Status         string    `json:"status"`
+	Error          string    `json:"error,omitempty"`
 
 	Diagnosis *Diagnosis `json:"diagnosis,omitempty"`
 	Attempts  []Attempt  `json:"attempts"`

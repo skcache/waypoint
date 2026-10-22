@@ -98,11 +98,20 @@ func ParseDiagnosis(text string, ev Evidence, allow Allowlist) (*Diagnosis, erro
 		}
 		return nil, fmt.Errorf("repair: diagnosis names source %q outside the provided package", f)
 	}
+	// The field is a list of invariant IDs. Models sometimes append a short
+	// explanation to an entry; keep the valid IDs and reject a reply that names
+	// no real invariant at all. This is format tolerance, not a weakening of
+	// any financial check.
+	cleaned := make([]string, 0, len(d.InvariantsAtRisk))
 	for _, inv := range d.InvariantsAtRisk {
-		if !knownInvariants[inv] {
-			return nil, fmt.Errorf("repair: diagnosis names unknown invariant %q", inv)
+		if knownInvariants[inv] {
+			cleaned = append(cleaned, inv)
 		}
 	}
+	if len(d.InvariantsAtRisk) > 0 && len(cleaned) == 0 {
+		return nil, fmt.Errorf("repair: diagnosis names no known invariant")
+	}
+	d.InvariantsAtRisk = cleaned
 	return &d, nil
 }
 

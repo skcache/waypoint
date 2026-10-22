@@ -98,14 +98,16 @@ func Run(ctx context.Context, opts Options) *Report {
 	rep.aggregate(meta)
 	if err != nil {
 		rep.Status = StatusError
-		rep.Limitations = append(rep.Limitations, "the model call failed: "+err.Error())
+		rep.Error = "the model call failed: " + err.Error()
+		rep.Limitations = append(rep.Limitations, rep.Error)
 		return finish(rep, opts)
 	}
 	_ = os.WriteFile(filepath.Join(opts.OutDir, "diagnosis-reply.txt"), []byte(redact(reply.Text, "")), 0o600)
 	diag, err := ParseDiagnosis(reply.Text, opts.Evidence, opts.Allow)
 	if err != nil {
 		rep.Status = StatusError
-		rep.Limitations = append(rep.Limitations, "the diagnosis reply failed schema validation: "+err.Error())
+		rep.Error = "the diagnosis reply failed schema validation: " + err.Error()
+		rep.Limitations = append(rep.Limitations, rep.Error)
 		return finish(rep, opts)
 	}
 	rep.Diagnosis = diag
@@ -120,8 +122,8 @@ func Run(ctx context.Context, opts Options) *Report {
 		r, err := OpenSandbox(ctx, opts.RepoRoot)
 		if err != nil {
 			rep.Status = StatusError
-			rep.Limitations = append(rep.Limitations,
-				"the candidate execution sandbox is unavailable; refusing to run model-generated code on the host (fail closed): "+err.Error())
+			rep.Error = "the candidate execution sandbox is unavailable; refusing to run model-generated code on the host (fail closed): " + err.Error()
+			rep.Limitations = append(rep.Limitations, rep.Error)
 			return finish(rep, opts)
 		}
 		runner = r
@@ -153,6 +155,7 @@ func Run(ctx context.Context, opts Options) *Report {
 			a.FinishedAt = time.Now().UTC()
 			rep.Attempts = append(rep.Attempts, a)
 			rep.Status = StatusError
+			rep.Error = a.Error
 			break
 		}
 
@@ -179,6 +182,7 @@ func Run(ctx context.Context, opts Options) *Report {
 			a.FinishedAt = time.Now().UTC()
 			rep.Attempts = append(rep.Attempts, a)
 			rep.Status = StatusError
+			rep.Error = a.Error
 			break
 		}
 		changed, err := ws.ApplyEdits(patch.Edits, opts.Allow)

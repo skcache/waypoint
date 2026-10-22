@@ -38,6 +38,9 @@ type Options struct {
 	Condition     string // B0, B1, B2, or "" for all
 	CaseIDs       []string
 	MaxAttemptsB2 int
+	// Resume merges this invocation's case results into an existing
+	// results.json in OutDir instead of replacing it.
+	Resume bool
 }
 
 // Result is one case under one condition.
@@ -200,8 +203,48 @@ func Run(ctx context.Context, opts Options) (*Dataset, error) {
 		}
 		ds.Cases = append(ds.Cases, cr)
 	}
+	if opts.Resume {
+		ds.Cases = mergeCases(loadPrior(opts.OutDir), ds.Cases)
+	}
 	ds.Totals = totalize(ds.Cases)
 	return ds, nil
+}
+
+func loadPrior(outDir string) []CaseReport {
+	raw, err := os.ReadFile(filepath.Join(outDir, "results.json"))
+	if err != nil {
+		return nil
+	}
+	var prior Dataset
+	if json.Unmarshal(raw, &prior) != nil {
+		return nil
+	}
+	return prior.Cases
+}
+
+func mergeCases(prior, fresh []CaseReport) []CaseReport {
+	byID := map[string]CaseReport{}
+	order := []string{}
+	for _, c := range prior {
+		byID[c.Case.ID] = c
+		order = append(order, c.Case.ID)
+	}
+	for _, c := range fresh {
+		if old, ok := byID[c.Case.ID]; ok {
+			for cond, run := range c.Runs {
+				old.Runs[cond] = run
+			}
+			c.Runs = old.Runs
+		} else {
+			order = append(order, c.Case.ID)
+		}
+		byID[c.Case.ID] = c
+	}
+	out := make([]CaseReport, 0, len(order))
+	for _, id := range order {
+		out = append(out, byID[id])
+	}
+	return out
 }
 
 func runCase(ctx context.Context, opts Options, c Case) (CaseReport, error) {
@@ -495,7 +538,10 @@ func runRepair(ctx context.Context, opts Options, c Case, ws, sha string, ev rep
 		}
 	} else if rep.Status == "ERROR" {
 		r.Status = "ERROR"
-		r.Error = lastError(rep.Attempts)
+		r.Error = rep.Error
+		if r.Error == "" {
+			r.Error = lastError(rep.Attempts)
+		}
 	} else {
 		r.Status = "REJECTED"
 		if len(rep.Attempts) > 0 {
