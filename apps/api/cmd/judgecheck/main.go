@@ -65,12 +65,13 @@ type casePolicy struct {
 }
 
 var casePolicies = map[string]casePolicy{
-	"H1-identity-rewrite":    {"verified", "CAPTURED_VERIFIED", "any", -1},
-	"H2-webhook-conflict":    {"verified", "CAPTURED_VERIFIED", "any", 1},
-	"H3-currency-mismatch":   {"refused", "CAPTURE_OUTCOME_UNKNOWN", "unknown", -1},
-	"H4-pending-capture":     {"refused", "CAPTURE_OUTCOME_UNKNOWN", "unknown", -1},
-	"H5-approval-bypass":     {"refused", "ORDER_CREATED", "none", -1},
-	"H6-ambiguous-reconcile": {"refused", "CAPTURE_OUTCOME_UNKNOWN", "unknown", -1},
+	"H1-identity-rewrite":          {"verified", "CAPTURED_VERIFIED", "any", -1},
+	"H2-webhook-conflict":          {"verified", "CAPTURED_VERIFIED", "any", 1},
+	"H3-currency-mismatch":         {"refused", "CAPTURE_OUTCOME_UNKNOWN", "unknown", -1},
+	"H4-pending-capture":           {"refused", "CAPTURE_OUTCOME_UNKNOWN", "unknown", -1},
+	"H5-early-fulfillment":         {"verified", "CAPTURED_VERIFIED", "any", 1},
+	"H6-ambiguous-reconcile":       {"refused", "CAPTURE_OUTCOME_UNKNOWN", "unknown", -1},
+	"H7-webhook-duplicate-exposed": {"verified", "CAPTURED_VERIFIED", "any", 1},
 }
 
 func run(ctx context.Context, fault, caseID, in, outDir, dsn, baseRevision, patchDigest string) error {
