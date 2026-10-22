@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // InvariantResult is one invariant's outcome with human-readable reasoning and
@@ -1085,6 +1086,36 @@ func checkI14(ev *Evidence) InvariantResult {
 				Counterexample: map[string]any{
 					"order_id": f.OrderID, "event_id": f.EventID,
 					"verified_capture_id": verified.ProviderCaptureID,
+				},
+			}
+		}
+		// The effect must not precede the merchant's own capture confirmation:
+		// an early webhook may be recorded, but it cannot fulfill before the
+		// local journal proves the payment.
+		var confirmedAt time.Time
+		for _, e := range ev.Events {
+			if e.OrderID != f.OrderID {
+				continue
+			}
+			if e.EventType == "PROVIDER_CAPTURE_CONFIRMED" || e.EventType == "PROVIDER_CAPTURE_RECOVERED" {
+				if e.CreatedAt.After(confirmedAt) {
+					confirmedAt = e.CreatedAt
+				}
+			}
+		}
+		if confirmedAt.IsZero() {
+			return InvariantResult{
+				Status:         StatusFail,
+				Summary:        "a fulfillment effect has no durable capture confirmation behind it",
+				Counterexample: map[string]any{"order_id": f.OrderID, "event_id": f.EventID},
+			}
+		}
+		if f.CreatedAt.Before(confirmedAt) {
+			return InvariantResult{
+				Status:  StatusFail,
+				Summary: "a fulfillment effect was created before the merchant verified the capture",
+				Counterexample: map[string]any{
+					"order_id": f.OrderID, "fulfilled_at": f.CreatedAt.UTC(), "confirmed_at": confirmedAt.UTC(),
 				},
 			}
 		}

@@ -81,22 +81,16 @@ func Cases() []Case {
 			Mutations: []Mutation{
 				{
 					Path: "apps/api/internal/merchant/webhook.go",
-					Old:  "if err := s.recordWebhookReceipt(ctx, tx, ev, orderID, true); err != nil {",
-					New:  "if err := s.recordWebhookReceipt(ctx, tx, ev, orderID, false); err != nil {",
-				},
-				{
-					Path: "apps/api/internal/merchant/webhook.go",
 					Old:  "VALUES ($1::uuid, 'FULFILL', $2, $3)",
 					New:  "VALUES ($1::uuid, $2, $2, $3)",
 				},
 				{
 					Path: "apps/api/internal/merchant/webhook.go",
 					Old:  "if ev.CaptureID == \"\" || ev.CaptureID != verifiedCapture {",
-					New:  "if ev.CaptureID == \"\" {",
+					New:  "if ev.CaptureID == \"\" {\n\t\t\t_ = verifiedCapture",
 				},
 			},
 			ReferenceFix: []Mutation{
-				{Path: "apps/api/internal/merchant/webhook.go", Old: "s.recordWebhookReceipt(ctx, tx, ev, orderID, false)", New: "s.recordWebhookReceipt(ctx, tx, ev, orderID, true)"},
 				{Path: "apps/api/internal/merchant/webhook.go", Old: "VALUES ($1::uuid, $2, $2, $3)", New: "VALUES ($1::uuid, 'FULFILL', $2, $3)"},
 				{Path: "apps/api/internal/merchant/webhook.go", Old: "if ev.CaptureID == \"\" {", New: "if ev.CaptureID == \"\" || ev.CaptureID != verifiedCapture {"},
 			},
@@ -136,23 +130,27 @@ func Cases() []Case {
 			}},
 		},
 		{
-			ID: "H5-approval-bypass", Family: "authorization",
-			Title:   "Capture is attempted before buyer approval",
-			Journey: "H5-approval-bypass", Mode: "refused",
-			ExpectedCategory: "authorization",
-			Facts:            []string{"final_status", "capture_status", "capture_error"},
-			Mutations: []Mutation{{
-				Path: "apps/api/internal/merchant/service.go",
-				Old: "	case paypal.OrderStatusCreated:\n" +
-					"		return Order{}, fmt.Errorf(\"%w: buyer approval has not been observed yet (provider status CREATED)\", ErrConflict)",
-				New: "	case paypal.OrderStatusCreated:\n" +
-					"		// The capture attempt proceeds.",
-			}},
-			ReferenceFix: []Mutation{{
-				Path: "apps/api/internal/merchant/service.go",
-				Old:  "	case paypal.OrderStatusCreated:\n		// The capture attempt proceeds.",
-				New:  "	case paypal.OrderStatusCreated:\n		return Order{}, fmt.Errorf(\"%w: buyer approval has not been observed yet (provider status CREATED)\", ErrConflict)",
-			}},
+			ID: "H5-early-fulfillment", Family: "webhook-fulfillment",
+			Title:   "An early capture event fulfills before local verification",
+			Journey: "H5-early-fulfillment", Mode: "verified", GateFault: "F3",
+			ExpectedCategory: "fulfillment",
+			Facts:            []string{"final_status", "fulfillment_effects_early", "fulfillment_effects"},
+			Mutations: []Mutation{
+				{
+					Path: "apps/api/internal/merchant/webhook.go",
+					Old:  "\t\tif status != StatusCapturedVerified {\n\t\t\t// Early event: durable receipt only. A later redelivery, after the\n\t\t\t// merchant has verified the capture, can still fulfill.\n\t\t\tbreak\n\t\t}",
+					New:  "\t\t_ = status",
+				},
+				{
+					Path: "apps/api/internal/merchant/webhook.go",
+					Old:  "if ev.CaptureID == \"\" || ev.CaptureID != verifiedCapture {",
+					New:  "if ev.CaptureID == \"\" {\n\t\t\t_ = verifiedCapture",
+				},
+			},
+			ReferenceFix: []Mutation{
+				{Path: "apps/api/internal/merchant/webhook.go", Old: "\t\t_ = status", New: "\t\tif status != StatusCapturedVerified {\n\t\t\tbreak\n\t\t}"},
+				{Path: "apps/api/internal/merchant/webhook.go", Old: "if ev.CaptureID == \"\" {\n\t\t\t_ = verifiedCapture", New: "if ev.CaptureID == \"\" || ev.CaptureID != verifiedCapture {"},
+			},
 		},
 		{
 			ID: "H6-ambiguous-reconcile", Family: "ambiguity-reconciliation",
@@ -162,15 +160,24 @@ func Cases() []Case {
 			Facts:            []string{"final_status", "capture_status", "reconcile_error", "capture_error"},
 			Mutations: []Mutation{{
 				Path: "apps/api/internal/merchant/service.go",
-				Old: "	if active.Status == OpStatusInFlight {\n" +
-					"		if _, err := s.store.MarkCaptureUnknown(ctx, orderID, active.ID, active.Fence, detail, s.evidenceTier()); err != nil {",
-				New: "	if active.Status == OpStatusInFlight {\n" +
-					"		if _, err := s.store.MarkCaptureRejected(ctx, orderID, active.ID, active.Fence, detail, s.evidenceTier()); err != nil {",
+				Old: "	} else {\n" +
+					"		if err := s.store.AppendEvent(ctx, orderID, \"PAYPAL\", \"RECONCILIATION_INCONCLUSIVE\", detail, s.evidenceTier()); err != nil {\n" +
+					"			return Order{}, err\n" +
+					"		}\n" +
+					"		if err := s.store.TouchLastChecked(ctx, active.ID); err != nil {\n" +
+					"			return Order{}, err\n" +
+					"		}\n" +
+					"	}",
+				New: "	} else {\n" +
+					"		if _, err := s.store.MarkCaptureRejected(ctx, orderID, active.ID, active.Fence, detail, s.evidenceTier()); err != nil {\n" +
+					"			return Order{}, err\n" +
+					"		}\n" +
+					"	}",
 			}},
 			ReferenceFix: []Mutation{{
 				Path: "apps/api/internal/merchant/service.go",
-				Old:  "	if active.Status == OpStatusInFlight {\n		if _, err := s.store.MarkCaptureRejected(ctx, orderID, active.ID, active.Fence, detail, s.evidenceTier()); err != nil {",
-				New:  "	if active.Status == OpStatusInFlight {\n		if _, err := s.store.MarkCaptureUnknown(ctx, orderID, active.ID, active.Fence, detail, s.evidenceTier()); err != nil {",
+				Old:  "	} else {\n		if _, err := s.store.MarkCaptureRejected(ctx, orderID, active.ID, active.Fence, detail, s.evidenceTier()); err != nil {\n			return Order{}, err\n		}\n	}",
+				New:  "	} else {\n		if err := s.store.AppendEvent(ctx, orderID, \"PAYPAL\", \"RECONCILIATION_INCONCLUSIVE\", detail, s.evidenceTier()); err != nil {\n			return Order{}, err\n		}\n		if err := s.store.TouchLastChecked(ctx, active.ID); err != nil {\n			return Order{}, err\n		}\n	}",
 			}},
 		},
 		{

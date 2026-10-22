@@ -27,8 +27,8 @@ func RunCaseJourney(ctx context.Context, h *Harness, caseID string) (FixtureRun,
 		return runCaptureJourney(ctx, h, caseID, captureSetup{currency: "CAD"}, true)
 	case "H4-pending-capture":
 		return runCaptureJourney(ctx, h, caseID, captureSetup{status: "PENDING"}, true)
-	case "H5-approval-bypass":
-		return runCaptureJourney(ctx, h, caseID, captureSetup{skipApproval: true}, false)
+	case "H5-early-fulfillment":
+		return runH5(ctx, h)
 	case "H6-ambiguous-reconcile":
 		return runCaptureJourney(ctx, h, caseID, captureSetup{ambiguousCapture: true}, true)
 	}
@@ -40,6 +40,7 @@ func RunCaseJourney(ctx context.Context, h *Harness, caseID string) (FixtureRun,
 // in place; the benchmark mutation is the rewritten retry request id.
 func runH1(ctx context.Context, h *Harness) (FixtureRun, error) {
 	provider := NewScriptedProvider(h.Pool, FaultSchedule{Capture: FaultDropResponseAfterMutation})
+	provider.HideCaptureUntilResolved = true
 	run := FixtureRun{Fault: "H1-identity-rewrite", Facts: map[string]string{"provider": "scripted-fixture"}}
 	svc := merchant.NewService(h.Store, provider, merchant.FaultNone, "")
 	svc.SetProviderEvidenceTier(merchant.TierFault)
@@ -201,9 +202,9 @@ func runH2(ctx context.Context, h *Harness) (FixtureRun, error) {
 		}
 	}
 
-	deliver := func(capID string) error {
+	deliverID := func(id, capID string) error {
 		payload, err := json.Marshal(map[string]string{
-			"id": "evt-cap-1", "type": "PAYMENT.CAPTURE.COMPLETED",
+			"id": id, "type": "PAYMENT.CAPTURE.COMPLETED",
 			"provider_order_id": order.ProviderOrderID, "capture_id": capID,
 		})
 		if err != nil {
@@ -213,10 +214,10 @@ func runH2(ctx context.Context, h *Harness) (FixtureRun, error) {
 			merchant.FixtureSignatureHeader(): merchant.SignFixtureWebhook(fixtureWebhookSecret, payload),
 		})
 	}
-	if err := deliver(captureID); err != nil {
+	if err := deliverID("evt-cap-1", captureID); err != nil {
 		run.Facts["first_event_error"] = err.Error()
 	}
-	if err := deliver("CAP-CONFLICT-0001"); err != nil {
+	if err := deliverID("evt-cap-2", "CAP-CONFLICT-0001"); err != nil {
 		run.Facts["conflict_rejected"] = "true"
 		run.Facts["conflict_error"] = err.Error()
 	} else {
@@ -224,6 +225,63 @@ func runH2(ctx context.Context, h *Harness) (FixtureRun, error) {
 	}
 	run.Facts["fulfillment_effects"] = fmt.Sprint(h.countFulfillments(ctx, order.ID))
 	run.Facts["evt_cap_1_capture"] = h.webhookCaptureID(ctx, "evt-cap-1")
+	run.Observations = provider.Observations()
+	return run, nil
+}
+
+// runH5 delivers a capture event before the merchant has verified the capture,
+// then captures and redelivers. The effect must exist only after verification.
+func runH5(ctx context.Context, h *Harness) (FixtureRun, error) {
+	provider := NewScriptedProvider(h.Pool, FaultSchedule{})
+	svc := merchant.NewService(h.Store, provider, merchant.FaultNone, "")
+	svc.SetProviderEvidenceTier(merchant.TierFault)
+	svc.SetWebhookVerifier(merchant.NewFixtureWebhookVerifier(fixtureWebhookSecret))
+	run := FixtureRun{Fault: "H5-early-fulfillment", Facts: map[string]string{"provider": "scripted-fixture"}}
+
+	traceID, err := paypal.NewRequestID()
+	if err != nil {
+		return run, err
+	}
+	order, err := svc.Checkout(ctx, traceID, "maple-mug", 1)
+	if err != nil {
+		return run, err
+	}
+	run.OrderID, run.ProviderOrderID = order.ID, order.ProviderOrderID
+	run.TotalMinor, run.Currency = order.TotalMinor, order.Currency
+	provider.ApproveOrder(order.ProviderOrderID)
+	if _, err := svc.Observe(ctx, order.ID); err != nil {
+		return run, err
+	}
+	deliver := func() error {
+		payload, err := json.Marshal(map[string]string{
+			"id": "evt-early", "type": "PAYMENT.CAPTURE.COMPLETED",
+			"provider_order_id": order.ProviderOrderID, "capture_id": "CAP-SCRIPT-0001",
+		})
+		if err != nil {
+			return err
+		}
+		return svc.HandleWebhook(ctx, payload, map[string]string{
+			merchant.FixtureSignatureHeader(): merchant.SignFixtureWebhook(fixtureWebhookSecret, payload),
+		})
+	}
+	if err := deliver(); err != nil {
+		run.Facts["early_event_error"] = err.Error()
+	}
+	run.Facts["fulfillment_effects_early"] = fmt.Sprint(h.countFulfillments(ctx, order.ID))
+	if _, err := svc.Capture(ctx, order.ID); err != nil {
+		run.Facts["capture_error"] = err.Error()
+	}
+	if err := deliver(); err != nil {
+		run.Facts["redelivery_error"] = err.Error()
+	}
+	detail, err := h.Store.OrderDetail(ctx, order.ID)
+	if err != nil {
+		return run, err
+	}
+	run.OrderStatus = detail.Order.Status
+	run.ClaimedCapture = "CAP-SCRIPT-0001"
+	run.Facts["final_status"] = detail.Order.Status
+	run.Facts["fulfillment_effects"] = fmt.Sprint(h.countFulfillments(ctx, order.ID))
 	run.Observations = provider.Observations()
 	return run, nil
 }
