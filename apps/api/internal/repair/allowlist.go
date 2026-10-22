@@ -37,6 +37,22 @@ func DefaultAllowlist() Allowlist {
 	}
 }
 
+// AllowlistForFault narrows the M4 surface to the implementation file that
+// actually contains the seeded defect, plus new lowercase helper files in the
+// same package. Trusted store, tests, harness, oracle, migrations and verifier
+// stay out of reach for every fault.
+func AllowlistForFault(fault string) Allowlist {
+	a := DefaultAllowlist()
+	switch fault {
+	case "F2":
+		a.Existing["ambiguity.go"] = true
+	case "F3":
+		a.Existing["webhook.go"] = true
+		a.Existing["webhook_store.go"] = true
+	}
+	return a
+}
+
 var newFilePattern = regexp.MustCompile(`^[a-z][a-z0-9_]*\.go$`)
 
 // reserved lists names that must never be created: they would shadow the

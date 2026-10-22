@@ -88,11 +88,16 @@ func (v *Verifier) Run(ctx context.Context) Verification {
 	// 3. Trusted regressions (tests live outside the writable surface, so a
 	// candidate cannot edit them into passing).
 	testArgs := []string{"test", "-count=1", "-timeout", "240s"}
-	if v.Fault == "F1" {
+	switch v.Fault {
+	case "F1":
 		// The fixture intentionally contains the F1 defect, so its correctness
 		// gate lives behind the f1_repair tag; pre-repair reproduction is a
 		// separate (fault_reproduction) test run against the pinned base.
 		testArgs = append(testArgs, "-tags", "f1_repair")
+	case "F2", "F3":
+		// M4 correctness gates live behind m4_repair for the same reason: the
+		// base revision deliberately wires the defective policy/handler.
+		testArgs = append(testArgs, "-tags", "m4_repair")
 	}
 	testArgs = append(testArgs, "./internal/merchant/", "./internal/domain/")
 	tests := v.Runner.Run(ctx, v.Workspace.Dir, v.ArtifactDir, 300*time.Second, testEnv, "go", testArgs...)

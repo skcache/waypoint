@@ -53,6 +53,10 @@ type Service struct {
 	sameIDRetryWindow time.Duration
 	instanceID        string
 	leaseTTL          time.Duration
+	// ambiguity classifies failed capture calls. The canonical policy treats
+	// an unreadable 2xx response as "may have applied"; the fixture can wire
+	// the legacy policy to reproduce the F2 integration defect.
+	ambiguity ambiguityPolicy
 	// providerTier labels the provenance of provider-derived journal events.
 	// The real Sandbox client is tier R; when a scripted fixture provider is
 	// wired (the replay harness), the tier is F so the journal never claims
@@ -75,9 +79,15 @@ func NewService(store *Store, api OrdersAPI, fault, incidentDir string) *Service
 		sameIDRetryWindow: defaultSameIDRetryWindow,
 		instanceID:        newInstanceID(),
 		leaseTTL:          defaultCaptureLeaseTTL,
+		ambiguity:         canonicalAmbiguity{},
 		providerTier:      TierReal,
 	}
 }
+
+// UseLegacyAmbiguity wires the historical (defective) capture-ambiguity
+// policy. It exists so the fixture can reproduce the F2 defect; production
+// wiring always uses the canonical policy.
+func (s *Service) UseLegacyAmbiguity() { s.ambiguity = legacyAmbiguity{} }
 
 // newInstanceID identifies this process as the owner of capture attempts.
 func newInstanceID() string {
@@ -447,7 +457,7 @@ func (s *Service) Capture(ctx context.Context, orderID string) (Order, error) {
 	result, err := s.api.CaptureOrder(ctx, order.ProviderOrderID, op.ProviderRequestID)
 	if err != nil {
 		detail := failureDetail(op, err)
-		if paypal.AmbiguousOutcome(err) {
+		if s.ambiguity.Ambiguous(err) {
 			if _, mErr := s.store.MarkCaptureUnknown(ctx, orderID, op.ID, op.Fence, detail, s.evidenceTier()); mErr != nil {
 				return Order{}, mErr
 			}

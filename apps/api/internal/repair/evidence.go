@@ -134,10 +134,18 @@ func BuildEvidence(ctx context.Context, h *replay.Harness, run replay.FixtureRun
 // model declarations it depends on. Everything else (tests, store, fault
 // catalogue, oracle, harness) stays out of the prompt.
 func selectSourceFiles(repoRoot string, allow Allowlist) ([]SourceFile, error) {
-	candidates := []string{
-		filepath.Join(allow.Root, "service.go"),
-		"apps/api/internal/payments/paypal/models.go",
+	candidates := []string{filepath.Join(allow.Root, "service.go")}
+	extras := make([]string, 0, len(allow.Existing))
+	for rel := range allow.Existing {
+		if rel != "service.go" {
+			extras = append(extras, rel)
+		}
 	}
+	sort.Strings(extras)
+	for _, rel := range extras {
+		candidates = append(candidates, filepath.Join(allow.Root, rel))
+	}
+	candidates = append(candidates, "apps/api/internal/payments/paypal/models.go")
 	var out []SourceFile
 	total := 0
 	for _, rel := range candidates {

@@ -71,6 +71,15 @@ const (
 	// independent oracle (I6 identity binding). It exists so M3 can prove the
 	// pipeline generalizes beyond F1 instead of replaying a known answer.
 	FaultF4 = "F4"
+	// FaultF2 is the M4 lost-response family: the provider applies a capture
+	// and the response is lost. The fixture wires the legacy ambiguity policy
+	// so the seeded application defect is a misclassification, not the fault
+	// injector; the dropped response remains active after repair.
+	FaultF2 = "F2"
+	// FaultF3 is the M4 webhook/fulfillment family: duplicate, reordered and
+	// concurrent event delivery must produce exactly one fulfillment effect
+	// for a legitimate capture.
+	FaultF3 = "F3"
 )
 
 // Product is one fixture catalog item. Price is server-owned trust: the

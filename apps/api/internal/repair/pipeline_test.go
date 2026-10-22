@@ -109,7 +109,7 @@ func pipelineFixture(t *testing.T, fault string) (*replay.Harness, replay.Fixtur
 		t.Fatalf("pre-repair fixture was already accepted; the test needs a real incident (%s)", verdict.Reason)
 	}
 	root := repoRoot(t)
-	ev, err := repair.BuildEvidence(ctx, h, run, root, "test-revision", repair.DefaultAllowlist())
+	ev, err := repair.BuildEvidence(ctx, h, run, root, "test-revision", repair.AllowlistForFault(fault))
 	if err != nil {
 		t.Fatalf("evidence: %v", err)
 	}

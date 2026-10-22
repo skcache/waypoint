@@ -53,11 +53,13 @@ func main() {
 		os.Exit(0)
 	}
 	if *outDir == "" {
-		fmt.Fprintln(os.Stderr, "usage: repair -fault F1|F4 -out <dir> [-mode oracle|baseline] [-attempts 2] [-base-ref HEAD]")
+		fmt.Fprintln(os.Stderr, "usage: repair -fault F1|F2|F3|F4 -out <dir> [-mode oracle|baseline] [-attempts 2] [-base-ref HEAD]")
 		os.Exit(2)
 	}
-	if *fault != "F1" && *fault != "F4" {
-		fmt.Fprintf(os.Stderr, "invalid -fault %q (want F1 or F4)\n", *fault)
+	switch *fault {
+	case "F1", "F2", "F3", "F4":
+	default:
+		fmt.Fprintf(os.Stderr, "invalid -fault %q (want F1, F2, F3 or F4)\n", *fault)
 		os.Exit(2)
 	}
 	if cfgErr != nil {
@@ -131,7 +133,7 @@ func run(cfg llm.Config, repoFlag, baseRef, fault, outDir, mode string, attempts
 		return fmt.Errorf("the base revision already satisfies the acceptance rules (status %s); there is no incident to repair", preVerdict.OrderStatus)
 	}
 
-	allow := repair.DefaultAllowlist()
+	allow := repair.AllowlistForFault(fault)
 	ev, err := repair.BuildEvidence(ctx, h, preRun, root, rev, allow)
 	if err != nil {
 		return err
