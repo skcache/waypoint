@@ -9,6 +9,7 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -164,6 +165,7 @@ type fakePayPal struct {
 	getFn     func(orderID string) (*paypal.Order, error)
 	captureFn func(orderID, requestID string) (*paypal.Order, error)
 
+	mu           sync.Mutex
 	createCalls  []paypal.CreateOrderInput
 	createIDs    []string
 	captureCalls []string
@@ -171,8 +173,10 @@ type fakePayPal struct {
 }
 
 func (f *fakePayPal) CreateOrder(_ context.Context, in paypal.CreateOrderInput, requestID string) (*paypal.Order, error) {
+	f.mu.Lock()
 	f.createCalls = append(f.createCalls, in)
 	f.createIDs = append(f.createIDs, requestID)
+	f.mu.Unlock()
 	if f.createFn != nil {
 		return f.createFn(in, requestID)
 	}
@@ -187,7 +191,9 @@ func (f *fakePayPal) CreateOrder(_ context.Context, in paypal.CreateOrderInput, 
 }
 
 func (f *fakePayPal) GetOrder(_ context.Context, orderID string) (*paypal.Order, error) {
+	f.mu.Lock()
 	f.getCalls = append(f.getCalls, orderID)
+	f.mu.Unlock()
 	if f.getFn != nil {
 		return f.getFn(orderID)
 	}
@@ -195,7 +201,9 @@ func (f *fakePayPal) GetOrder(_ context.Context, orderID string) (*paypal.Order,
 }
 
 func (f *fakePayPal) CaptureOrder(_ context.Context, orderID, requestID string) (*paypal.Order, error) {
+	f.mu.Lock()
 	f.captureCalls = append(f.captureCalls, requestID)
+	f.mu.Unlock()
 	if f.captureFn != nil {
 		return f.captureFn(orderID, requestID)
 	}

@@ -198,17 +198,23 @@ func TestPipelineRejectsSeededUnsafeF3Candidate(t *testing.T) {
 		t.Fatalf("status = %s, want NOT_VERIFIED for the unsafe candidate; last=%+v", rep.Status, lastAttempt(rep))
 	}
 	att := lastAttempt(rep)
-	if att.Number == 0 || att.Eval == nil {
-		t.Fatalf("no eval recorded: %+v", att)
+	if att.Number == 0 {
+		t.Fatalf("no attempt recorded")
 	}
-	if att.Eval.Accepted || att.Eval.OracleVerdict != string(oracle.VerdictUnsafe) {
-		t.Fatalf("eval = accepted:%v verdict:%s, want rejected/UNSAFE", att.Eval.Accepted, att.Eval.OracleVerdict)
+	// This candidate fails the trusted financial gate before the judge runs:
+	// the gate asserts exactly one fulfillment effect. Defense in depth — the
+	// same patch is independently rejected by the judge with I13 when the
+	// binary is exercised outside that test (evidence/m4-unsafe-f3/eval.json).
+	if att.Ladder.TestsPassed {
+		t.Fatalf("unsafe candidate passed the trusted tests; it must be rejected: %+v", att.Ladder)
 	}
-	joined := strings.Join(att.Eval.FailingInvariants, " ")
-	if !strings.Contains(joined, "I13") {
-		t.Fatalf("failing invariants = %v, want I13 (duplicate fulfillment)", att.Eval.FailingInvariants)
+	var testsStep string
+	for _, st := range att.Steps {
+		if st.Step == "tests" {
+			testsStep = st.Output
+		}
 	}
-	if !strings.Contains(att.Diff, "$2, $2") {
-		t.Fatalf("unsafe candidate did not keep the per-event key:\n%s", att.Diff)
+	if !strings.Contains(testsStep, "fulfillment effects = 2") {
+		t.Fatalf("trusted test did not report the duplicate fulfillment:\n%s", testsStep)
 	}
 }
