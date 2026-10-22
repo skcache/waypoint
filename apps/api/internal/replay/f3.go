@@ -32,8 +32,7 @@ func runF3(ctx context.Context, h *Harness) (FixtureRun, error) {
 		},
 	}
 
-	svc := merchant.NewService(h.Store, provider, merchant.FaultNone, "")
-	svc.UseLegacyWebhook()
+	svc := merchant.NewLegacyWebhookService(h.Store, provider)
 	svc.SetProviderEvidenceTier(merchant.TierFault)
 	svc.SetWebhookVerifier(merchant.NewFixtureWebhookVerifier(fixtureWebhookSecret))
 
@@ -139,8 +138,7 @@ func runF3(ctx context.Context, h *Harness) (FixtureRun, error) {
 	run.Facts["concurrent_errors"] = fmt.Sprint(concurrentErrs)
 
 	// Process restart: a fresh handler replays the original delivery.
-	restarted := merchant.NewService(h.Store, provider, merchant.FaultNone, "")
-	restarted.UseLegacyWebhook()
+	restarted := merchant.NewLegacyWebhookService(h.Store, provider)
 	restarted.SetProviderEvidenceTier(merchant.TierFault)
 	restarted.SetWebhookVerifier(merchant.NewFixtureWebhookVerifier(fixtureWebhookSecret))
 	if err := deliver(restarted, "evt-cap-1", "PAYMENT.CAPTURE.COMPLETED", captureID, fixtureWebhookSecret); err != nil {

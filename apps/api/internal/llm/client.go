@@ -69,6 +69,10 @@ type Config struct {
 	// (1000); reasoning models need headroom because hidden reasoning counts
 	// against the budget.
 	MaxOutputTokens int
+	// ReasoningEffort optionally asks a reasoning-capable provider to spend
+	// less hidden reasoning (low|medium|high). Empty leaves the provider
+	// default. It never changes what the model is allowed to see.
+	ReasoningEffort string
 }
 
 // Configured reports whether every required value is present.
@@ -107,6 +111,14 @@ func ConfigFromEnv(getenv func(string) string) (Config, error) {
 			return Config{}, fmt.Errorf("invalid LLM_MAX_OUTPUT_TOKENS (value redacted): want an integer between 100 and 16000")
 		}
 		cfg.MaxOutputTokens = n
+	}
+	if raw := getenv("LLM_REASONING_EFFORT"); raw != "" {
+		switch raw {
+		case "low", "medium", "high":
+			cfg.ReasoningEffort = raw
+		default:
+			return Config{}, fmt.Errorf("invalid LLM_REASONING_EFFORT (value redacted): want low, medium or high")
+		}
 	}
 	return cfg, nil
 }
@@ -214,6 +226,7 @@ type Client struct {
 	apiKey    string
 	model     string
 	maxTokens int
+	reasoning string
 	http      *http.Client
 }
 
@@ -298,10 +311,15 @@ type chatMessage struct {
 }
 
 type chatRequest struct {
-	Model       string        `json:"model"`
-	Messages    []chatMessage `json:"messages"`
-	Temperature float64       `json:"temperature"`
-	MaxTokens   int           `json:"max_tokens"`
+	Model       string           `json:"model"`
+	Messages    []chatMessage    `json:"messages"`
+	Temperature float64          `json:"temperature"`
+	MaxTokens   int              `json:"max_tokens"`
+	Reasoning   *reasoningConfig `json:"reasoning,omitempty"`
+}
+
+type reasoningConfig struct {
+	Effort string `json:"effort"`
 }
 
 // chatCompletionResponse is the envelope. Unknown envelope fields are
@@ -351,7 +369,7 @@ func (c *Client) Generate(ctx context.Context, system, user string) (string, err
 // GenerateDetail performs one chat completion and returns the assistant text
 // with the provider's usage numbers when present.
 func (c *Client) GenerateDetail(ctx context.Context, system, user string) (Completion, error) {
-	payload, err := json.Marshal(chatRequest{
+	reqBody := chatRequest{
 		Model: c.model,
 		Messages: []chatMessage{
 			{Role: "system", Content: system},
@@ -359,7 +377,11 @@ func (c *Client) GenerateDetail(ctx context.Context, system, user string) (Compl
 		},
 		Temperature: 0,
 		MaxTokens:   c.maxTokens,
-	})
+	}
+	if c.reasoning != "" {
+		reqBody.Reasoning = &reasoningConfig{Effort: c.reasoning}
+	}
+	payload, err := json.Marshal(reqBody)
 	if err != nil {
 		return Completion{}, &Error{Kind: KindUnavailable, Detail: "request encoding failed"}
 	}

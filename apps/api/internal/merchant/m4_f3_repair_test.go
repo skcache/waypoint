@@ -27,7 +27,7 @@ func TestWebhookDuplicatesAndReorderingYieldOneFulfillment(t *testing.T) {
 			return completedOrder(orderID, "CAP-WH-1", "USD", "12.34"), nil
 		},
 	}
-	svc := merchant.NewService(store, fake, merchant.FaultNone, "")
+	svc := merchant.NewLegacyWebhookService(store, fake)
 	svc.SetProviderEvidenceTier(merchant.TierFault)
 	order := newOrder(t, store, svc, 1)
 	approve(t, svc, order.ID)
@@ -37,7 +37,6 @@ func TestWebhookDuplicatesAndReorderingYieldOneFulfillment(t *testing.T) {
 
 	const secret = "wh-test-secret"
 	svc.SetWebhookVerifier(merchant.NewFixtureWebhookVerifier(secret))
-	svc.UseLegacyWebhook()
 
 	deliver := func(id, eventType, captureID, signWith string) error {
 		payload, err := json.Marshal(map[string]string{

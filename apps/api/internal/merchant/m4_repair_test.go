@@ -24,8 +24,7 @@ func TestLegacyAmbiguityTreatsUnreadable2xxAsUnknown(t *testing.T) {
 			return nil, &paypal.ResponseError{}
 		},
 	}
-	svc := merchant.NewService(store, fake, merchant.FaultNone, "")
-	svc.UseLegacyAmbiguity()
+	svc := merchant.NewLegacyAmbiguityService(store, fake)
 	order := newOrder(t, store, svc, 1)
 	approve(t, svc, order.ID)
 

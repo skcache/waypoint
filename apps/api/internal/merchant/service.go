@@ -91,16 +91,9 @@ func NewService(store *Store, api OrdersAPI, fault, incidentDir string) *Service
 }
 
 // SetWebhookVerifier installs the authenticity boundary used by HandleWebhook.
+// It is configuration, not behavior: the fixture-only defect wiring lives in
+// fixture_wiring.go, outside the candidate-writable surface.
 func (s *Service) SetWebhookVerifier(v WebhookVerifier) { s.webhooks = v }
-
-// UseLegacyWebhook wires the historical event handler. Like UseLegacyAmbiguity
-// it exists only so the fixture can reproduce a seeded application defect.
-func (s *Service) UseLegacyWebhook() { s.applyWebhook = s.legacyApplyWebhookEvent }
-
-// UseLegacyAmbiguity wires the historical (defective) capture-ambiguity
-// policy. It exists so the fixture can reproduce the F2 defect; production
-// wiring always uses the canonical policy.
-func (s *Service) UseLegacyAmbiguity() { s.ambiguity = legacyAmbiguity{} }
 
 // newInstanceID identifies this process as the owner of capture attempts.
 func newInstanceID() string {

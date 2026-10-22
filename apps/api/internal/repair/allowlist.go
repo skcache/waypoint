@@ -64,6 +64,7 @@ var reserved = map[string]bool{
 	"store_test.go":     true,
 	"service_test.go":   true,
 	"webhook_verify.go": true,
+	"fixture_wiring.go": true,
 }
 
 // Validate checks a candidate path BEFORE anything is written.

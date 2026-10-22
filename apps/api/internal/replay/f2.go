@@ -32,8 +32,7 @@ func runF2(ctx context.Context, h *Harness) (FixtureRun, error) {
 		},
 	}
 
-	svc := merchant.NewService(h.Store, provider, merchant.FaultNone, "")
-	svc.UseLegacyAmbiguity()
+	svc := merchant.NewLegacyAmbiguityService(h.Store, provider)
 	svc.SetProviderEvidenceTier(merchant.TierFault)
 
 	traceID, err := paypal.NewRequestID()
@@ -68,8 +67,7 @@ func runF2(ctx context.Context, h *Harness) (FixtureRun, error) {
 
 	// The worker dies and a fresh process (new instance id) takes over. It
 	// repeats the legacy wiring because the deployment is unchanged.
-	restarted := merchant.NewService(h.Store, provider, merchant.FaultNone, "")
-	restarted.UseLegacyAmbiguity()
+	restarted := merchant.NewLegacyAmbiguityService(h.Store, provider)
 	restarted.SetProviderEvidenceTier(merchant.TierFault)
 
 	// Recovery attempt. A correct implementation reuses the durable request id
