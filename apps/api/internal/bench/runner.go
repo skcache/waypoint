@@ -396,6 +396,16 @@ func runB0(c Case, pre EvalView, ev repair.Evidence) Result {
 	}
 }
 
+var currencyToken = regexp.MustCompile(`\b[A-Z]{3}\b`)
+
+func distinctCurrencies(s string) int {
+	seen := map[string]bool{}
+	for _, m := range currencyToken.FindAllString(s, -1) {
+		seen[m] = true
+	}
+	return len(seen)
+}
+
 func b0Category(pre EvalView) string {
 	joined := strings.Join(pre.Failing, " ")
 	switch {
@@ -405,12 +415,15 @@ func b0Category(pre EvalView) string {
 		return "authorization"
 	case strings.Contains(joined, "currency") || strings.Contains(joined, "I2"):
 		return "monetary"
+	case strings.Contains(joined, "I4") || strings.Contains(joined, "I7"):
+		return "identity"
 	case strings.Contains(joined, "I5"):
 		return "ambiguity"
 	case strings.Contains(joined, "I6"):
+		if distinctCurrencies(joined) > 1 {
+			return "monetary"
+		}
 		return "status"
-	case strings.Contains(joined, "I4") || strings.Contains(joined, "I7"):
-		return "identity"
 	}
 	return "unknown"
 }

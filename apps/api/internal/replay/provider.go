@@ -31,9 +31,12 @@ const (
 	FaultDropResponseAfterMutation FaultMode = "drop_response_after_mutation"
 	// FaultDefiniteRefusal: the provider refuses without processing (4xx).
 	FaultDefiniteRefusal FaultMode = "definite_refusal"
-	// FaultAmbiguousError: the provider refuses to process but the error is
-	// ambiguous (HTTP 5xx), so the merchant must not treat it as definite.
+	// FaultAmbiguousError: the provider applies the mutation and then returns
+	// an ambiguous 5xx (lost-response variant).
 	FaultAmbiguousError FaultMode = "ambiguous_error"
+	// FaultAmbiguousNoEffect: the provider returns an ambiguous 5xx without
+	// applying the mutation.
+	FaultAmbiguousNoEffect FaultMode = "ambiguous_no_effect"
 )
 
 // FaultSchedule selects faults per provider method.
@@ -315,6 +318,12 @@ func (p *ScriptedProvider) CaptureOrder(ctx context.Context, orderID, requestID 
 	}
 	obs.SentAmount = po.amountValue
 	obs.SentCurrency = po.currency
+
+	if p.schedule.Capture == FaultAmbiguousNoEffect {
+		obs.ResponseDropped = false
+		p.record(obs)
+		return nil, &paypal.APIError{StatusCode: 503, Name: "SERVICE_UNAVAILABLE"}
+	}
 
 	// Idempotency: an already-seen capture request id returns the ORIGINAL
 	// result without applying a second effect.

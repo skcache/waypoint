@@ -96,7 +96,7 @@ type captureSetup struct {
 func runCaptureJourney(ctx context.Context, h *Harness, caseID string, setup captureSetup, reconcile bool) (FixtureRun, error) {
 	schedule := FaultSchedule{}
 	if setup.ambiguousCapture {
-		schedule.Capture = FaultAmbiguousError
+		schedule.Capture = FaultAmbiguousNoEffect
 	}
 	provider := NewScriptedProvider(h.Pool, schedule)
 	provider.CaptureCurrencyOverride = setup.currency
