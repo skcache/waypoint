@@ -4,9 +4,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const links = [
-  { href: "/", label: "Workbench" },
-  { href: "/checkout", label: "Checkout" },
-  { href: "/trace", label: "Trace" },
+  { href: "/", label: "Incidents" },
+  { href: "/benchmark", label: "Benchmark" },
 ] as const;
 
 export function TopNav() {
@@ -22,9 +21,9 @@ export function TopNav() {
             key={link.href}
             href={link.href}
             aria-current={active ? "page" : undefined}
-            className={`text-sm ${
+            className={`pb-0.5 text-sm ${
               active
-                ? "font-medium text-ink"
+                ? "border-b border-ink font-medium text-ink"
                 : "text-muted transition-colors hover:text-ink"
             }`}
           >

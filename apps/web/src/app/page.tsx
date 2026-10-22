@@ -1,260 +1,167 @@
-import type { Metadata } from "next";
-import { Panel } from "@/components/panel";
-import { SampleLabel } from "@/components/sample-label";
+import Link from "next/link";
+import {
+  data,
+  fmtMs,
+  fmtTokens,
+  shortHash,
+  statusLabel,
+  statusTone,
+} from "@/lib/m5";
 
-export const metadata: Metadata = {
-  title: "Workbench",
-};
+export const metadata = { title: "Incidents" };
 
-const systems = [
-  {
-    name: "API runtime",
-    state: "In place",
-    tone: "text-ok",
-    note: "Go API with liveness and database-readiness endpoints. This UI does not call it yet.",
-  },
-  {
-    name: "Database",
-    state: "In place",
-    tone: "text-ok",
-    note: "PostgreSQL schema with versioned migrations. No UI reads it yet.",
-  },
-  {
-    name: "Runtime AI",
-    state: "Not configured",
-    tone: "text-muted",
-    note: "The intent-draft compiler is implemented on the API and reports NOT_CONFIGURED until model credentials are provided. This UI does not call it yet.",
-  },
-  {
-    name: "PayPal checkout",
-    state: "Not wired",
-    tone: "text-muted",
-    note: "The sandbox flow was proven server-side in the Phase 04 spike. Product checkout wiring is not built yet.",
-  },
-];
-
-const mandate: [string, string][] = [
-  ["Currency", "USD"],
-  ["Ceiling", "$150.00"],
-  ["Max quantity", "1"],
-  ["Category", "keyboard"],
-  ["Preferences", "quiet, office use, no gaming RGB"],
-  ["Expires", "2026-10-24 18:00 UTC"],
-];
-
-const proposal: [string, string][] = [
-  ["Catalog item", "keyboard-office-quiet"],
-  ["Description", "Quiet office keyboard, 87-key, non-backlit"],
-  ["Unit price", "$142.00"],
-  ["Quantity", "1"],
-  ["Total", "$142.00"],
-  ["Agent rationale", "Selected for quiet office typing"],
-];
-
-const decisions = [
-  {
-    state: "Allow",
-    tone: "text-ok",
-    rule: "Hard checks pass and the semantic verifier supports the fit.",
-    effect: "Eligible for one PayPal sandbox checkout.",
-  },
-  {
-    state: "Deny",
-    tone: "text-bad",
-    rule: "Available evidence establishes a violation: a hard-rule breach, or verifier evidence contradicting the confirmed terms.",
-    effect: "Never calls the payment provider.",
-  },
-  {
-    state: "Review",
-    tone: "text-warn",
-    rule: "The evidence cannot establish support or contradiction: missing or unreadable evidence, model UNKNOWN, timeout, or ambiguity.",
-    effect: "Fails closed. Not payable until a human resolves it.",
-  },
-];
-
-const scenarios = [
-  {
-    tag: "Scenario A - authorized checkout",
-    rows: [
-      ["Human confirmed", "One quiet office keyboard, up to $150.00, quantity 1."],
-      [
-        "Agent proposed",
-        "Quiet office keyboard, 87-key, non-backlit at $142.00 from the controlled catalog.",
-      ],
-      [
-        "Waypoint decided",
-        "Allow. Hard checks pass and the verifier supports the fit.",
-      ],
-      [
-        "PayPal",
-        "Not executed in this preview. In a wired run, the buyer approves on PayPal, the server captures, and the result appears only when the provider confirms it.",
-      ],
-    ],
-  },
-  {
-    tag: "Scenario B - qualitative mismatch",
-    rows: [
-      [
-        "Human confirmed",
-        "Quiet keyboard for office work. No loud gaming keyboards, no RGB.",
-      ],
-      [
-        "Agent proposed",
-        "Clicky gaming keyboard with bright RGB lighting at $120.00. Amount and quantity pass the numeric checks.",
-      ],
-      [
-        "Waypoint decided",
-        "Deny, or review. The verifier finds the contradiction between the evidence and the confirmed preferences.",
-      ],
-      ["PayPal", "No order is created. A denied or reviewed proposal never reaches the provider."],
-    ],
-  },
-  {
-    tag: "Scenario C - ambiguous provider outcome (fault injection)",
-    rows: [
-      [
-        "Context",
-        "A mocked capture times out with an unknown outcome while a duplicate client request arrives. This is controlled fault injection, not a live provider outage.",
-      ],
-      [
-        "Waypoint decided",
-        "One logical operation is preserved with the recorded provider request ID. The run moves to reconciliation instead of retrying blindly.",
-      ],
-      [
-        "PayPal",
-        "Nothing is recorded as failed or completed without evidence. A bounded status check may resolve the outcome; if it cannot, the operation stays explicitly unresolved rather than guessed at, marked failed, or blindly retried.",
-      ],
-    ],
-  },
-];
-
-export default function WorkbenchPage() {
+function Verdict({ value }: { value?: string }) {
+  if (!value) return <span className="text-faint">—</span>;
+  const tone =
+    value === "VERIFIED_FOR_TESTED_SCENARIOS"
+      ? "text-ok"
+      : value === "UNSAFE"
+        ? "text-bad"
+        : "text-warn";
   return (
-    <div className="space-y-10">
-      <header>
-        <h1 className="text-xl font-semibold tracking-tight">Workbench</h1>
-        <p className="mt-2 max-w-2xl text-sm leading-6 text-muted">
-          The intended flow, end to end: the terms a human would confirm, the
-          purchase an agent proposes, the decision Waypoint records, and what
-          PayPal confirms. Nothing on this page runs; every value is a labeled
-          sample.
-        </p>
-      </header>
+    <span className={`mono text-[11px] ${tone}`}>
+      {value === "VERIFIED_FOR_TESTED_SCENARIOS" ? "VERIFIED" : value}
+    </span>
+  );
+}
 
-      <section
-        aria-labelledby="flow-heading"
-        className="grid gap-6 lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)]"
-      >
-        <h2 id="flow-heading" className="sr-only">
-          Mandate draft and agent proposal
-        </h2>
-        <Panel title="Request and mandate draft" label={<SampleLabel>Draft, not confirmed</SampleLabel>}>
-          <p className="text-sm leading-6">
-            &ldquo;Buy one quiet office keyboard, under $150.&rdquo;
+export default function Page() {
+  const heldOut = data.cases.filter((c) => !c.case.Exposed);
+  const b2 = data.totals.by_condition?.B2;
+  const attempts = heldOut.reduce((n, c) => n + (c.runs.B2?.attempts ?? 0), 0);
+  return (
+    <div className="space-y-8">
+      <section className="flex flex-col justify-between gap-5 border-b border-line pb-6 sm:flex-row sm:items-start">
+        <div>
+          <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-faint">
+            Waypoint / review console
           </p>
-          <p className="mt-1 text-xs text-muted">
-            Draft terms only. This is not a confirmed mandate and carries no
-            spending authority; human confirmation (a later phase) is what
-            makes the terms spendable.
+          <h1 className="mt-2 text-2xl font-semibold tracking-tight">Incidents</h1>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-muted">
+            Held-out payment-integration defects, the AI diagnosis and patch, and the
+            independent oracle verdict a human reviews before any integration decision.
           </p>
-          <dl className="mt-4 grid gap-x-6 gap-y-2 text-sm sm:grid-cols-[minmax(0,9rem)_minmax(0,1fr)]">
-            {mandate.map(([key, value]) => (
-              <div key={key} className="contents">
-                <dt className="text-muted">{key}</dt>
-                <dd className="font-mono text-[13px]">{value}</dd>
-              </div>
-            ))}
-          </dl>
-        </Panel>
-
-        <Panel title="Agent proposal" label={<SampleLabel />}>
-          <dl className="grid gap-x-6 gap-y-2 text-sm sm:grid-cols-[minmax(0,8rem)_minmax(0,1fr)]">
-            {proposal.map(([key, value]) => (
-              <div key={key} className="contents">
-                <dt className="text-muted">{key}</dt>
-                <dd className="font-mono text-[13px]">{value}</dd>
-              </div>
-            ))}
-          </dl>
-          <p className="mt-4 border-t border-line pt-3 text-xs leading-5 text-muted">
-            The agent proposes. It never grants permission, and its rationale is
-            evidence, not authorization.
-          </p>
-        </Panel>
+        </div>
+        <dl className="grid grid-cols-3 gap-x-8 gap-y-2 text-xs sm:text-right">
+          <div>
+            <dt className="text-[10px] uppercase tracking-wider text-faint">Corpus</dt>
+            <dd className="mono mt-0.5 text-ink">{data.benchmark_id}</dd>
+          </div>
+          <div>
+            <dt className="text-[10px] uppercase tracking-wider text-faint">Digest</dt>
+            <dd className="mono mt-0.5 text-ink">
+              {shortHash(data.digest.replace("sha256:", ""))}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-[10px] uppercase tracking-wider text-faint">Evidence tier</dt>
+            <dd className="mono mt-0.5 text-ink">F · scripted</dd>
+          </div>
+        </dl>
       </section>
 
-      <section aria-labelledby="decisions-heading">
-        <h2
-          id="decisions-heading"
-          className="text-xs font-medium uppercase tracking-wider text-muted"
-        >
-          Decision outcomes
-        </h2>
-        <p className="mt-2 max-w-2xl text-sm leading-6 text-muted">
-          Every proposal resolves to exactly one of these. Deny requires
-          evidence of a violation; when the evidence is insufficient the
-          outcome is review, never an automatic allow. The runtime that
-          produces them live arrives in later phases.
-        </p>
-        <div className="mt-4 grid gap-4 md:grid-cols-3">
-          {decisions.map((decision) => (
-            <div
-              key={decision.state}
-              className="rounded-panel border border-line bg-surface px-4 py-4"
-            >
-              <p className={`text-sm font-medium ${decision.tone}`}>
-                {decision.state}
-              </p>
-              <p className="mt-2 text-xs leading-5 text-muted">{decision.rule}</p>
-              <p className="mt-3 border-t border-line pt-3 text-xs leading-5">
-                {decision.effect}
-              </p>
-            </div>
-          ))}
+      <section className="grid grid-cols-2 gap-px overflow-hidden rounded-panel border border-line bg-line sm:grid-cols-4">
+        {[
+          ["Held-out cases", String(heldOut.length)],
+          ["Safe repairs accepted", `${b2?.safe_accepted ?? 0} / ${heldOut.length}`],
+          ["Unsafe accepted", String(b2?.false_acceptances ?? 0)],
+          ["Model attempts", String(attempts)],
+        ].map(([label, value]) => (
+          <div key={label} className="bg-surface px-4 py-4">
+            <p className="text-[10px] uppercase tracking-wider text-faint">{label}</p>
+            <p className="mt-1.5 text-xl font-semibold tracking-tight tabular-nums">
+              {value}
+            </p>
+          </div>
+        ))}
+      </section>
+
+      <section className="overflow-hidden rounded-panel border border-line bg-surface">
+        <div className="flex h-10 items-center justify-between border-b border-line px-4">
+          <h2 className="text-[11px] font-medium uppercase tracking-wider text-muted">
+            Benchmark incidents
+          </h2>
+          <span className="mono text-[11px] text-faint">
+            {data.model.id ?? "model not configured"} · base {shortHash(data.base_sha)}
+          </span>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[760px] border-collapse text-left">
+            <thead>
+              <tr className="border-b border-line text-[10px] uppercase tracking-wider text-faint">
+                <th className="px-4 py-2.5 font-medium">Incident</th>
+                <th className="px-4 py-2.5 font-medium">Family</th>
+                <th className="px-4 py-2.5 font-medium">Pre-repair</th>
+                <th className="px-4 py-2.5 font-medium">B2 outcome</th>
+                <th className="px-4 py-2.5 text-right font-medium">Attempts</th>
+                <th className="px-4 py-2.5 text-right font-medium">Prompt tokens</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.cases.map((row) => {
+                const b2run = row.runs.B2 ?? row.runs.B1;
+                return (
+                  <tr
+                    key={row.case.ID}
+                    className="group border-b border-line/70 last:border-0 hover:bg-background/60"
+                  >
+                    <td className="px-4 py-3">
+                      <Link
+                        href={`/incidents/${encodeURIComponent(row.case.ID)}`}
+                        className="block"
+                      >
+                        <span className="block text-[13px] font-medium text-ink group-hover:text-accent">
+                          {row.case.Title}
+                        </span>
+                        <span className="mono mt-0.5 block text-[11px] text-faint">
+                          {row.case.ID}
+                          {row.case.Exposed ? " · exposed reference" : ""}
+                        </span>
+                      </Link>
+                    </td>
+                    <td className="px-4 py-3 text-xs text-muted">{row.case.Family}</td>
+                    <td className="px-4 py-3">
+                      <Verdict value={row.pre_repair.verdict} />
+                      <span className="mono mt-0.5 block text-[11px] text-faint">
+                        {row.pre_repair.order_status}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      {b2run ? (
+                        <>
+                          <span
+                            className={`text-xs font-medium ${statusTone(b2run.status)}`}
+                          >
+                            {statusLabel(b2run.status)}
+                          </span>
+                          <span className="mono mt-0.5 block whitespace-nowrap text-[11px] text-faint">
+                            {b2run.oracle_verdict === "VERIFIED_FOR_TESTED_SCENARIOS" ? "VERIFIED" : b2run.oracle_verdict || "no oracle"} · {fmtMs(b2run.latency_ms)}
+                          </span>
+                        </>
+                      ) : (
+                        <span className="text-xs text-faint">not run</span>
+                      )}
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3 text-right text-xs tabular-nums text-muted">
+                      {b2run?.attempts ?? "—"}
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3 text-right text-xs tabular-nums text-muted">
+                      {fmtTokens(b2run?.prompt_tokens ?? 0)}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       </section>
 
-      <section aria-labelledby="scenarios-heading">
-        <h2
-          id="scenarios-heading"
-          className="text-xs font-medium uppercase tracking-wider text-muted"
-        >
-          Demonstration scenarios
-        </h2>
-        <div className="mt-4 space-y-6">
-          {scenarios.map((scenario) => (
-            <Panel
-              key={scenario.tag}
-              title={scenario.tag}
-              label={<SampleLabel>Illustrative</SampleLabel>}
-            >
-              <dl className="grid gap-x-6 gap-y-3 text-sm sm:grid-cols-[minmax(0,9rem)_minmax(0,1fr)]">
-                {scenario.rows.map(([key, value]) => (
-                  <div key={key} className="contents">
-                    <dt className="text-muted">{key}</dt>
-                    <dd className="leading-6">{value}</dd>
-                  </div>
-                ))}
-              </dl>
-            </Panel>
-          ))}
-        </div>
-      </section>
-
-      <Panel title="System status" label={<SampleLabel>As of Phase 06</SampleLabel>}>
-        <ul className="divide-y divide-line">
-          {systems.map((system) => (
-            <li
-              key={system.name}
-              className="grid gap-1 py-3 first:pt-0 last:pb-0 sm:grid-cols-[minmax(0,10rem)_minmax(0,7rem)_minmax(0,1fr)] sm:gap-6"
-            >
-              <p className="text-sm font-medium">{system.name}</p>
-              <p className={`text-sm ${system.tone}`}>{system.state}</p>
-              <p className="text-sm leading-6 text-muted">{system.note}</p>
-            </li>
-          ))}
-        </ul>
-      </Panel>
+      <p className="max-w-3xl text-xs leading-5 text-faint">
+        Six held-out cases and one exposed reference, not a statistical benchmark. Every
+        provider interaction is a deterministic tier-F fixture; no PayPal transaction or
+        signed webhook was used. A model patch is never merged, deployed, or treated as a
+        financial authority.
+      </p>
     </div>
   );
 }
