@@ -51,8 +51,18 @@ func assertAdvisoryLockNotStranded(t *testing.T) {
 	defer func() { _ = conn.Close(ctx) }()
 
 	var held bool
-	if err := conn.QueryRow(ctx, `SELECT pg_try_advisory_lock($1)`, migrationLockID).Scan(&held); err != nil {
-		t.Fatalf("probe advisory lock: %v", err)
+	// A cancelled migration destroys its session asynchronously; the backend
+	// can take a moment to exit and release a session-level lock. Allow a short
+	// bounded settle window, but a genuinely stranded lock stays held and still
+	// fails this assertion.
+	for attempt := 0; attempt < 20; attempt++ {
+		if err := conn.QueryRow(ctx, `SELECT pg_try_advisory_lock($1)`, migrationLockID).Scan(&held); err != nil {
+			t.Fatalf("probe advisory lock: %v", err)
+		}
+		if held {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
 	}
 	if !held {
 		t.Fatal("the migration advisory lock is still held by some session: a failed or cancelled run stranded it")
