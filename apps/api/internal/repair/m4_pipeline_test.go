@@ -155,3 +155,60 @@ func TestPipelineRepairsF3WithABoundaryDouble(t *testing.T) {
 		t.Fatalf("eval = %+v, want oracle VERIFIED", att.Eval)
 	}
 }
+
+func unsafeF3PatchReply() string {
+	oldStatus := "if _, err := tx.Exec(ctx, `UPDATE merchant_orders SET status = $2, updated_at = now() WHERE id = $1::uuid`, orderID, StatusApproved); err != nil {\n\t\t\treturn err\n\t\t}"
+	p := map[string]any{
+		"summary": "stop event-driven status writes but keep per-event fulfillment keys",
+		"edits": []map[string]any{{
+			"path":      "apps/api/internal/merchant/webhook.go",
+			"old_text":  oldStatus,
+			"new_text":  "// Events never advance payment state.\n\t\t_ = orderID",
+			"rationale": "addresses the visible status regression",
+		}},
+	}
+	data, _ := json.Marshal(p)
+	return string(data)
+}
+
+// TestPipelineRejectsSeededUnsafeF3Candidate documents the M4 unsafe trap. The
+// candidate removes the visible status regression but keeps a per-event
+// fulfillment key: every handler call returns success and the order ends
+// CAPTURED_VERIFIED, while two distinct events for one capture create two
+// fulfillment effects. Only the independent oracle rejects it (I13).
+//
+// This candidate is SEEDED by us, not proposed by a hosted model.
+func TestPipelineRejectsSeededUnsafeF3Candidate(t *testing.T) {
+	_, _, ev := pipelineFixture(t, "F3")
+	root := repoRoot(t)
+	before, err := repair.RepoStatus(root)
+	if err != nil {
+		t.Fatalf("status: %v", err)
+	}
+	allow := repair.AllowlistForFault("F3")
+	out := tempOut(t)
+	model := &scriptedModel{replies: []string{diagnosisReplyF3(), unsafeF3PatchReply()}}
+	rep := repair.Run(context.Background(), repair.Options{
+		RepoRoot: root, BaseRef: "HEAD", Fault: "F3", OutDir: out, Runner: sharedSandbox(t),
+		Mode: "oracle", MaxAttempts: 1, Model: model, Evidence: ev,
+		Allow: allow, RepoStatusBefore: before,
+		Revision: "test-revision", RevisionSource: "test", IncidentID: ev.IncidentID,
+	})
+	if rep.Status != repair.StatusNotVerified {
+		t.Fatalf("status = %s, want NOT_VERIFIED for the unsafe candidate; last=%+v", rep.Status, lastAttempt(rep))
+	}
+	att := lastAttempt(rep)
+	if att.Number == 0 || att.Eval == nil {
+		t.Fatalf("no eval recorded: %+v", att)
+	}
+	if att.Eval.Accepted || att.Eval.OracleVerdict != string(oracle.VerdictUnsafe) {
+		t.Fatalf("eval = accepted:%v verdict:%s, want rejected/UNSAFE", att.Eval.Accepted, att.Eval.OracleVerdict)
+	}
+	joined := strings.Join(att.Eval.FailingInvariants, " ")
+	if !strings.Contains(joined, "I13") {
+		t.Fatalf("failing invariants = %v, want I13 (duplicate fulfillment)", att.Eval.FailingInvariants)
+	}
+	if !strings.Contains(att.Diff, "$2, $2") {
+		t.Fatalf("unsafe candidate did not keep the per-event key:\n%s", att.Diff)
+	}
+}

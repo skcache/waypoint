@@ -60,7 +60,7 @@ var knownInvariants = map[string]bool{
 
 // ParseDiagnosis validates the investigator's structured output against the
 // evidence it was given. Citations must exist; invented evidence is refused.
-func ParseDiagnosis(text string, ev Evidence) (*Diagnosis, error) {
+func ParseDiagnosis(text string, ev Evidence, allow Allowlist) (*Diagnosis, error) {
 	var d Diagnosis
 	if err := decodeStrict(text, &d); err != nil {
 		return nil, err
@@ -85,9 +85,18 @@ func ParseDiagnosis(text string, ev Evidence) (*Diagnosis, error) {
 		files[f.Path] = true
 	}
 	for _, f := range d.SuspectedFiles {
-		if !files[f] {
-			return nil, fmt.Errorf("repair: diagnosis names source %q that was not provided", f)
+		if files[f] {
+			continue
 		}
+		// A diagnosis may name a sibling implementation file it inferred from
+		// the provided source (for example the fixture-only wiring that selects
+		// a defect). The patch is still restricted to allow.Existing and new
+		// files, so naming a read-only sibling does not widen the writable
+		// surface.
+		if strings.HasPrefix(f, allow.Root+"/") && !strings.Contains(f, "..") {
+			continue
+		}
+		return nil, fmt.Errorf("repair: diagnosis names source %q outside the provided package", f)
 	}
 	for _, inv := range d.InvariantsAtRisk {
 		if !knownInvariants[inv] {

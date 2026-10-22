@@ -98,7 +98,7 @@ func Run(ctx context.Context, opts Options) *Report {
 		return finish(rep, opts)
 	}
 	_ = os.WriteFile(filepath.Join(opts.OutDir, "diagnosis-reply.txt"), []byte(redact(reply.Text, "")), 0o600)
-	diag, err := ParseDiagnosis(reply.Text, opts.Evidence)
+	diag, err := ParseDiagnosis(reply.Text, opts.Evidence, opts.Allow)
 	if err != nil {
 		rep.Status = StatusError
 		rep.Limitations = append(rep.Limitations, "the diagnosis reply failed schema validation: "+err.Error())
