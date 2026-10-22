@@ -11,7 +11,7 @@ include .env
 export
 endif
 
-.PHONY: help dev-api dev-web dev-merchant merchant-reset db-up db-down db-migrate db-reset test test-api test-integration lint lint-api lint-web build-api build-web clean
+.PHONY: help dev-api dev-web dev-merchant merchant-reset db-up db-down db-migrate db-reset test test-api test-integration test-web lint lint-api lint-web build-api build-web demo-m5 clean
 
 help: ## List available targets
 	@grep -h -E '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "}; {printf "  %-12s %s\n", $$1, $$2}'
@@ -43,13 +43,16 @@ db-reset: ## DESTRUCTIVE local reset: drop the db volume and start empty
 	docker compose up -d db
 	@echo "volume recreated — run 'make db-migrate' to rebuild the schema"
 
-test: test-api ## Run the automated test suites that exist today
+test: test-api test-web ## Run the automated test suites that exist today
 
 test-api: ## Go tests for the API
 	cd $(API_DIR) && go test ./...
 
 test-integration: ## Go tests with database integration REQUIRED (fails instead of skipping without PostgreSQL)
 	cd $(API_DIR) && REQUIRE_DATABASE_TESTS=1 go test ./...
+
+test-web: ## Workbench unit tests (review authorization, sanitized export guards)
+	cd $(WEB_DIR) && npm test
 
 lint: lint-api lint-web ## Run available linters
 
@@ -64,6 +67,13 @@ build-api: ## Build the API binary to apps/api/bin/server
 
 build-web: ## Production build of the web app
 	cd $(WEB_DIR) && npm run build
+
+demo-m5: ## Deterministic M5 demo checks and workbench entry point (no model calls, no payments)
+	cd $(API_DIR) && go test ./internal/bench -run 'TestCommitted' -v
+	cd $(WEB_DIR) && npm test
+	@echo ""
+	@echo "Workbench: make dev-web  ->  http://localhost:3000/incidents"
+	@echo "Narrative: evidence/m5/DEMO.md"
 
 clean: ## Remove local build outputs
 	rm -rf $(API_DIR)/bin $(WEB_DIR)/.next

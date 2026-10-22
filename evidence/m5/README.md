@@ -77,6 +77,41 @@ The denominator is therefore **6 held-out cases in the corpus, 2 attempted
 under B1/B2, 4 not run**. This is not a completed benchmark; it is the honest
 state after the provider budget was exhausted.
 
+### Model-budget check (2026-10-22)
+
+The configured hosted model was re-checked before any further work. The
+provider account reports `total_credits=0` and `total_usage=0.189259787`. No
+resume was attempted: the next call would only reproduce the HTTP 402, and no
+other model was substituted. H2 remains `ERROR`; H3–H6 remain `NOT RUN`.
+
+## Workbench security and sanitized export
+
+- `/api/decisions` is **disabled by default**. `POST` returns `403` and writes
+  nothing unless the deployment sets `WAYPOINT_REVIEW_TOKEN` (at least 16
+  characters); with it, the request must carry that exact bearer token or it
+  gets `401`. No anonymous visitor can record an integration approval.
+- Recording only appends a local JSONL note. It never merges a patch, deploys,
+  captures, refunds or retries a payment.
+- `apps/web/src/data/m5.json` is produced by an explicit sanitized projection
+  (`bench.Project`), not by serializing the evaluator dataset. It omits defect
+  mutation text, reference fixes, expected categories, gate configuration,
+  prompt facts and absolute artifact paths. Reviewable diffs, reports, evals
+  and provider observations are retained. A generated repair diff necessarily
+  shows the source line the candidate changed; that is candidate output, not
+  the injector's mutation specification or reference fix.
+- `results.json` itself no longer serializes mutations, reference fixes,
+  expected categories or host artifact paths.
+- `TestPublicProjectionExcludesEvaluatorData`,
+  `TestCommittedWebDataHasNoEvaluatorData`,
+  `TestCommittedResultsHasNoEvaluatorFields` and
+  `src/lib/review-guard.test.mjs` guard these boundaries.
+
+## Deterministic demo
+
+See [`DEMO.md`](DEMO.md) or run `make demo-m5` followed by `make dev-web`. The
+demo is offline, uses committed evidence, and needs no PostgreSQL or API keys.
+
+
 ## What is demonstrated
 
 - A real hosted model diagnosed H1 and produced a scoped patch that the
