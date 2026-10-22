@@ -63,7 +63,9 @@ Raw counts. No statistical significance is claimed.
 - **H1** was accepted under both B1 and B2 by the trusted judge, with one
   capture effect and the original durable request identity. Model:
   `deepseek/deepseek-v4.1-flash`, temperature 0. B1 used 17,866 prompt / 6,093
-  completion tokens; B2 used 17,730 / 4,794.
+  completion tokens; B2 used 17,730 / 4,794. The model's diagnosis category was
+  `authorization`, scored incorrect against the expected `identity`; acceptance
+  came from the build, trusted gate and oracle, not from the label.
 - **H2** failed with `HTTP 402` (provider credit exhausted) in both conditions.
   The failure is recorded, not retried until green.
 - **H3–H6** are **NOT RUN** for B1/B2 because the same budget was exhausted.

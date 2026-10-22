@@ -45,7 +45,8 @@ new identity instead of reconciling the original operation.
 The B1 and B2 panels show the recorded replies from
 `deepseek/deepseek-v4.1-flash` at temperature 0:
 
-- diagnosis category: identity/idempotency;
+- diagnosis category: `authorization` (recorded as an incorrect category against
+  the expected `identity`; the patch was still independently accepted);
 - a scoped patch, visible as the generated diff;
 - one attempt, with token usage and latency.
 
