@@ -1,4 +1,4 @@
-//go:build m4_repair
+//go:build m4_f3
 
 package merchant_test
 

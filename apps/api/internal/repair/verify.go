@@ -94,10 +94,13 @@ func (v *Verifier) Run(ctx context.Context) Verification {
 		// gate lives behind the f1_repair tag; pre-repair reproduction is a
 		// separate (fault_reproduction) test run against the pinned base.
 		testArgs = append(testArgs, "-tags", "f1_repair")
-	case "F2", "F3":
-		// M4 correctness gates live behind m4_repair for the same reason: the
-		// base revision deliberately wires the defective policy/handler.
-		testArgs = append(testArgs, "-tags", "m4_repair")
+	case "F2":
+		// M4 correctness gates live behind per-family tags: the base revision
+		// deliberately wires the defective policy/handler, and an F2 candidate
+		// must not be judged by the F3 gate (or vice versa).
+		testArgs = append(testArgs, "-tags", "m4_f2")
+	case "F3":
+		testArgs = append(testArgs, "-tags", "m4_f3")
 	}
 	testArgs = append(testArgs, "./internal/merchant/", "./internal/domain/")
 	tests := v.Runner.Run(ctx, v.Workspace.Dir, v.ArtifactDir, 300*time.Second, testEnv, "go", testArgs...)
