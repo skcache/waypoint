@@ -1,0 +1,32 @@
+{
+  "root_cause": "The F2 capture path incorrectly classifies an unreadable successful capture response as a definite rejection because legacyAmbiguity only treats provider 5xx API errors as ambiguous.",
+  "mechanism": "The provider applied the USD 12.34 capture but dropped its response, producing an unreadable-response error; legacyAmbiguity returned false for that error, so the service took its rejection branch and persisted a REJECTED capture operation with no capture ID even though CAP-SCRIPT-0001 existed, after which a later provider read recovered the capture and marked the order CAPTURED_VERIFIED, leaving the rejected-operation history inconsistent with the provider-recorded capture.",
+  "suspected_files": [
+    "apps/api/internal/merchant/ambiguity.go",
+    "apps/api/internal/merchant/service.go"
+  ],
+  "supporting_evidence": [
+    "EV-1",
+    "EV-4",
+    "EV-9",
+    "EV-10",
+    "EV-14",
+    "EV-15"
+  ],
+  "invariants_at_risk": [
+    "I6"
+  ],
+  "proposed_fix": "Make all capture-outcome decisions use the canonical paypal.AmbiguousOutcome classification, including the F2 fixture wiring, rather than the 5xx-only shortcut; an unreadable 2xx response or transport failure should mark the operation and order outcome unknown, preserve the original request ID, and proceed only through provider reconciliation or a bounded same-ID retry.",
+  "confidence_reasons": [
+    "EV-14 directly records that the capture mutation was applied, the response was dropped, there was no definite refusal, and the provider returned a COMPLETED USD 12.34 capture identified as CAP-SCRIPT-0001.",
+    "EV-9 records response_unreadable=true and error_classified=AMBIGUOUS while simultaneously classifying the event itself as CAPTURE_REJECTED_DEFINITE, which is the exact split produced when failure detail uses the canonical classifier but the capture decision uses legacyAmbiguity.",
+    "EV-4 confirms that the local capture operation was persisted as REJECTED with no provider capture ID.",
+    "EV-10 and EV-15 show that provider evidence subsequently exposed the completed capture, while EV-1 shows the final order state as CAPTURED_VERIFIED despite the first-capture rejection error.",
+    "The supplied implementation of legacyAmbiguity returns false for non-APIError failures, whereas the unreadable-response condition in EV-9 is represented as a ResponseError-like outcome in failureDetail."
+  ],
+  "uncertainties": [
+    "The evidence is tier F from a scripted fixture, so it does not establish behavior against the real PayPal Sandbox or production.",
+    "The file that wires legacyAmbiguity into the F2 scenario was not supplied, so that wiring is inferred from the implementation and incident pattern rather than directly inspected.",
+    "The supplied observations show one provider capture and no duplicate capture, but they cannot establish whether any separate customer-visible effect or additional capture occurred outside the fixture."
+  ]
+}

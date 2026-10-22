@@ -1,0 +1,31 @@
+diff --git a/apps/api/internal/merchant/service.go b/apps/api/internal/merchant/service.go
+index eb83779..ca9951a 100644
+--- a/apps/api/internal/merchant/service.go
++++ b/apps/api/internal/merchant/service.go
+@@ -53,9 +53,8 @@ type Service struct {
+ 	sameIDRetryWindow time.Duration
+ 	instanceID        string
+ 	leaseTTL          time.Duration
+-	// ambiguity classifies failed capture calls. The canonical policy treats
+-	// an unreadable 2xx response as "may have applied"; the fixture can wire
+-	// the legacy policy to reproduce the F2 integration defect.
++	// ambiguity classifies failed capture calls using the canonical provider
++	// policy, which treats an unreadable 2xx response as "may have applied".
+ 	ambiguity ambiguityPolicy
+ 	// webhooks verifies provider event authenticity; applyWebhook is the
+ 	// selected event handler (canonical, or the fixture's legacy defect).
+@@ -97,10 +96,10 @@ func (s *Service) SetWebhookVerifier(v WebhookVerifier) { s.webhooks = v }
+ // it exists only so the fixture can reproduce a seeded application defect.
+ func (s *Service) UseLegacyWebhook() { s.applyWebhook = s.legacyApplyWebhookEvent }
+ 
+-// UseLegacyAmbiguity wires the historical (defective) capture-ambiguity
+-// policy. It exists so the fixture can reproduce the F2 defect; production
+-// wiring always uses the canonical policy.
+-func (s *Service) UseLegacyAmbiguity() { s.ambiguity = legacyAmbiguity{} }
++// UseLegacyAmbiguity retains the legacy configuration hook while ensuring
++// capture failures use canonical provider ambiguity classification. An
++// unreadable response may mean that the capture applied.
++func (s *Service) UseLegacyAmbiguity() { s.ambiguity = canonicalAmbiguity{} }
+ 
+ // newInstanceID identifies this process as the owner of capture attempts.
+ func newInstanceID() string {

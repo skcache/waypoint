@@ -1,0 +1,34 @@
+{
+  "root_cause": "The F2 capture path used legacyAmbiguity, which treated the unreadable capture-response error as definite because it classified only APIError responses with status \u003e= 500 as ambiguous.",
+  "mechanism": "The provider applied the USD 12.34 capture and completed it, but dropped the response (EV-14). The service then consulted the defective legacy policy and selected the rejection path, recording the capture operation as REJECTED with no provider capture ID even though the failure detail classified the error as AMBIGUOUS (EV-4, EV-9). A later provider read exposed the matching COMPLETED capture (EV-15), and provider-evidence recovery marked the order CAPTURED_VERIFIED (EV-2, EV-10), leaving the local history with a rejected capture attempt, an empty claimed capture ID, and a capture error alongside the successful provider capture and verified order status (EV-1).",
+  "suspected_files": [
+    "apps/api/internal/merchant/ambiguity.go",
+    "apps/api/internal/merchant/service.go"
+  ],
+  "supporting_evidence": [
+    "EV-14",
+    "EV-9",
+    "EV-4",
+    "EV-15",
+    "EV-10",
+    "EV-1",
+    "EV-2"
+  ],
+  "invariants_at_risk": [
+    "I6"
+  ],
+  "proposed_fix": "Remove the F2 legacy-policy wiring and use canonicalAmbiguity, or have legacyAmbiguity delegate to paypal.AmbiguousOutcome, consistently for capture errors. An unreadable or dropped capture response must mark the durable operation and order as outcome UNKNOWN while preserving the original request ID, never as REJECTED; recovery should set CAPTURED_VERIFIED only from matching COMPLETED provider evidence and update the capture operation and claimed capture identifier consistently with the order.",
+  "confidence_reasons": [
+    "EV-14 directly records that the capture mutation applied, reached COMPLETED, produced capture ID CAP-SCRIPT-0001 for USD 12.34, dropped the response, and was not a definite refusal.",
+    "EV-9 records response_unreadable: true and error_classified: AMBIGUOUS, while EV-4 records the resulting local capture operation as REJECTED; this mismatch is exactly what the supplied legacyAmbiguity implementation produces for a non-APIError response failure.",
+    "EV-15 independently confirms the completed capture and matching amount and currency, and EV-10 shows that the order was subsequently recovered from provider evidence.",
+    "EV-1 and EV-2 confirm the final inconsistency: the order is CAPTURED_VERIFIED and has provider capture evidence, while the incident still contains a capture-rejection error and an empty claimed capture ID.",
+    "The provider capture amount of USD 12.34 matches the local total of 1234 USD minor units, so the evidence points to outcome classification rather than an amount or currency mismatch."
+  ],
+  "uncertainties": [
+    "This is tier-F scripted-fixture evidence rather than a real Sandbox run, so the frequency and production impact cannot be established.",
+    "The exact dropped HTTP response body and status cannot be reconstructed from the supplied evidence.",
+    "The Store implementation is not provided, so the exact persistence path that leaves the historical capture operation REJECTED during later recovery cannot be inspected.",
+    "No duplicate capture is evidenced; the supplied provider observations show one capture mutation, but they cannot rule out behavior outside the recorded fixture sequence."
+  ]
+}

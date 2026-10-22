@@ -1,0 +1,13 @@
+diff --git a/apps/api/internal/merchant/service.go b/apps/api/internal/merchant/service.go
+index eeec14a..32a5a4a 100644
+--- a/apps/api/internal/merchant/service.go
++++ b/apps/api/internal/merchant/service.go
+@@ -463,7 +463,7 @@ func (s *Service) Capture(ctx context.Context, orderID string) (Order, error) {
+ 	result, err := s.api.CaptureOrder(ctx, order.ProviderOrderID, op.ProviderRequestID)
+ 	if err != nil {
+ 		detail := failureDetail(op, err)
+-		if s.ambiguity.Ambiguous(err) {
++		if paypal.AmbiguousOutcome(err) {
+ 			if _, mErr := s.store.MarkCaptureUnknown(ctx, orderID, op.ID, op.Fence, detail, s.evidenceTier()); mErr != nil {
+ 				return Order{}, mErr
+ 			}

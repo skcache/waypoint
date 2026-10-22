@@ -1,0 +1,15 @@
+{
+  "_rendered": "{\n  \"capture_error\": \"first capture: capture rejected for order 98fa60a3-3be2-401a-a788-e659ca5846ce: paypal: invalid provider response: \",\n  \"checkout_error\": \"\",\n  \"claimed_capture_id\": \"\",\n  \"currency\": \"USD\",\n  \"evidence_tier\": \"F\",\n  \"fault_family\": \"F2\",\n  \"fixture_revision\": \"2d7dde3e7ec6d6368bc6f485a2cb060cdc6611b8\",\n  \"incident_id\": \"M3-INC-F2-98fa60a3-3be2-401a-a788-e659ca5846ce\",\n  \"order_id\": \"98fa60a3-3be2-401a-a788-e659ca5846ce\",\n  \"order_status\": \"CAPTURED_VERIFIED\",\n  \"provider_capture_id\": \"CAP-SCRIPT-0001\",\n  \"total_minor\": 1234\n}",
+  "capture_error": "first capture: capture rejected for order 98fa60a3-3be2-401a-a788-e659ca5846ce: paypal: invalid provider response: ",
+  "checkout_error": "",
+  "claimed_capture_id": "",
+  "currency": "USD",
+  "evidence_tier": "F",
+  "fault_family": "F2",
+  "fixture_revision": "2d7dde3e7ec6d6368bc6f485a2cb060cdc6611b8",
+  "incident_id": "M3-INC-F2-98fa60a3-3be2-401a-a788-e659ca5846ce",
+  "order_id": "98fa60a3-3be2-401a-a788-e659ca5846ce",
+  "order_status": "CAPTURED_VERIFIED",
+  "provider_capture_id": "CAP-SCRIPT-0001",
+  "total_minor": 1234
+}

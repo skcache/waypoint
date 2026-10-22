@@ -1,0 +1,23 @@
+{
+  "summary": "The F3 legacy webhook handler (legacyApplyWebhookEvent) trusted the event payload as the source of truth: it rewound merchant_orders.status to APPROVED on any ORDER.APPROVED event (even after a verified capture) and keyed fulfillment by event id, allowing duplicate effects. This patch makes the legacy handler apply the canonical event semantics: it no longer writes order status from an event, it fulfills only when the local order is already CAPTURED_VERIFIED and the event's capture id matches the sealed provider_capture_id, and it uses the stable per-order effect key 'FULFILL' so redelivered or distinct events for one capture yield exactly one fulfillment effect. The F3 wiring is left intact; the defective behavior it exposes is fixed.",
+  "edits": [
+    {
+      "path": "apps/api/internal/merchant/webhook.go",
+      "old_text": "\torderID, _, err := s.webhookOrder(ctx, tx, ev.ProviderOrderID)",
+      "new_text": "\torderID, status, err := s.webhookOrder(ctx, tx, ev.ProviderOrderID)",
+      "rationale": "The legacy handler discarded the local order status, so it could not gate fulfillment on CAPTURED_VERIFIED. Capture the status returned by webhookOrder so the handler can verify the order is already sealed before fulfilling."
+    },
+    {
+      "path": "apps/api/internal/merchant/webhook.go",
+      "old_text": "\tcase \"ORDER.APPROVED\":\n\t\tif _, err := tx.Exec(ctx, `UPDATE merchant_orders SET status = $2, updated_at = now() WHERE id = $1::uuid`, orderID, StatusApproved); err != nil {\n\t\t\treturn err\n\t\t}\n\tcase \"PAYMENT.CAPTURE.COMPLETED\":",
+      "new_text": "\tcase \"PAYMENT.CAPTURE.COMPLETED\":\n\t\tif status != StatusCapturedVerified {\n\t\t\tbreak\n\t\t}\n\t\tverifiedCapture, err := s.verifiedCaptureID(ctx, tx, orderID)\n\t\tif err != nil {\n\t\t\treturn err\n\t\t}\n\t\tif ev.CaptureID == \"\" || ev.CaptureID != verifiedCapture {\n\t\t\tbreak\n\t\t}",
+      "rationale": "Removes the ORDER.APPROVED branch that unconditionally rewound a verified capture back to APPROVED, and gates fulfillment on the local order already being CAPTURED_VERIFIED with an event capture id matching the sealed provider_capture_id. Events can no longer mutate payment state."
+    },
+    {
+      "path": "apps/api/internal/merchant/webhook.go",
+      "old_text": "\t\t\tVALUES ($1::uuid, $2, $2, $3)",
+      "new_text": "\t\t\tVALUES ($1::uuid, 'FULFILL', $2, $3)",
+      "rationale": "Replaces the event-id-keyed effect key with the stable per-order key 'FULFILL', so redelivered or distinct events describing the same capture produce exactly one fulfillment effect via the (order_id, effect_key) conflict guard."
+    }
+  ]
+}

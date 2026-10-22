@@ -1,0 +1,38 @@
+diff --git a/apps/api/internal/merchant/webhook.go b/apps/api/internal/merchant/webhook.go
+index 58d9a23..d84ca2b 100644
+--- a/apps/api/internal/merchant/webhook.go
++++ b/apps/api/internal/merchant/webhook.go
+@@ -96,7 +96,7 @@ func (s *Service) legacyApplyWebhookEvent(ctx context.Context, ev WebhookEvent)
+ 	}
+ 	defer func() { _ = tx.Rollback(ctx) }()
+ 
+-	orderID, _, err := s.webhookOrder(ctx, tx, ev.ProviderOrderID)
++	orderID, status, err := s.webhookOrder(ctx, tx, ev.ProviderOrderID)
+ 	if err != nil {
+ 		return err
+ 	}
+@@ -108,14 +108,20 @@ func (s *Service) legacyApplyWebhookEvent(ctx context.Context, ev WebhookEvent)
+ 	}
+ 
+ 	switch ev.Type {
+-	case "ORDER.APPROVED":
+-		if _, err := tx.Exec(ctx, `UPDATE merchant_orders SET status = $2, updated_at = now() WHERE id = $1::uuid`, orderID, StatusApproved); err != nil {
++	case "PAYMENT.CAPTURE.COMPLETED":
++		if status != StatusCapturedVerified {
++			break
++		}
++		verifiedCapture, err := s.verifiedCaptureID(ctx, tx, orderID)
++		if err != nil {
+ 			return err
+ 		}
+-	case "PAYMENT.CAPTURE.COMPLETED":
++		if ev.CaptureID == "" || ev.CaptureID != verifiedCapture {
++			break
++		}
+ 		if _, err := tx.Exec(ctx, `
+ 			INSERT INTO merchant_fulfillment_effects (order_id, effect_key, event_id, tier)
+-			VALUES ($1::uuid, $2, $2, $3)
++			VALUES ($1::uuid, 'FULFILL', $2, $3)
+ 			ON CONFLICT (order_id, effect_key) DO NOTHING`,
+ 			orderID, ev.ID, s.evidenceTier()); err != nil {
+ 			return err

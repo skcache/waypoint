@@ -6,7 +6,7 @@ independently verifies that the repairs preserve correct financial state.
 
 Built for the [PayPal AI Hackathon 2026](https://paypalaihackathon.devpost.com/).
 
-> **Status: early V2 prototype (milestones M1–M3 implemented).** The repository contains:
+> **Status: early V2 prototype (milestones M1–M4 implemented).** The repository contains:
 > a runnable **merchant checkout fixture** (Go + PostgreSQL) that performs real PayPal
 > **Sandbox** orders with a durable operation journal and deliberately injectable
 > defects; an independent **deterministic financial-correctness oracle** with a fault
@@ -15,26 +15,28 @@ Built for the [PayPal AI Hackathon 2026](https://paypalaihackathon.devpost.com/)
 > a disposable worktree, and accepts it only after the candidate's own code passes
 > independent verification; the Go API with PostgreSQL migrations; and the previous
 > static three-route web preview, which will be replaced by the V2 incident console in a
-> later milestone. **The live hosted-model evaluation is NOT RUN in this repository's
-> checked-in evidence: no model credentials are configured here.** The pipeline's
-> integration boundaries are exercised with a clearly labelled scripted double, never
-> presented as a hosted-AI result. Nothing here processes real money; all provider
-> traffic is sandbox.
+> later milestone. **The M3 and M4 evidence directories contain genuine hosted-model
+> runs** (raw replies, diffs, oracle verdicts, token counts), alongside clearly labelled
+> scripted boundary tests. The M4 matrix is in `evidence/m4-live/README.md`. No model
+> credentials are stored in this repository. Nothing here processes real money; all
+> provider traffic is sandbox, and M4 webhook events are trusted **fixture** events,
+> not PayPal-signed webhooks.
 
 ## Current status
 
 | Area | State |
 |---|---|
 | Merchant checkout fixture (`apps/api/cmd/merchant`) | **Implemented (M1)** — server-owned amounts, durable operation identity committed before outbound calls, real PayPal Sandbox order creation, buyer-approval redirect flow, server-side capture with provider-evidence gating, redacted incident artifacts, `MERCHANT_FAULT=F1` reproducible provider-request failure; binds to `127.0.0.1` only |
-| Financial oracle (`apps/api/internal/oracle`) | **Implemented (M2)** — deterministic I1–I12 invariant engine over the durable journal and trusted provider observations; verdicts `VERIFIED_FOR_TESTED_SCENARIOS` / `UNSAFE` / `INCONCLUSIVE`; NOT_APPLICABLE for unexercised invariants; redacted proof bundles |
+| Financial oracle (`apps/api/internal/oracle`) | **Implemented (M2/M4)** — deterministic I1–I14 invariant engine over the durable journal and trusted provider observations; verdicts `VERIFIED_FOR_TESTED_SCENARIOS` / `UNSAFE` / `INCONCLUSIVE`; I13/I14 judge fulfillment cardinality and authenticated event backing; NOT_APPLICABLE for unexercised invariants; redacted proof bundles |
 | Fault harness + unsafe seeds (`apps/api/internal/replay`) | **Implemented (M2)** — scripted deterministic provider (tier F), scenarios for lost response, duplicate delivery, concurrency, restart, stale reads; two knowingly-unsafe seed patches (fresh-identity reissue; wrong-amount acceptance) rejected by the oracle with counterexamples |
 | Go API (`apps/api`) | `GET /healthz`, `GET /readyz`, and the legacy V1 `POST /api/v1/intents/draft` endpoint (kept running; the V1 product direction is retired) |
 | Investigation + repair pipeline (`apps/api/internal/repair`, `cmd/repair`) | **Implemented (M3)** — evidence-bounded structured diagnosis, schema-validated, allowlisted patches applied in a disposable git worktree, candidate execution in a **disposable Docker sandbox** (no host home/env, internal network only, non-root, read-only root, CPU/memory/PID/time limits, fail-closed), bounded retries on failure evidence, review report that keeps diagnosis/patch/build/tests/oracle/acceptance as separate facts; never applies to the working tree, pushes or deploys. Live hosted-model evaluation runs only when `LLM_*` credentials are configured; otherwise the command reports `NOT_CONFIGURED`. |
+| Webhook + fulfillment fixture (`apps/api/internal/merchant/webhook*.go`) | **Implemented (M4)** — durable `merchant_webhook_events` receipts (event id unique, delivery counter), `merchant_fulfillment_effects` with a stable per-order effect key, transactional apply, fixture HMAC authenticity boundary (tier F; signed PayPal webhooks unverified) |
 | Verifier (`apps/api/cmd/fixturecheck` + `apps/api/cmd/judgecheck`) | **Implemented (M3)** — the fixture run (candidate-linked) records only provider observations; a separate **trusted judge** (imports the oracle only, no merchant/replay code) re-reads the durable journal, evaluates the evidence, and writes the verdict plus proof bundle. Acceptance requires a provider-observed capture identity and an oracle `VERIFIED_FOR_TESTED_SCENARIOS`; candidate code cannot run inside, forge, or terminate the judge |
-| PostgreSQL | **Implemented** — versioned migrations `0001`–`0006` (fixture tables in `0004`, capture-ownership lease in `0005`, ownership-generation fence in `0006`); `/readyz` reports database readiness |
+| PostgreSQL | **Implemented** — versioned migrations `0001`–`0007` (fixture tables in `0004`, capture-ownership lease in `0005`, ownership-generation fence in `0006`, webhook receipts and fulfillment effects in `0007`); `/readyz` reports database readiness |
 | PayPal Sandbox (Orders v2) | **Verified** — real sandbox order creation, genuine buyer approval, provider-confirmed capture (`COMPLETED`), and a provider-rejected malformed request observed end-to-end; the developer-only feasibility spike CLI is retained under `cmd/paypal-spike` |
 | Web app (`apps/web`) | Static V1 preview pages; will be rebuilt around real incident data |
-| Full evaluation + workbench UI | Planned — milestone M4+ (multi-family fault/repair benchmark, incident console) |
+| Full evaluation + workbench UI | Planned — milestone M5 (held-out statistical benchmark, incident console) |
 
 ## Merchant fixture (the M1 vertical slice)
 
@@ -96,10 +98,15 @@ refused until the provider actually reports `APPROVED`.
 engine. It judges **only** durable evidence — the PostgreSQL journal read with its
 own SQL, plus provider observations recorded by the harness (or a real provider) —
 and returns `VERIFIED_FOR_TESTED_SCENARIOS`, `UNSAFE`, or `INCONCLUSIVE` per run,
-with every I1–I12 invariant listed (unexercised ones are `NOT_APPLICABLE`, never
+with every I1–I14 invariant listed (unexercised ones are `NOT_APPLICABLE`, never
 fabricated passes). The AI component is never the authority on correctness, and a
 scope-guard test asserts the oracle's dependency graph stays outside candidate-patch
 scope.
+
+I13 and I14 extend the same engine to business effects: at most one fulfillment
+per legitimate payment, and every fulfillment must be backed by an authenticated
+event naming the capture the merchant independently verified. They read the
+`merchant_fulfillment_effects` and `merchant_webhook_events` rows directly.
 
 The M2 fault harness (`apps/api/internal/replay`) runs deterministic scenarios
 against a scripted provider (tier F, local injection): lost capture response,
@@ -133,10 +140,11 @@ fixture incident (tier F, reproducible) ─► bounded evidence bundle
 
 Safety properties that are enforced in code, not prose:
 
-- The only writable surface is `apps/api/internal/merchant/service.go` plus new
-  lowercase `.go` files in that directory. Tests, the store, the fault
-  catalogue, migrations, the harness, the oracle and `cmd/*` are rejected by
-  path, before anything is written.
+- The writable surface is per fault family: `service.go` plus
+  `ambiguity.go` for F2, `webhook.go` for F3, plus new lowercase `.go` files in
+  that directory. The fixture-only wiring (`fixture_wiring.go`), tests, the
+  store, the fault catalogue, migrations, the harness, the oracle and `cmd/*`
+  are rejected by path, before anything is written.
 - Patches are exact-match textual edits; an `old_text` that does not occur
   exactly once is refused. Symlinks, absolute paths, traversal, deletions and
   renames are refused. A post-apply `git status` check must show exactly the
@@ -168,10 +176,13 @@ Safety properties that are enforced in code, not prose:
   accepted for human review. A clean build is never reported as a fix.
 
 Run it (requires `LLM_API_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL`, and the local
-PostgreSQL test database):
+PostgreSQL test database; `LLM_REASONING_EFFORT=low` is optional for
+reasoning-heavy providers):
 
 ```bash
 cd apps/api
+go run ./cmd/repair -fault F2 -out ../../tmp/repair-f2 -attempts 2
+go run ./cmd/repair -fault F3 -out ../../tmp/repair-f3 -attempts 2
 go run ./cmd/repair -fault F4 -out ../../tmp/repair-f4 -attempts 2
 go run ./cmd/repair -fault F4 -out ../../tmp/repair-f4-baseline -mode baseline  # B0 comparison
 ```
@@ -194,6 +205,33 @@ The two phases are separate build-tagged suites:
 
 The oracle is unchanged in both phases; a repair is accepted only when the
 candidate's own compiled fixture passes the gate and the oracle verdict.
+
+## Adversarial families (the M4 vertical slice)
+
+M4 adds two genuinely different failure families on the same durable-identity
+foundation:
+
+- **F2 — capture applied, response lost.** The scripted provider applies the
+  capture and drops the response. The fixture wires the historical ambiguity
+  policy, which treats an unreadable 2xx response as a definite rejection. The
+  journey then restarts the process and retries: the unsafe journal closes the
+  first attempt as `REJECTED` and later verifies without a successful capture
+  operation (I5/I6). The repaired policy keeps the attempt `UNKNOWN` and
+  recovers it with the original request id and one capture effect.
+- **F3 — duplicate/reordered webhooks.** Delivery is at-least-once and
+  unordered: the same event id twice, a second event id for the same capture, a
+  late approval, eight concurrent handlers, a restart replay, an early event,
+  and an unauthenticated delivery. The legacy handler keys fulfillment by event
+  id and writes event status onto the order (two effects, status rewound); the
+  repaired handler verifies the sealed capture, uses one effect key per order,
+  and never mutates payment state from an event. I13/I14 judge the effects.
+
+The **unsafe trap** is seeded, not model-generated: `evidence/m4-unsafe-f3/`
+contains a candidate that compiles, returns success and ends
+`CAPTURED_VERIFIED`, but creates two fulfillment effects; the trusted financial
+test rejects it first and the independent judge rejects it with an I13
+counterexample. The M4 live matrix, raw model replies and failed attempts are in
+`evidence/m4-live/README.md`.
 
 ## Local development
 

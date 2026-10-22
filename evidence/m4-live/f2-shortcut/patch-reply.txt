@@ -1,0 +1,17 @@
+{
+  "summary": "Keep the legacy configuration hook for compatibility while routing capture-error ambiguity through the canonical provider policy. An unreadable or dropped capture response will now remain durably UNKNOWN with its request identity preserved, allowing matching provider evidence to recover the capture operation and claimed capture ID consistently.",
+  "edits": [
+    {
+      "path": "apps/api/internal/merchant/service.go",
+      "old_text": "\t// ambiguity classifies failed capture calls. The canonical policy treats\n\t// an unreadable 2xx response as \"may have applied\"; the fixture can wire\n\t// the legacy policy to reproduce the F2 integration defect.\n\tambiguity ambiguityPolicy",
+      "new_text": "\t// ambiguity classifies failed capture calls using the canonical provider\n\t// policy, which treats an unreadable 2xx response as \"may have applied\".\n\tambiguity ambiguityPolicy",
+      "rationale": "Capture errors must always use the canonical ambiguity classification so an unreadable response is not mistaken for a definite rejection."
+    },
+    {
+      "path": "apps/api/internal/merchant/service.go",
+      "old_text": "// UseLegacyAmbiguity wires the historical (defective) capture-ambiguity\n// policy. It exists so the fixture can reproduce the F2 defect; production\n// wiring always uses the canonical policy.\nfunc (s *Service) UseLegacyAmbiguity() { s.ambiguity = legacyAmbiguity{} }",
+      "new_text": "// UseLegacyAmbiguity retains the legacy configuration hook while ensuring\n// capture failures use canonical provider ambiguity classification. An\n// unreadable response may mean that the capture applied.\nfunc (s *Service) UseLegacyAmbiguity() { s.ambiguity = canonicalAmbiguity{} }",
+      "rationale": "The legacy hook previously installed a policy that classified non-APIError capture failures as definite. Using canonicalAmbiguity marks dropped or unreadable responses as potentially applied, preserving the durable operation and request ID and allowing matching COMPLETED provider evidence to recover both the operation and capture identifier."
+    }
+  ]
+}

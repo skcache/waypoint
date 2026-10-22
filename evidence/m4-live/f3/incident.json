@@ -1,0 +1,15 @@
+{
+  "_rendered": "{\n  \"capture_error\": \"\",\n  \"checkout_error\": \"\",\n  \"claimed_capture_id\": \"CAP-SCRIPT-0001\",\n  \"currency\": \"USD\",\n  \"evidence_tier\": \"F\",\n  \"fault_family\": \"F3\",\n  \"fixture_revision\": \"7cd25ae2c689685f28c6f395ab55aecc9d19521c\",\n  \"incident_id\": \"M3-INC-F3-732229b4-03f6-4af1-bbee-6cb80c53619b\",\n  \"order_id\": \"732229b4-03f6-4af1-bbee-6cb80c53619b\",\n  \"order_status\": \"APPROVED\",\n  \"provider_capture_id\": \"CAP-SCRIPT-0001\",\n  \"total_minor\": 1234\n}",
+  "capture_error": "",
+  "checkout_error": "",
+  "claimed_capture_id": "CAP-SCRIPT-0001",
+  "currency": "USD",
+  "evidence_tier": "F",
+  "fault_family": "F3",
+  "fixture_revision": "7cd25ae2c689685f28c6f395ab55aecc9d19521c",
+  "incident_id": "M3-INC-F3-732229b4-03f6-4af1-bbee-6cb80c53619b",
+  "order_id": "732229b4-03f6-4af1-bbee-6cb80c53619b",
+  "order_status": "APPROVED",
+  "provider_capture_id": "CAP-SCRIPT-0001",
+  "total_minor": 1234
+}

@@ -1,0 +1,229 @@
+{
+  "schema_version": 1,
+  "incident_id": "M3-INC-F2-39efad70-cd15-4a6d-9586-a6b987f97abb",
+  "fault_family": "F2",
+  "mode": "oracle",
+  "evidence_tier": "F",
+  "base_revision": "648a3d4ba15f8a2905e938f2a59102ae3d2d6fa1",
+  "revision_source": "git-resolve",
+  "candidate_sandbox": "docker image golang:1.27-alpine; internal network wp-net-5ce814467fc8; disposable postgres wp-db-f857720f5bb8; non-root uid 501; memory 2g; cpus 2; pids 256; read-only root; read-only module cache; separate pristine judge cache",
+  "started_at": "2026-10-22T01:51:07.091169Z",
+  "finished_at": "2026-10-22T01:54:09.974503Z",
+  "status": "ACCEPTED_FOR_HUMAN_REVIEW",
+  "diagnosis": {
+    "root_cause": "The F2 capture path used legacyAmbiguity, which treated the unreadable capture-response error as definite because it classified only APIError responses with status \u003e= 500 as ambiguous.",
+    "mechanism": "The provider applied the USD 12.34 capture and completed it, but dropped the response (EV-14). The service then consulted the defective legacy policy and selected the rejection path, recording the capture operation as REJECTED with no provider capture ID even though the failure detail classified the error as AMBIGUOUS (EV-4, EV-9). A later provider read exposed the matching COMPLETED capture (EV-15), and provider-evidence recovery marked the order CAPTURED_VERIFIED (EV-2, EV-10), leaving the local history with a rejected capture attempt, an empty claimed capture ID, and a capture error alongside the successful provider capture and verified order status (EV-1).",
+    "suspected_files": [
+      "apps/api/internal/merchant/ambiguity.go",
+      "apps/api/internal/merchant/service.go"
+    ],
+    "supporting_evidence": [
+      "EV-14",
+      "EV-9",
+      "EV-4",
+      "EV-15",
+      "EV-10",
+      "EV-1",
+      "EV-2"
+    ],
+    "invariants_at_risk": [
+      "I6"
+    ],
+    "proposed_fix": "Remove the F2 legacy-policy wiring and use canonicalAmbiguity, or have legacyAmbiguity delegate to paypal.AmbiguousOutcome, consistently for capture errors. An unreadable or dropped capture response must mark the durable operation and order as outcome UNKNOWN while preserving the original request ID, never as REJECTED; recovery should set CAPTURED_VERIFIED only from matching COMPLETED provider evidence and update the capture operation and claimed capture identifier consistently with the order.",
+    "confidence_reasons": [
+      "EV-14 directly records that the capture mutation applied, reached COMPLETED, produced capture ID CAP-SCRIPT-0001 for USD 12.34, dropped the response, and was not a definite refusal.",
+      "EV-9 records response_unreadable: true and error_classified: AMBIGUOUS, while EV-4 records the resulting local capture operation as REJECTED; this mismatch is exactly what the supplied legacyAmbiguity implementation produces for a non-APIError response failure.",
+      "EV-15 independently confirms the completed capture and matching amount and currency, and EV-10 shows that the order was subsequently recovered from provider evidence.",
+      "EV-1 and EV-2 confirm the final inconsistency: the order is CAPTURED_VERIFIED and has provider capture evidence, while the incident still contains a capture-rejection error and an empty claimed capture ID.",
+      "The provider capture amount of USD 12.34 matches the local total of 1234 USD minor units, so the evidence points to outcome classification rather than an amount or currency mismatch."
+    ],
+    "uncertainties": [
+      "This is tier-F scripted-fixture evidence rather than a real Sandbox run, so the frequency and production impact cannot be established.",
+      "The exact dropped HTTP response body and status cannot be reconstructed from the supplied evidence.",
+      "The Store implementation is not provided, so the exact persistence path that leaves the historical capture operation REJECTED during later recovery cannot be inspected.",
+      "No duplicate capture is evidenced; the supplied provider observations show one capture mutation, but they cannot rule out behavior outside the recorded fixture sequence."
+    ]
+  },
+  "attempts": [
+    {
+      "number": 1,
+      "started_at": "2026-10-22T01:52:45.453572Z",
+      "finished_at": "2026-10-22T01:54:09.946342Z",
+      "ladder": {
+        "diagnosis_produced": true,
+        "patch_generated": true,
+        "patch_applied": true,
+        "build_passed": true,
+        "tests_passed": true,
+        "oracle_verdict": "VERIFIED_FOR_TESTED_SCENARIOS",
+        "accepted_for_human_review": true
+      },
+      "patch": {
+        "summary": "Keep the legacy configuration hook for compatibility while routing capture-error ambiguity through the canonical provider policy. An unreadable or dropped capture response will now remain durably UNKNOWN with its request identity preserved, allowing matching provider evidence to recover the capture operation and claimed capture ID consistently.",
+        "edits": [
+          {
+            "path": "apps/api/internal/merchant/service.go",
+            "old_text": "\t// ambiguity classifies failed capture calls. The canonical policy treats\n\t// an unreadable 2xx response as \"may have applied\"; the fixture can wire\n\t// the legacy policy to reproduce the F2 integration defect.\n\tambiguity ambiguityPolicy",
+            "new_text": "\t// ambiguity classifies failed capture calls using the canonical provider\n\t// policy, which treats an unreadable 2xx response as \"may have applied\".\n\tambiguity ambiguityPolicy",
+            "rationale": "Capture errors must always use the canonical ambiguity classification so an unreadable response is not mistaken for a definite rejection."
+          },
+          {
+            "path": "apps/api/internal/merchant/service.go",
+            "old_text": "// UseLegacyAmbiguity wires the historical (defective) capture-ambiguity\n// policy. It exists so the fixture can reproduce the F2 defect; production\n// wiring always uses the canonical policy.\nfunc (s *Service) UseLegacyAmbiguity() { s.ambiguity = legacyAmbiguity{} }",
+            "new_text": "// UseLegacyAmbiguity retains the legacy configuration hook while ensuring\n// capture failures use canonical provider ambiguity classification. An\n// unreadable response may mean that the capture applied.\nfunc (s *Service) UseLegacyAmbiguity() { s.ambiguity = canonicalAmbiguity{} }",
+            "rationale": "The legacy hook previously installed a policy that classified non-APIError capture failures as definite. Using canonicalAmbiguity marks dropped or unreadable responses as potentially applied, preserving the durable operation and request ID and allowing matching COMPLETED provider evidence to recover both the operation and capture identifier."
+          }
+        ]
+      },
+      "diff": "diff --git a/apps/api/internal/merchant/service.go b/apps/api/internal/merchant/service.go\nindex eb83779..ca9951a 100644\n--- a/apps/api/internal/merchant/service.go\n+++ b/apps/api/internal/merchant/service.go\n@@ -53,9 +53,8 @@ type Service struct {\n \tsameIDRetryWindow time.Duration\n \tinstanceID        string\n \tleaseTTL          time.Duration\n-\t// ambiguity classifies failed capture calls. The canonical policy treats\n-\t// an unreadable 2xx response as \"may have applied\"; the fixture can wire\n-\t// the legacy policy to reproduce the F2 integration defect.\n+\t// ambiguity classifies failed capture calls using the canonical provider\n+\t// policy, which treats an unreadable 2xx response as \"may have applied\".\n \tambiguity ambiguityPolicy\n \t// webhooks verifies provider event authenticity; applyWebhook is the\n \t// selected event handler (canonical, or the fixture's legacy defect).\n@@ -97,10 +96,10 @@ func (s *Service) SetWebhookVerifier(v WebhookVerifier) { s.webhooks = v }\n // it exists only so the fixture can reproduce a seeded application defect.\n func (s *Service) UseLegacyWebhook() { s.applyWebhook = s.legacyApplyWebhookEvent }\n \n-// UseLegacyAmbiguity wires the historical (defective) capture-ambiguity\n-// policy. It exists so the fixture can reproduce the F2 defect; production\n-// wiring always uses the canonical policy.\n-func (s *Service) UseLegacyAmbiguity() { s.ambiguity = legacyAmbiguity{} }\n+// UseLegacyAmbiguity retains the legacy configuration hook while ensuring\n+// capture failures use canonical provider ambiguity classification. An\n+// unreadable response may mean that the capture applied.\n+func (s *Service) UseLegacyAmbiguity() { s.ambiguity = canonicalAmbiguity{} }\n \n // newInstanceID identifies this process as the owner of capture attempts.\n func newInstanceID() string {\n",
+      "patch_digest": "sha256:051aab27ff6d472de79588bfacb5199ebf315735c12b457867d7466e05b201c9",
+      "changed_files": [
+        "apps/api/internal/merchant/service.go"
+      ],
+      "steps": [
+        {
+          "step": "gofmt",
+          "command": [
+            "gofmt",
+            "-l",
+            "internal/merchant/service.go"
+          ],
+          "exit_code": 0,
+          "timed_out": false,
+          "duration_ms": 319,
+          "output": "",
+          "output_truncated": false
+        },
+        {
+          "step": "build",
+          "command": [
+            "go",
+            "build",
+            "./..."
+          ],
+          "exit_code": 0,
+          "timed_out": false,
+          "duration_ms": 18066,
+          "output": "",
+          "output_truncated": false
+        },
+        {
+          "step": "tests",
+          "command": [
+            "go",
+            "test",
+            "-count=1",
+            "-timeout",
+            "240s",
+            "-tags",
+            "m4_f2",
+            "./internal/merchant/",
+            "./internal/domain/"
+          ],
+          "exit_code": 0,
+          "timed_out": false,
+          "duration_ms": 6166,
+          "output": "ok  \tgithub.com/skcache/waypoint/apps/api/internal/merchant\t2.092s\nok  \tgithub.com/skcache/waypoint/apps/api/internal/domain\t0.003s\n",
+          "output_truncated": false
+        },
+        {
+          "step": "fixture",
+          "command": [
+            "go",
+            "run",
+            "./cmd/fixturecheck",
+            "-fault",
+            "F2",
+            "-out",
+            "/out",
+            "-dsn",
+            "[REDACTED]"
+          ],
+          "exit_code": 0,
+          "timed_out": false,
+          "duration_ms": 1135,
+          "output": "2026/10/22 01:53:55 INFO merchant checkout: local order committed, calling provider order_id=d1d3a19d-ca23-4247-9fd7-db2fd44bab08 trace_id=ae425ba5-3854-43f3-ba3d-8ce2de027dc9 request_id=ffb46a23-a91e-4122-add5-aa71a1fbca71 total_minor=1234 fault=none\n2026/10/22 01:53:55 WARN provider order created without an approval URL order_id=d1d3a19d-ca23-4247-9fd7-db2fd44bab08\n",
+          "output_truncated": false
+        },
+        {
+          "step": "judge",
+          "command": [
+            "go",
+            "run",
+            "./cmd/judgecheck",
+            "-fault",
+            "F2",
+            "-in",
+            "/out/observations.json",
+            "-out",
+            "/out",
+            "-dsn",
+            "[REDACTED]",
+            "-base-revision",
+            "648a3d4ba15f8a2905e938f2a59102ae3d2d6fa1",
+            "-patch-digest",
+            "sha256:051aab27ff6d472de79588bfacb5199ebf315735c12b457867d7466e05b201c9"
+          ],
+          "exit_code": 0,
+          "timed_out": false,
+          "duration_ms": 14339,
+          "output": "judge: ACCEPTED — provider-issued capture identity, amount, currency and terminal status match the journal; the oracle verified the tested scenario\n",
+          "output_truncated": false
+        }
+      ],
+      "eval": {
+        "accepted": true,
+        "reason": "provider-issued capture identity, amount, currency and terminal status match the journal; the oracle verified the tested scenario",
+        "order_status": "CAPTURED_VERIFIED",
+        "claimed_capture_id": "CAP-SCRIPT-0001",
+        "provider_capture_id": "CAP-SCRIPT-0001"
+      }
+    }
+  ],
+  "final_ladder": {
+    "diagnosis_produced": true,
+    "patch_generated": true,
+    "patch_applied": true,
+    "build_passed": true,
+    "tests_passed": true,
+    "oracle_verdict": "VERIFIED_FOR_TESTED_SCENARIOS",
+    "accepted_for_human_review": true
+  },
+  "model_calls": [
+    {
+      "purpose": "diagnosis",
+      "model": "minimax/minimax-m3.1-flash:free",
+      "latency_ms": 94726,
+      "prompt_bytes": 48043,
+      "response_bytes": 3382,
+      "prompt_tokens": 13155,
+      "completion_tokens": 5677,
+      "usage_reported": true
+    },
+    {
+      "purpose": "patch",
+      "model": "minimax/minimax-m3.1-flash:free",
+      "latency_ms": 44209,
+      "prompt_bytes": 42930,
+      "response_bytes": 2115,
+      "prompt_tokens": 10575,
+      "completion_tokens": 5999,
+      "usage_reported": true
+    }
+  ],
+  "prompt_tokens": 23730,
+  "completion_tokens": 11676,
+  "usage_reported": true,
+  "patch_digest": "sha256:051aab27ff6d472de79588bfacb5199ebf315735c12b457867d7466e05b201c9",
+  "applied_to_developer_tree": false,
+  "deployed": false,
+  "human_approval_required": true,
+  "limitations": [
+    "All provider interaction in this run is deterministic scripted-fixture instrumentation (tier F). No real PayPal Sandbox transaction was executed by the repair pipeline.",
+    "The verifier judges behavior, not intent: a candidate that deletes the injected fault switch instead of fixing the underlying behavior can still pass if the resulting behavior is correct. Read the diff with that in mind.",
+    "Resource bounds are wall-clock timeouts, capped output and an advisory Go memory limit (GOMEMLIMIT); there is no hard OS memory cgroup on this platform.",
+    "Token usage is recorded only when the provider reports it; cost is not computed without a pricing source.",
+    "The model proposes; the independent oracle and the fixture acceptance rules decide. VERIFIED_FOR_TESTED_SCENARIOS covers only the scenario that actually executed.",
+    "Nothing was applied to the developer's working tree, committed, pushed, merged or deployed. A human owns any integration decision."
+  ]
+}

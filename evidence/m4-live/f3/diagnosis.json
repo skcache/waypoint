@@ -1,0 +1,31 @@
+{
+  "root_cause": "The F3 legacy webhook handler (legacyApplyWebhookEvent) treats the provider event payload as the source of truth: it writes ORDER.APPROVED directly onto merchant_orders and keys fulfillment by event id, so a late/duplicate approval event rewinds an already-verified capture back to APPROVED and can mint duplicate fulfillment effects.",
+  "mechanism": "Capture completed normally: the CAPTURE operation row is SUCCEEDED with ProviderCaptureID CAP-SCRIPT-0001 (EV-4) and the provider confirms a COMPLETED capture of 12.34 USD under the same request id (EV-9, EV-13), which is the path that seals the order as CAPTURED_VERIFIED. The order row nevertheless reads Status=APPROVED with UpdatedAt 19:22:08.856107 (EV-2), i.e. ~11 ms AFTER the capture operation was updated at 19:22:08.845393 (EV-4) and after the provider capture confirmation (EV-9). The only code path in the supplied sources that writes StatusApproved from an inbound event is legacyApplyWebhookEvent's ORDER.APPROVED branch, which unconditionally UPDATEs merchant_orders.status; the canonical applyWebhookEvent never advances or rewinds payment state from an event. The result is a financially inconsistent record: money is captured provider-side (EV-1 claimed_capture_id CAP-SCRIPT-0001, EV-9, EV-13) while the local order is presented as merely APPROVED, and the same handler's event-id-keyed effect_key allows more than one fulfillment effect for one capture.",
+  "suspected_files": [
+    "apps/api/internal/merchant/webhook.go",
+    "apps/api/internal/merchant/fixture_wiring.go"
+  ],
+  "supporting_evidence": [
+    "EV-1",
+    "EV-2",
+    "EV-4",
+    "EV-9",
+    "EV-13"
+  ],
+  "invariants_at_risk": [
+    "I6"
+  ],
+  "proposed_fix": "Stop wiring the legacy handler: have HandleWebhook dispatch to the canonical applyWebhookEvent (remove the F3 legacy selection in fixture_wiring.go). The canonical handler must remain the only event path: record a durable receipt keyed by provider event id, never write order status from an event, fulfill only when the local order is already CAPTURED_VERIFIED and the event's capture id equals the sealed provider_capture_id, and use a stable per-order effect key (e.g. 'FULFILL') so redelivered or distinct events for the same capture yield exactly one fulfillment effect.",
+  "confidence_reasons": [
+    "EV-4 shows the CAPTURE operation SUCCEEDED with ProviderCaptureID CAP-SCRIPT-0001, and EV-9/EV-13 show the provider applied and confirmed a COMPLETED capture of 1234 USD under the same provider_request_id, so the capture was financially effective and should have sealed the order as verified.",
+    "EV-2 shows the order still at Status=APPROVED with UpdatedAt 19:22:08.856107, which is later than the capture operation's UpdatedAt 19:22:08.845393 (EV-4) and the provider capture confirmation (EV-9); a post-capture write therefore moved the order back to APPROVED rather than the capture never having been recorded.",
+    "EV-1 independently records the same inconsistency (order_status APPROVED alongside claimed_capture_id/provider_capture_id CAP-SCRIPT-0001), matching the journal rather than contradicting it.",
+    "Among the supplied sources, only legacyApplyWebhookEvent writes StatusApproved from an inbound event and keys fulfillment by event id, which is exactly the F3 wiring described in the file comments; the canonical handler explicitly forbids state transitions from events."
+  ],
+  "uncertainties": [
+    "No merchant_webhook_events or merchant_fulfillment_effects rows are included in the evidence, so the specific ORDER.APPROVED delivery (and any duplicate fulfillment effect) is inferred from timestamp ordering and the F3 wiring, not directly observed.",
+    "fixture_wiring.go, which selects the legacy handler, is referenced in the sources but was not provided for inspection, so the exact wiring line is unconfirmed.",
+    "Evidence tier is F (scripted fixture), so this diagnosis describes the fixture's seeded defect and does not establish behavior of a real PayPal Sandbox or production integration.",
+    "The evidence cannot establish whether any downstream consumer already acted on the rewound APPROVED status or on a duplicated fulfillment effect."
+  ]
+}
