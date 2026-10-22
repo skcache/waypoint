@@ -55,8 +55,8 @@ const (
 	maxEventDetail   = 1200
 	maxIncidentJSON  = 16 << 10
 	maxObservation   = 24
-	maxSourceBytes   = 48 << 10
-	maxTotalSource   = 72 << 10
+	maxSourceBytes   = 24 << 10
+	maxTotalSource   = 36 << 10
 )
 
 // BuildEvidence assembles the model input from a fixture run and the durable
