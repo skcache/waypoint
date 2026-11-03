@@ -24,6 +24,8 @@ make demo
 `make demo` starts local PostgreSQL, applies migrations, replays the F3
 duplicate-webhook incident, builds and verifies the candidate, executes the
 seeded unsafe candidate, builds the workbench, and probes its navigation.
+The fixture generates fresh order/incident IDs and timestamps per run; the
+defect, patch, verdicts and I13 counterexample are deterministic.
 
 First run may take a few minutes: Docker pulls the Go sandbox image and prefetches
 the module cache. Later runs are faster.
