@@ -7,11 +7,14 @@
 package main
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"strings"
 	"time"
@@ -45,6 +48,7 @@ type runMeta struct {
 	BaseRevision     string      `json:"base_revision"`
 	RevisionSource   string      `json:"revision_source"`
 	EvidenceTier     string      `json:"evidence_tier"`
+	EvidenceLayout   string      `json:"evidence_layout"`
 	FinishedAt       string      `json:"finished_at"`
 	ModelRecordedAt  string      `json:"model_recorded_at,omitempty"`
 	Source           string      `json:"source"`
@@ -100,7 +104,86 @@ type observation struct {
 	OrderStatus       string `json:"order_status,omitempty"`
 	CaptureID         string `json:"capture_id,omitempty"`
 	CaptureStatus     string `json:"capture_status,omitempty"`
+	CaptureAmount     string `json:"capture_amount,omitempty"`
+	CaptureCurrency   string `json:"capture_currency,omitempty"`
+	Stale             bool   `json:"stale_read"`
+	Source            string `json:"source,omitempty"`
 	Tier              string `json:"tier,omitempty"`
+}
+
+// UnmarshalJSON accepts both the canonical lower-case observation schema used
+// by the early fixture bundle and the capitalised oracle.ProviderObs schema
+// written by the accepted attempt. The wire shape differs; the fields do not.
+func (o *observation) UnmarshalJSON(data []byte) error {
+	var keys map[string]json.RawMessage
+	if err := json.Unmarshal(data, &keys); err != nil {
+		return err
+	}
+	type canonical observation
+	if _, ok := keys["seq"]; ok {
+		var c canonical
+		if err := json.Unmarshal(data, &c); err != nil {
+			return err
+		}
+		*o = observation(c)
+		return nil
+	}
+	var p struct {
+		Seq               int    `json:"Seq"`
+		At                string `json:"At"`
+		Method            string `json:"Method"`
+		OrderRef          string `json:"OrderRef"`
+		RequestID         string `json:"RequestID"`
+		DurableBeforeCall bool   `json:"DurableBeforeCall"`
+		SentAmount        string `json:"SentAmount"`
+		SentCurrency      string `json:"SentCurrency"`
+		Applied           bool   `json:"Applied"`
+		Replayed          bool   `json:"Replayed"`
+		ResponseDropped   bool   `json:"ResponseDropped"`
+		DefiniteRefusal   bool   `json:"DefiniteRefusal"`
+		OrderStatus       string `json:"OrderStatus"`
+		CaptureID         string `json:"CaptureID"`
+		CaptureStatus     string `json:"CaptureStatus"`
+		CaptureAmount     string `json:"CaptureAmount"`
+		CaptureCurrency   string `json:"CaptureCurrency"`
+		Stale             bool   `json:"Stale"`
+		Source            string `json:"Source"`
+		Tier              string `json:"Tier"`
+	}
+	if err := json.Unmarshal(data, &p); err != nil {
+		return err
+	}
+	*o = observation{
+		Seq: p.Seq, At: p.At, Method: p.Method, OrderRef: p.OrderRef,
+		RequestID: p.RequestID, DurableBeforeCall: p.DurableBeforeCall,
+		SentAmount: p.SentAmount, SentCurrency: p.SentCurrency,
+		Applied: p.Applied, Replayed: p.Replayed, ResponseDropped: p.ResponseDropped,
+		DefiniteRefusal: p.DefiniteRefusal, OrderStatus: p.OrderStatus,
+		CaptureID: p.CaptureID, CaptureStatus: p.CaptureStatus,
+		CaptureAmount: p.CaptureAmount, CaptureCurrency: p.CaptureCurrency,
+		Stale: p.Stale, Source: p.Source, Tier: p.Tier,
+	}
+	return nil
+}
+
+type observationsFile struct {
+	Fault        string        `json:"fault"`
+	OrderID      string        `json:"order_id"`
+	Observations []observation `json:"observations"`
+}
+
+type oracleBundle struct {
+	PatchDigest string `json:"patch_digest"`
+	Verdict     string `json:"verdict"`
+}
+
+type attemptArtifacts struct {
+	Dir              string
+	DiffPath         string
+	ObservationsPath string
+	EvalPath         string
+	BundlePath       string
+	Layout           string
 }
 
 type diagnosis struct {
@@ -151,12 +234,14 @@ type invariant struct {
 }
 
 type eval struct {
-	Accepted    bool        `json:"accepted"`
-	Reason      string      `json:"reason"`
-	OrderStatus string      `json:"order_status"`
-	Verdict     string      `json:"verdict"`
-	EvaluatedAt string      `json:"evaluated_at,omitempty"`
-	Invariants  []invariant `json:"invariants"`
+	Accepted          bool        `json:"accepted"`
+	Reason            string      `json:"reason"`
+	OrderStatus       string      `json:"order_status"`
+	ClaimedCaptureID  string      `json:"claimed_capture_id,omitempty"`
+	ProviderCaptureID string      `json:"provider_capture_id,omitempty"`
+	Verdict           string      `json:"verdict"`
+	EvaluatedAt       string      `json:"evaluated_at,omitempty"`
+	Invariants        []invariant `json:"invariants"`
 }
 
 type unsafe struct {
@@ -229,6 +314,55 @@ func run(from, out, mode, source, sourceLabel, unsafePath, unsafeSource, unsafeL
 		return fmt.Errorf("unexpected evidence tier %q", rep.EvidenceTier)
 	}
 
+	att, err := acceptedAttempt(rep)
+	if err != nil {
+		return err
+	}
+	artifacts, err := resolveAttemptArtifacts(from, mode, att)
+	if err != nil {
+		return err
+	}
+
+	// All candidate evidence is read from the one accepted attempt. There is no
+	// root-level or attempt-1 fallback for a fresh run: that would let a later
+	// accepted patch be displayed with earlier verification evidence.
+	diffBytes, err := os.ReadFile(artifacts.DiffPath)
+	if err != nil {
+		return fmt.Errorf("read accepted patch diff: %w", err)
+	}
+	if strings.TrimSpace(string(diffBytes)) == "" {
+		return fmt.Errorf("accepted patch diff is empty")
+	}
+	if strings.TrimSpace(att.Diff) == "" {
+		return fmt.Errorf("accepted attempt %d has no recorded diff", att.Number)
+	}
+	if string(diffBytes) != att.Diff {
+		return fmt.Errorf("accepted patch diff does not match attempt %d report bytes", att.Number)
+	}
+	digest := diffDigest(diffBytes)
+	if att.PatchDigest == "" || att.PatchDigest != digest {
+		return fmt.Errorf("accepted attempt %d patch digest mismatch: report=%q computed=%q", att.Number, att.PatchDigest, digest)
+	}
+	if rep.PatchDigest == "" || rep.PatchDigest != digest {
+		return fmt.Errorf("report patch digest mismatch: report=%q computed=%q", rep.PatchDigest, digest)
+	}
+
+	obs, err := readObservations(artifacts.ObservationsPath)
+	if err != nil {
+		return err
+	}
+	oracle, err := readEval(artifacts.EvalPath)
+	if err != nil {
+		return err
+	}
+	bundle, err := readBundle(artifacts.BundlePath)
+	if err != nil {
+		return err
+	}
+	if err := validateAcceptedEvidence(rep, att, obs, oracle, bundle, digest); err != nil {
+		return err
+	}
+
 	var rawIncident incidentFile
 	if err := readJSON(filepath.Join(from, "incident.json"), &rawIncident); err != nil {
 		return err
@@ -238,30 +372,9 @@ func run(from, out, mode, source, sourceLabel, unsafePath, unsafeSource, unsafeL
 		OrderStatus: rawIncident.OrderStatus, EvidenceTier: rawIncident.EvidenceTier,
 		TotalMinor: rawIncident.TotalMinor, Currency: rawIncident.Currency,
 		CheckoutError: rawIncident.CheckoutError, CaptureError: rawIncident.CaptureError,
-	}
-	obsPath := filepath.Join(from, "observations.json")
-	var obsFile struct {
-		Observations []observation `json:"observations"`
-	}
-	if err := readJSON(obsPath, &obsFile); err == nil {
-		inc.Observations = obsFile.Observations
-	} else {
-		// Fresh cmd/repair artifacts write a bare observation array; the
-		// committed M4 evidence wraps it with order metadata.
-		var obsArray []observation
-		if err := readJSON(obsPath, &obsArray); err == nil {
-			inc.Observations = obsArray
-		}
+		Observations: obs.Observations,
 	}
 	pre, err := readEval(filepath.Join(from, "pre-repair-eval.json"))
-	if err != nil {
-		return err
-	}
-	oraclePath := filepath.Join(from, "eval.json")
-	if _, err := os.Stat(oraclePath); err != nil {
-		oraclePath = filepath.Join(from, "attempts", "attempt-1", "eval.json")
-	}
-	oracle, err := readEval(oraclePath)
 	if err != nil {
 		return err
 	}
@@ -272,20 +385,6 @@ func run(from, out, mode, source, sourceLabel, unsafePath, unsafeSource, unsafeL
 	fresh, err := readFreshGate(unsafeLog)
 	if err != nil {
 		return err
-	}
-	att := finalAttempt(rep)
-	if att == nil {
-		return fmt.Errorf("report has no candidate attempt")
-	}
-	diff := att.Diff
-	if data, err := os.ReadFile(filepath.Join(from, "patch.diff")); err == nil {
-		diff = string(data)
-	}
-	if strings.TrimSpace(diff) == "" {
-		return fmt.Errorf("no reviewable diff in the artifact directory")
-	}
-	if rep.PatchDigest == "" {
-		return fmt.Errorf("no patch digest in the report")
 	}
 
 	recordedAt := ""
@@ -345,27 +444,28 @@ func run(from, out, mode, source, sourceLabel, unsafePath, unsafeSource, unsafeL
 			ModelCalls: calls, PromptTokens: rep.PromptTokens, CompletionTokens: rep.CompletionTokens,
 			UsageSource: usageSource, RunID: rep.IncidentID, BaseRevision: rep.BaseRevision,
 			RevisionSource: rep.RevisionSource, EvidenceTier: rep.EvidenceTier,
-			FinishedAt: rep.FinishedAt.UTC().Format(time.RFC3339), ModelRecordedAt: recordedAt,
+			EvidenceLayout: artifacts.Layout,
+			FinishedAt:     rep.FinishedAt.UTC().Format(time.RFC3339), ModelRecordedAt: recordedAt,
 			Source: source, SourceLabel: sourceLabel,
 		},
 		Incident:  inc,
 		PreRepair: pre,
 		Diagnosis: diag(rep.Diagnosis),
 		Patch: patch{
-			Summary: patchSummary(rep), ChangedFiles: changedFiles(rep),
-			Digest: rep.PatchDigest, Diff: diff,
+			Summary: patchSummary(att), ChangedFiles: changedFiles(att),
+			Digest: digest, Diff: string(diffBytes),
 		},
 		Verification: verification{
 			Ladder: ladder{
-				DiagnosisProduced: rep.Final.DiagnosisProduced,
-				PatchGenerated:    rep.Final.PatchGenerated,
-				PatchApplied:      rep.Final.PatchApplied,
-				BuildPassed:       rep.Final.BuildPassed,
-				TestsPassed:       rep.Final.TestsPassed,
-				OracleVerdict:     rep.Final.OracleVerdict,
-				Accepted:          rep.Final.Accepted,
+				DiagnosisProduced: att.Ladder.DiagnosisProduced,
+				PatchGenerated:    att.Ladder.PatchGenerated,
+				PatchApplied:      att.Ladder.PatchApplied,
+				BuildPassed:       att.Ladder.BuildPassed,
+				TestsPassed:       att.Ladder.TestsPassed,
+				OracleVerdict:     att.Ladder.OracleVerdict,
+				Accepted:          att.Ladder.Accepted,
 			},
-			Steps: steps(rep), Sandbox: rep.Sandbox,
+			Steps: steps(att), Sandbox: rep.Sandbox,
 		},
 		Oracle: oracle,
 		Unsafe: unsafe{
@@ -375,7 +475,7 @@ func run(from, out, mode, source, sourceLabel, unsafePath, unsafeSource, unsafeL
 		},
 		HumanReview: humanReview{
 			Status: rep.Status,
-			CandidatePatchAppliedInDisposableWorktree: rep.Final.PatchApplied,
+			CandidatePatchAppliedInDisposableWorktree: att.Ladder.PatchApplied,
 			DeveloperTreeApplied:                      rep.Applied,
 			Deployed:                                  rep.Deployed,
 			HumanApprovalRequired:                     rep.HumanApprovalRequired,
@@ -392,10 +492,196 @@ func run(from, out, mode, source, sourceLabel, unsafePath, unsafeSource, unsafeL
 			return fmt.Errorf("export contains private data matching %s", re.String())
 		}
 	}
-	if err := os.MkdirAll(filepath.Dir(out), 0o755); err != nil {
+	return writeAtomic(out, raw)
+}
+
+func acceptedAttempt(rep *repair.Report) (*repair.Attempt, error) {
+	var accepted *repair.Attempt
+	for i := range rep.Attempts {
+		if rep.Attempts[i].Ladder.Accepted {
+			if accepted != nil {
+				return nil, fmt.Errorf("report contains multiple accepted attempts")
+			}
+			accepted = &rep.Attempts[i]
+		}
+	}
+	if accepted == nil {
+		return nil, fmt.Errorf("report contains no accepted attempt")
+	}
+	if accepted.Number <= 0 {
+		return nil, fmt.Errorf("accepted attempt has invalid number %d", accepted.Number)
+	}
+	if !reflect.DeepEqual(rep.Final, accepted.Ladder) {
+		return nil, fmt.Errorf("report final ladder does not match accepted attempt %d", accepted.Number)
+	}
+	if accepted.Patch == nil || strings.TrimSpace(accepted.Patch.Summary) == "" {
+		return nil, fmt.Errorf("accepted attempt %d has no patch summary", accepted.Number)
+	}
+	if len(accepted.Changed) == 0 {
+		return nil, fmt.Errorf("accepted attempt %d has no changed files", accepted.Number)
+	}
+	if strings.TrimSpace(accepted.Diff) == "" || accepted.PatchDigest == "" {
+		return nil, fmt.Errorf("accepted attempt %d has no reviewable diff or digest", accepted.Number)
+	}
+	if accepted.Eval == nil || !accepted.Eval.Accepted {
+		return nil, fmt.Errorf("accepted attempt %d has no accepted judge summary", accepted.Number)
+	}
+	if len(accepted.Steps) == 0 {
+		return nil, fmt.Errorf("accepted attempt %d has no verification steps", accepted.Number)
+	}
+	hasJudge := false
+	for _, s := range accepted.Steps {
+		if !s.Passed() {
+			return nil, fmt.Errorf("accepted attempt %d contains a failed verification step %q", accepted.Number, s.Step)
+		}
+		if s.Step == "judge" {
+			hasJudge = true
+		}
+	}
+	if !hasJudge {
+		return nil, fmt.Errorf("accepted attempt %d has no independent judge step", accepted.Number)
+	}
+	return accepted, nil
+}
+
+func resolveAttemptArtifacts(from, mode string, att *repair.Attempt) (attemptArtifacts, error) {
+	attemptDir := filepath.Join(from, "attempts", fmt.Sprintf("attempt-%d", att.Number))
+	if info, err := os.Stat(attemptDir); err == nil {
+		if !info.IsDir() {
+			return attemptArtifacts{}, fmt.Errorf("accepted attempt path is not a directory: %s", attemptDir)
+		}
+		return requireArtifacts(attemptDir, "attempt")
+	} else if !os.IsNotExist(err) {
+		return attemptArtifacts{}, fmt.Errorf("inspect accepted attempt: %w", err)
+	}
+	// The committed M4 recorded evidence predates the attempt directory layout.
+	// It is accepted only in the explicit recorded mode and only as a complete
+	// legacy root bundle; fresh replay/live runs never fall back to root files.
+	if mode == "recorded" {
+		return requireArtifacts(from, "legacy_recorded_root")
+	}
+	return attemptArtifacts{}, fmt.Errorf("accepted attempt %d evidence directory is missing; refusing root fallback", att.Number)
+}
+
+func requireArtifacts(dir, layout string) (attemptArtifacts, error) {
+	required := map[string]string{
+		"diff":         filepath.Join(dir, "patch.diff"),
+		"observations": filepath.Join(dir, "observations.json"),
+		"eval":         filepath.Join(dir, "eval.json"),
+		"bundle":       filepath.Join(dir, "bundle.json"),
+	}
+	for name, path := range required {
+		info, err := os.Stat(path)
+		if err != nil {
+			return attemptArtifacts{}, fmt.Errorf("%s evidence %s is missing: %w", layout, name, err)
+		}
+		if !info.Mode().IsRegular() {
+			return attemptArtifacts{}, fmt.Errorf("%s evidence %s is not a regular file", layout, name)
+		}
+	}
+	return attemptArtifacts{
+		Dir: dir, DiffPath: required["diff"], ObservationsPath: required["observations"],
+		EvalPath: required["eval"], BundlePath: required["bundle"], Layout: layout,
+	}, nil
+}
+
+func readObservations(path string) (observationsFile, error) {
+	var of observationsFile
+	if err := readJSON(path, &of); err != nil {
+		return of, err
+	}
+	if of.OrderID == "" {
+		return of, fmt.Errorf("observations file has no order id")
+	}
+	if len(of.Observations) == 0 {
+		return of, fmt.Errorf("observations file has no provider observations")
+	}
+	prev := 0
+	for i, o := range of.Observations {
+		if o.Seq <= 0 || (i > 0 && o.Seq <= prev) {
+			return of, fmt.Errorf("observations are not in increasing sequence order at item %d", i)
+		}
+		if o.At == "" || o.Method == "" || o.Tier == "" {
+			return of, fmt.Errorf("observation %d is missing timestamp, method or tier", o.Seq)
+		}
+		prev = o.Seq
+	}
+	return of, nil
+}
+
+func readBundle(path string) (oracleBundle, error) {
+	var b oracleBundle
+	if err := readJSON(path, &b); err != nil {
+		return b, err
+	}
+	if b.PatchDigest == "" || b.Verdict == "" {
+		return b, fmt.Errorf("judge bundle is missing patch digest or verdict")
+	}
+	return b, nil
+}
+
+func validateAcceptedEvidence(rep *repair.Report, att *repair.Attempt, obs observationsFile, oracle eval, bundle oracleBundle, digest string) error {
+	if !oracle.Accepted {
+		return fmt.Errorf("independent oracle did not accept the repaired candidate")
+	}
+	if oracle.Verdict == "" || oracle.Verdict != att.Ladder.OracleVerdict || oracle.Verdict != rep.Final.OracleVerdict {
+		return fmt.Errorf("oracle verdict does not match accepted attempt %d", att.Number)
+	}
+	if len(oracle.Invariants) == 0 {
+		return fmt.Errorf("independent oracle evidence contains no invariants")
+	}
+	if att.Eval != nil {
+		if !att.Eval.Accepted || oracle.Reason != att.Eval.Reason || oracle.OrderStatus != att.Eval.OrderStatus {
+			return fmt.Errorf("oracle result does not match accepted attempt %d summary", att.Number)
+		}
+		if oracle.ClaimedCaptureID != att.Eval.ClaimedCaptureID || oracle.ProviderCaptureID != att.Eval.ProviderCaptureID {
+			return fmt.Errorf("oracle capture identity does not match accepted attempt %d", att.Number)
+		}
+	}
+	if bundle.PatchDigest != digest || bundle.Verdict != oracle.Verdict {
+		return fmt.Errorf("judge bundle does not describe the accepted attempt %d", att.Number)
+	}
+	if obs.Fault != "" && rep.Fault != "" && obs.Fault != rep.Fault {
+		return fmt.Errorf("observations fault %q does not match report fault %q", obs.Fault, rep.Fault)
+	}
+	if rep.EvidenceTier != "" {
+		for _, o := range obs.Observations {
+			if o.Tier != rep.EvidenceTier {
+				return fmt.Errorf("observation %d tier %q does not match report tier %q", o.Seq, o.Tier, rep.EvidenceTier)
+			}
+		}
+	}
+	return nil
+}
+
+func diffDigest(data []byte) string {
+	sum := sha256.Sum256(data)
+	return "sha256:" + hex.EncodeToString(sum[:])
+}
+
+func writeAtomic(path string, data []byte) error {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
-	return os.WriteFile(out, raw, 0o644)
+	f, err := os.CreateTemp(dir, ".demo-export-*")
+	if err != nil {
+		return err
+	}
+	name := f.Name()
+	defer os.Remove(name)
+	if err := f.Chmod(0o644); err != nil {
+		_ = f.Close()
+		return err
+	}
+	if _, err := f.Write(data); err != nil {
+		_ = f.Close()
+		return err
+	}
+	if err := f.Close(); err != nil {
+		return err
+	}
+	return os.Rename(name, path)
 }
 
 func diag(d *repair.Diagnosis) *diagnosis {
@@ -409,36 +695,21 @@ func diag(d *repair.Diagnosis) *diagnosis {
 	}
 }
 
-func finalAttempt(rep *repair.Report) *repair.Attempt {
-	for i := len(rep.Attempts) - 1; i >= 0; i-- {
-		if rep.Attempts[i].Ladder.Accepted {
-			return &rep.Attempts[i]
-		}
-	}
-	if len(rep.Attempts) == 0 {
-		return nil
-	}
-	return &rep.Attempts[len(rep.Attempts)-1]
-}
-
-func patchSummary(rep *repair.Report) string {
-	att := finalAttempt(rep)
+func patchSummary(att *repair.Attempt) string {
 	if att == nil || att.Patch == nil {
 		return ""
 	}
 	return att.Patch.Summary
 }
 
-func changedFiles(rep *repair.Report) []string {
-	att := finalAttempt(rep)
+func changedFiles(att *repair.Attempt) []string {
 	if att == nil {
 		return nil
 	}
 	return att.Changed
 }
 
-func steps(rep *repair.Report) []step {
-	att := finalAttempt(rep)
+func steps(att *repair.Attempt) []step {
 	if att == nil {
 		return nil
 	}
@@ -479,10 +750,12 @@ func readReport(path string) (*repair.Report, error) {
 }
 
 type evalFile struct {
-	Accepted    bool   `json:"accepted"`
-	Reason      string `json:"reason"`
-	OrderStatus string `json:"order_status"`
-	Oracle      struct {
+	Accepted          bool   `json:"accepted"`
+	Reason            string `json:"reason"`
+	OrderStatus       string `json:"order_status"`
+	ClaimedCaptureID  string `json:"claimed_capture_id"`
+	ProviderCaptureID string `json:"provider_capture_id"`
+	Oracle            struct {
 		Verdict     string      `json:"verdict"`
 		EvaluatedAt string      `json:"evaluated_at"`
 		Invariants  []invariant `json:"invariants"`
@@ -496,6 +769,7 @@ func readEval(path string) (eval, error) {
 	}
 	return eval{
 		Accepted: ef.Accepted, Reason: ef.Reason, OrderStatus: ef.OrderStatus,
+		ClaimedCaptureID: ef.ClaimedCaptureID, ProviderCaptureID: ef.ProviderCaptureID,
 		Verdict: ef.Oracle.Verdict, EvaluatedAt: ef.Oracle.EvaluatedAt,
 		Invariants: ef.Oracle.Invariants,
 	}, nil
