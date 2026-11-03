@@ -20,7 +20,7 @@ const markColor = (s?: string) => (s === "PASS" ? "text-ok" : s === "FAIL" ? "te
 function Section({ title, note, children, testId }: { title: string; note?: string; children: React.ReactNode; testId?: string }) {
   return (
     <section className="border-t border-line py-8" data-testid={testId}>
-      <h3 className="text-[19px] font-semibold tracking-[-0.02em]">{title}</h3>
+      <h3 className="text-[20px] font-medium">{title}</h3>
       {note ? <p className="mt-2 max-w-[56ch] text-[15px] leading-[1.55] text-muted">{note}</p> : null}
       <div className="mt-5">{children}</div>
     </section>
@@ -54,15 +54,15 @@ export function EvidenceDrawer({ doc, source, open, onClose }: { doc: DemoExport
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-50 flex justify-end" data-testid="evidence-drawer">
-      <button type="button" aria-label="Close the evidence" tabIndex={-1} onClick={onClose} className="absolute inset-0 bg-black/55 backdrop-blur-[2px]" />
-      <aside role="dialog" aria-modal="true" aria-label="Evidence" className="enter relative flex h-full w-full max-w-[620px] flex-col bg-background shadow-2xl">
+      <button type="button" aria-label="Close evidence" tabIndex={-1} onClick={onClose} className="absolute inset-0 bg-black/60" />
+      <aside role="dialog" aria-modal="true" aria-label="Evidence" className="enter relative flex h-full w-full max-w-[620px] flex-col border-l border-line bg-background">
         <header className="flex shrink-0 items-center justify-between border-b border-line px-6 py-4 sm:px-8">
           <div>
-            <h2 className="text-[19px] font-semibold tracking-[-0.02em]">Evidence</h2>
+            <h2 className="text-[20px] font-medium">Evidence</h2>
             <p className="text-[14px] text-faint">{sourceLabel(doc, source)} · tier {doc.run.evidence_tier}</p>
           </div>
-          <button ref={closeRef} type="button" onClick={onClose} aria-label="Close" className="grid size-11 place-items-center rounded-full text-muted transition-colors hover:bg-sunk hover:text-ink">
-            <X size={20} aria-hidden />
+          <button ref={closeRef} type="button" onClick={onClose} aria-label="Close" className="grid size-11 place-items-center rounded-[10px] text-muted transition-colors hover:bg-sunk hover:text-ink">
+            <X size={18} aria-hidden />
           </button>
         </header>
         <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-16 sm:px-8">
@@ -75,10 +75,10 @@ export function EvidenceDrawer({ doc, source, open, onClose }: { doc: DemoExport
             </dl>
           </Section>
 
-          <Section title="Rule by rule" note="The checker's verdict on each rule, for all three versions of the code." testId="workpaper">
-            <div className="mb-4 flex rounded-full border border-line-strong p-0.5" role="group" aria-label="Row filter">
+          <Section title="Rule by rule" note="The checker result for each rule, for 3 versions of the code." testId="workpaper">
+            <div className="mb-4 flex rounded-[12px] border border-line-strong p-1" role="group" aria-label="Row filter">
               {[{ v: true, t: `Differences (${differing.length})` }, { v: false, t: `All ${rows.length}` }].map((o) => (
-                <button key={String(o.v)} type="button" aria-pressed={only === o.v} onClick={() => setOnly(o.v)} className="min-h-11 flex-1 rounded-full px-4 text-[15px] font-medium aria-pressed:bg-accent aria-pressed:text-on-accent">
+                <button key={String(o.v)} type="button" aria-pressed={only === o.v} onClick={() => setOnly(o.v)} className="min-h-11 flex-1 rounded-[8px] px-4 text-[15px] font-medium transition-colors aria-pressed:bg-accent aria-pressed:text-on-accent">
                   {o.t}
                 </button>
               ))}
@@ -100,7 +100,7 @@ export function EvidenceDrawer({ doc, source, open, onClose }: { doc: DemoExport
                       className="grid w-full grid-cols-[minmax(0,1fr)_repeat(3,3.4rem)] items-center gap-1 py-3 text-left transition-colors hover:bg-surface sm:grid-cols-[minmax(0,1fr)_repeat(3,4.6rem)]"
                     >
                       <span className="flex min-w-0 items-baseline gap-3 pr-1">
-                        <span className="w-9 shrink-0 text-[17px] font-semibold">{row.id}</span>
+                        <span className="w-9 shrink-0 text-[16px] font-medium">{row.id}</span>
                         <span className="min-w-0 break-words text-[14px] leading-snug text-muted">{(row.repair ?? row.before ?? row.unsafe)?.title ?? row.summary}</span>
                       </span>
                       {COLS.map((c) => (
@@ -115,8 +115,8 @@ export function EvidenceDrawer({ doc, source, open, onClose }: { doc: DemoExport
                           const inv = row[c.key];
                           const cx = inv?.counterexample;
                           return (
-                            <div key={c.key} className="rounded-2xl border border-line p-4">
-                              <p className="flex items-center justify-between text-[15px] font-semibold">
+                            <div key={c.key} className="rounded-[12px] border border-line p-4">
+                              <p className="flex items-center justify-between text-[15px] font-medium">
                                 {c.label}
                                 <span className={markColor(inv?.status)}>{inv?.status === "PASS" ? "Held" : inv?.status === "FAIL" ? "Failed" : "Not applicable"}</span>
                               </p>
@@ -130,7 +130,7 @@ export function EvidenceDrawer({ doc, source, open, onClose }: { doc: DemoExport
                                   {cx.event_id ? <Fact label="Backing event"><span className="mono">{cx.event_id}</span></Fact> : null}
                                 </dl>
                               ) : (
-                                <p className="mt-2 text-[14px] leading-[1.5] text-muted">{inv?.status === "PASS" ? "No counterexample: the rule held." : inv?.status === "FAIL" ? "No counterexample fields exported." : "This rule does not apply to the scenario that ran."}</p>
+                                <p className="mt-2 text-[14px] leading-[1.5] text-muted">{inv?.status === "PASS" ? "No counterexample. The rule held." : inv?.status === "FAIL" ? "No counterexample data." : "This rule does not apply to this scenario."}</p>
                               )}
                             </div>
                           );
@@ -145,7 +145,7 @@ export function EvidenceDrawer({ doc, source, open, onClose }: { doc: DemoExport
 
           <Section
             title="Provider calls"
-            note={`These ${nodes.length} calls belong to the verification order${ids.verification ? ` ${shortId(ids.verification, 8, 4)}` : ""}, not the incident order. The gaps between them are the recorded ones.`}
+            note={`These ${nodes.length} calls belong to the verification order${ids.verification ? ` ${shortId(ids.verification, 8, 4)}` : ""}. They do not belong to the incident order. The gaps are the recorded gaps.`}
             testId="provider-calls"
           >
             <ol className="flex flex-wrap gap-2" aria-label="Provider calls">
@@ -156,10 +156,10 @@ export function EvidenceDrawer({ doc, source, open, onClose }: { doc: DemoExport
                     data-testid="observation-row"
                     aria-pressed={call === i}
                     onClick={() => setCall(i)}
-                    className="min-h-11 rounded-full border border-line-strong px-4 text-left text-[14px] transition-colors aria-pressed:border-accent aria-pressed:bg-accent aria-pressed:text-on-accent"
+                    className="min-h-11 rounded-[10px] border border-line-strong px-4 text-left text-[14px] transition-colors aria-pressed:border-accent aria-pressed:bg-accent aria-pressed:text-on-accent"
                   >
-                    <span className="font-semibold">{n.obs.seq}</span> <span className="mono">{n.obs.method}</span>
-                    <span className="ml-1.5 opacity-70">{i === 0 ? "start" : `+${formatMicros(n.gapUs)}`}</span>
+                    <span className="font-medium">{n.obs.seq}</span> <span className="mono">{n.obs.method}</span>
+                    <span className="ml-2 opacity-70">{i === 0 ? "start" : `+${formatMicros(n.gapUs)}`}</span>
                   </button>
                 </li>
               ))}
@@ -180,7 +180,7 @@ export function EvidenceDrawer({ doc, source, open, onClose }: { doc: DemoExport
             ) : null}
           </Section>
 
-          <Section title="Three orders, kept apart" note="The incident, the verification run and the unsafe run each used a different order, so one never explains another.">
+          <Section title="Three orders" note="The incident, the verification run, and the unsafe run use 3 different orders.">
             <div className="flex flex-col gap-3 text-[15px] text-faint">
               <span className="flex items-center justify-between gap-3">Incident <CopyChip value={ids.incident} label={shortId(ids.incident, 8, 4)} /></span>
               {ids.verification ? <span className="flex items-center justify-between gap-3">Verification <CopyChip value={ids.verification} label={shortId(ids.verification, 8, 4)} /></span> : null}
@@ -189,7 +189,7 @@ export function EvidenceDrawer({ doc, source, open, onClose }: { doc: DemoExport
           </Section>
 
           {parts.length ? (
-            <Section title="Isolation" note="What the candidate ran under in the sandbox.">
+            <Section title="Isolation" note="The sandbox settings for the candidate. The command output is not in the public export.">
               <ul>{parts.map((p) => <li key={p} className="mono py-0.5 text-[14px] text-muted">{p}</li>)}</ul>
             </Section>
           ) : null}

@@ -2,9 +2,9 @@ import { Showcase } from "@/components/waypoint/experience";
 import { loadRecordedDemo } from "@/lib/recorded";
 
 export const metadata = {
-  title: { absolute: "Waypoint - AI payment-bug repair, verified by an independent checker" },
+  title: { absolute: "Waypoint - AI repair of payment bugs with an independent check" },
   description:
-    "A recorded Waypoint run: an AI diagnoses a duplicate-fulfillment bug in a PayPal integration and writes a patch, then a separate checker tests it against 14 money rules, accepts the repair and rejects a seeded unsafe patch.",
+    "A recorded Waypoint run. An AI finds a duplicate fulfillment bug in a PayPal integration and writes a patch. A separate checker tests the patch against 14 rules. It accepts the repair and rejects an unsafe patch.",
 };
 
 export default async function Page() {

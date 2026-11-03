@@ -24,7 +24,7 @@ export function counterexampleFacts(cx: RuleTile["counterexample"]): string[] {
 
 /** Concentric contour lines inside a failed tile: inset shadows, thin lines over gaps of the tile's own colour. */
 function rings(count: number, gap: number): string {
-  const line = "color-mix(in oklch, var(--tile-fail-ink) 38%, var(--tile-fail))";
+  const line = "color-mix(in oklch, black 34%, var(--tile-fail))";
   const parts: string[] = [];
   for (let k = 0; k < count; k++) {
     parts.push(`inset 0 0 0 ${k * gap + 1}px ${line}`);
@@ -34,7 +34,7 @@ function rings(count: number, gap: number): string {
   return parts.join(", ");
 }
 
-const RINGS: Record<Variant, [number, number]> = { big: [3, 9], wide: [2, 8], mid: [1, 8], small: [0, 0] };
+const RINGS: Record<Variant, [number, number]> = { big: [3, 8], wide: [2, 8], mid: [1, 8], small: [0, 0] };
 const PAD: Record<Variant, string> = { big: "p-9", wide: "p-7", mid: "p-4", small: "p-3" };
 
 function tileStyle(status: string, lit: boolean, variant: Variant): CSSProperties {
@@ -104,11 +104,11 @@ export function Board({
         const facts = variant === "big" || variant === "wide" ? counterexampleFacts(t.counterexample) : [];
         const word = stateWord(t.status);
         // Lines of title that fit once the id, the state word and the padding are paid for.
-        const titleLines = variant === "mid" ? Math.min(5, Math.floor((h - 96) / 17)) : 0;
+        const titleLines = variant === "mid" ? Math.min(5, Math.floor((h - 96) / 16)) : 0;
         return (
           <div
             key={t.id}
-            className="absolute p-1 transition-[left,top,width,height] duration-700 ease-[cubic-bezier(0.2,0.8,0.2,1)] sm:p-[5px]"
+            className="absolute p-1 transition-[left,top,width,height] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]"
             style={{ left: `${r.x * 100}%`, top: `${r.y * 100}%`, width: `${r.w * 100}%`, height: `${r.h * 100}%` }}
           >
             <button
@@ -120,7 +120,7 @@ export function Board({
               aria-label={`${t.id}, ${t.title}: ${word}`}
               onClick={() => onSelect(selected === t.id ? null : t.id)}
               style={tileStyle(t.status, lit, variant)}
-              className={`flex size-full min-w-0 overflow-hidden rounded-[18px] text-left transition-[filter,outline-color] duration-300 hover:brightness-110 sm:rounded-[24px] ${PAD[variant]} ${
+              className={`flex size-full min-w-0 overflow-hidden rounded-[16px] text-left transition-[filter,outline-color] duration-200 hover:brightness-110 ${PAD[variant]} ${
                 variant === "wide" ? "flex-row items-center gap-6" : "flex-col justify-between"
               } ${selected === t.id ? "outline outline-2 outline-offset-2 outline-accent" : "outline outline-2 outline-offset-2 outline-transparent"}`}
             >
@@ -128,31 +128,31 @@ export function Board({
                 <>
                   <span className="numeral shrink-0 text-[56px]">{t.id}</span>
                   <span className="min-w-0 flex-1">
-                    <span className="block text-[13px] font-semibold">{word}</span>
-                    <span className="block text-[19px] font-medium leading-[1.2]" style={clamp(2)}>{t.title}</span>
+                    <span className="block text-[13px] font-medium">{word}</span>
+                    <span className="block text-[20px] font-medium leading-[1.2]" style={clamp(2)}>{t.title}</span>
                     {facts.length ? <span className="mt-1 block text-[14px] leading-snug" style={clamp(2)}>{facts.join(" · ")}</span> : null}
                   </span>
                 </>
               ) : (
                 <>
                   <span className="flex items-baseline justify-between gap-2">
-                    <span className={`numeral ${variant === "big" ? "text-[60px]" : variant === "mid" ? "text-[30px]" : "text-[22px]"}`}>{t.id}</span>
-                    {variant === "big" ? <span className="text-[15px] font-semibold">{word}</span> : null}
+                    <span className={`numeral ${variant === "big" ? "text-[56px]" : variant === "mid" ? "text-[28px]" : "text-[20px]"}`}>{t.id}</span>
+                    {variant === "big" ? <span className="text-[14px] font-medium">{word}</span> : null}
                   </span>
                   {variant === "big" ? (
-                    <span className="block text-[22px] font-medium leading-[1.22] [overflow-wrap:anywhere]">{t.title}</span>
+                    <span className="block text-[20px] font-medium leading-[1.25] [overflow-wrap:anywhere]">{t.title}</span>
                   ) : variant === "mid" && titleLines >= 2 ? (
-                    <span className="block min-h-0 text-[13.5px] font-medium leading-[1.25]" style={clamp(titleLines)}>{t.title}</span>
+                    <span className="block min-h-0 text-[13px] font-medium leading-[1.25]" style={clamp(titleLines)}>{t.title}</span>
                   ) : null}
                   <span className="block">
                     {facts.length ? (
-                      <span className="mb-2 block space-y-0.5 text-[15px] leading-snug">
+                      <span className="mb-2 block space-y-1 text-[14px] leading-snug">
                         {facts.map((f) => (
                           <span key={f} className="block">{f}</span>
                         ))}
                       </span>
                     ) : null}
-                    {variant !== "big" ? <span className={`block font-semibold ${variant === "mid" ? "text-[13px]" : "text-[12.5px] leading-tight"}`}>{variant === "small" && t.status === "NOT_APPLICABLE" ? "N/A" : word}</span> : null}
+                    {variant !== "big" ? <span className="block text-[13px] font-medium leading-tight">{variant === "small" && t.status === "NOT_APPLICABLE" ? "N/A" : word}</span> : null}
                   </span>
                 </>
               )}

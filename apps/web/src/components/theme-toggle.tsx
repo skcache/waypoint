@@ -32,9 +32,9 @@ export function ThemeToggle({ className = "" }: { className?: string }) {
       }}
       aria-label={`Switch to ${next} mode`}
       title={`Switch to ${next} mode`}
-      className={`inline-flex size-11 items-center justify-center rounded-full text-muted transition-colors hover:text-ink ${className}`}
+      className={`inline-flex size-11 items-center justify-center rounded-[10px] text-muted transition-colors hover:text-ink ${className}`}
     >
-      {theme === "dark" ? <Sun size={19} weight="regular" aria-hidden /> : <Moon size={19} weight="regular" aria-hidden />}
+      {theme === "dark" ? <Sun size={18} aria-hidden /> : <Moon size={18} aria-hidden />}
     </button>
   );
 }

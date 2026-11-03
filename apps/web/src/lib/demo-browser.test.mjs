@@ -66,8 +66,8 @@ try {
 
   // STEP 1, the incident: one lead number, one dominant board, the product in one sentence.
   const body = (await page.evaluate(() => document.body.textContent)).toLowerCase();
-  assert.ok(body.includes("recorded run") || body.includes("local run"), "the page says what kind of run it shows");
-  assert.ok(body.includes("separate checker tests every repair"), "the product is explained in one sentence");
+  assert.ok(body.includes("run is recorded") || body.includes("run is local"), "the page says what kind of run it shows");
+  assert.ok(body.includes("separate checker tests each repair"), "the product is explained in one sentence");
   assert.ok((await text(page, '[data-testid="case-label"]')).includes("Duplicate fulfillment"), "the case is named");
   assert.equal(await text(page, '[data-testid="hero-value"]'), "2", "the lead number is the incident's fulfillment count");
   assert.equal(await text(page, '[data-testid="fact-fulfilled"]'), "2");
@@ -82,19 +82,19 @@ try {
   await page.waitForFunction(() => document.querySelector('[data-testid="inspector"]')?.textContent.includes("I13"));
   const insp = await text(page, '[data-testid="inspector"]');
   assert.ok(insp.includes("2 fulfillment effects") && insp.includes("evt-cap-1"), "the inspector shows the oracle's counterexample");
-  assert.ok((await text(page, '[data-testid="provenance"]')).includes("pre-repair"), "provenance is stated");
+  assert.ok((await text(page, '[data-testid="provenance"]')).includes("before the repair"), "provenance is stated");
 
   // STEP 2, the AI repair: the exact patch and the sandbox it ran in.
   await step(page, 2);
   assert.equal(await text(page, '[data-testid="hero-value"]'), `+${run.patch.diff.split("\n").filter((l) => l.startsWith("+") && !l.startsWith("+++")).length}`);
   const fix = (await page.$eval('[aria-label="Walkthrough"]', (el) => el.textContent)).toLowerCase();
-  assert.ok(fix.includes(run.run.kind === "replay" ? "replayed recorded model output" : "recorded hosted-model reply"), "model provenance is accurate");
+  assert.ok(fix.includes(run.run.kind === "replay" ? "replay of a recorded model reply" : "recorded reply from a hosted model"), "model provenance is accurate");
   assert.ok(fix.includes("no merchant_webhook_events") && fix.includes("not directly observed"), "the model's uncertainty is visible");
   assert.ok((await page.$eval('[data-testid="demo-diff"]', (el) => el.textContent)).includes("'FULFILL'"), "the generated diff is visible");
-  const noteBtn = await page.$('[data-testid="demo-diff"] [aria-label="Reading the patch"] button');
+  const noteBtn = await page.$('[data-testid="demo-diff"] [aria-label="Notes on the patch"] button');
   if (noteBtn) {
     await noteBtn.click();
-    await page.waitForFunction(() => document.querySelector('[aria-label="Reading the patch"] [aria-live]')?.textContent.length > 20);
+    await page.waitForFunction(() => document.querySelector('[aria-label="Notes on the patch"] [aria-live]')?.textContent.length > 20);
   }
   const steps = run.verification.steps;
   const widths = await page.$$eval('[data-testid="sandbox"] [role="group"] button', (els) => els.map((e) => ({ n: e.getAttribute("data-step"), w: e.getBoundingClientRect().width })));
@@ -112,7 +112,7 @@ try {
   assert.equal(heldBg.size, 1, "all held rules share one tone");
   const repairFacts = { status: await text(page, '[data-testid="fact-status"]'), fulfilled: await text(page, '[data-testid="fact-fulfilled"]') };
   assert.equal(repairFacts.fulfilled, "1");
-  assert.ok((await text(page, '[data-testid="provenance"]')).toLowerCase().includes("not a claim about live paypal"), "verification scope is explicit");
+  assert.ok((await text(page, '[data-testid="provenance"]')).toLowerCase().includes("no claim about live paypal"), "verification scope is explicit");
 
   await click(page, '[data-testid="candidate-unsafe"]');
   await page.waitForFunction(() => document.querySelector('[data-testid="candidate-facts"]')?.getAttribute("data-candidate") === "unsafe");
@@ -126,22 +126,22 @@ try {
   if (run.unsafe.order_status) {
     assert.equal(unsafeStatus, repairFacts.status, "at the order level the unsafe patch looks exactly like the AI repair");
     const note = await text(page, '[data-testid="surface-note"]');
-    assert.ok(note.includes("looks the same") && note.includes("2 fulfillments"), "the page says the ledger is what tells them apart");
+    assert.ok(note.includes("The ledger is not the same") && note.includes("2 fulfillments"), "the page says the ledger is what tells them apart");
   } else {
     assert.equal(unsafeStatus, "not recorded", "an old export's missing unsafe status is shown as not recorded");
   }
   const prov = await text(page, '[data-testid="provenance"]');
-  assert.ok(prov.includes("Historical independent-oracle evidence"), "historical provenance is explicit");
+  assert.ok(prov.includes("Historical oracle evidence"), "historical provenance is explicit");
   if (run.unsafe.fresh_trusted_gate.executed) assert.ok(prov.includes("Fresh trusted gate"));
-  else assert.ok(prov.includes("not run for this recorded artifact"), "a missing fresh gate is explicit");
+  else assert.ok(prov.includes("did not run for this record"), "a missing fresh gate is explicit");
   await click(page, '[data-tile="I13"]');
   await page.waitForFunction(() => document.querySelector('[data-testid="inspector"]')?.textContent.includes("I13"));
 
   // STEP 4, human review.
   await step(page, 4);
   const human = await text(page, '[data-testid="demo-human"]');
-  assert.ok(human.includes("No human has approved this patch"), "approval state is explicit");
-  assert.ok(/cannot merge, push, deploy, capture, refund or retry/.test(human), "the review-boundary copy is visible");
+  assert.ok(human.includes("No person approved this patch"), "approval state is explicit");
+  assert.ok(/cannot merge, push, deploy, capture, refund, or retry/.test(human), "the review-boundary copy is visible");
   assert.ok(human.includes("Accepted for human review") && human.includes("disposable worktree"), "the review facts come from the export");
   assert.equal(await text(page, '[data-testid="hero-value"]'), "1", "one patch is waiting for review");
 
@@ -150,7 +150,7 @@ try {
     await step(page, n);
     const box = await (await page.$('[data-testid="human-gate"]')).boundingBox();
     assert.ok(box && box.y >= 0 && box.y + box.height <= 900, `the review boundary is on screen at step ${n}`);
-    assert.ok((await text(page, '[data-testid="human-gate"]')).toLowerCase().includes("no human approval"), "the boundary states there is no approval");
+    assert.ok((await text(page, '[data-testid="human-gate"]')).toLowerCase().includes("no person approved"), "the boundary states there is no approval");
   }
 
   // Evidence drawer: rule by rule, provider calls, three orders.

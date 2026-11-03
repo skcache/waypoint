@@ -26,7 +26,7 @@ export function Tick({ status, size = 18 }: { status?: string; size?: number }) 
 
 export function Fact({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="grid grid-cols-[minmax(0,8.5rem)_1fr] gap-x-4 gap-y-0.5 border-b border-line py-2.5">
+    <div className="grid grid-cols-[minmax(0,8.5rem)_1fr] gap-x-4 gap-y-0.5 border-b border-line py-3">
       <dt className="text-sm text-faint">{label}</dt>
       <dd className="min-w-0 break-words text-[15px] text-ink">{children}</dd>
     </div>
@@ -53,7 +53,7 @@ export function CopyChip({ value, label }: { value: string; label?: string }) {
           .catch(() => setCopied(false));
       }}
       aria-label={copied ? "Copied" : `Copy ${label ?? value}`}
-      className="mono inline-flex min-h-9 max-w-full items-center gap-1.5 rounded bg-sunk px-2.5 text-[13px] text-muted transition-colors hover:text-ink"
+      className="mono inline-flex min-h-9 max-w-full items-center gap-2 rounded bg-sunk px-3 text-[13px] text-muted transition-colors hover:text-ink"
     >
       <span className="truncate">{label ?? value}</span>
       {copied ? <Check size={13} weight="bold" aria-hidden /> : <Copy size={13} weight="bold" aria-hidden />}

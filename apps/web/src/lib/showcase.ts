@@ -51,22 +51,22 @@ export function modelLabel(doc: DemoExport): string {
 
 export function modelNote(doc: DemoExport): string {
   if (doc.run.kind === "replay") {
-    return "Replayed recorded model output. No hosted model is called for this page.";
+    return "This is a replay of a recorded model reply. No model call runs for this page.";
   }
   if (doc.run.kind === "live") {
-    return "Hosted-model output captured for this run. No model call is running for this page.";
+    return "This is the model output from this run. No model call runs for this page.";
   }
-  return "Recorded hosted-model reply. No model call is running for this page.";
+  return "This is a recorded reply from a hosted model. No model call runs for this page.";
 }
 
 export function tierNote(doc: DemoExport): string {
   if (doc.run.evidence_tier === "F") {
-    return "Tier F: deterministic fixture evidence. No live PayPal call.";
+    return "Tier F: fixture evidence. No live PayPal call.";
   }
   if (doc.run.evidence_tier === "R") {
-    return "Tier R: real provider evidence recorded by this run.";
+    return "Tier R: real provider evidence from this run.";
   }
-  return `Tier ${doc.run.evidence_tier || "unknown"}: evidence tier is recorded per observation.`;
+  return `Tier ${doc.run.evidence_tier || "unknown"}: the tier is in each observation.`;
 }
 
 export function observationTierLabel(doc: DemoExport): string {

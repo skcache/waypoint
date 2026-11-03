@@ -84,7 +84,7 @@ export function CodeViewer({
   }
 
   return (
-    <div className={`paper overflow-hidden rounded-xl border border-line bg-background shadow-[0_24px_60px_-20px_rgba(0,0,0,0.6)] ${fill ? "flex h-full min-h-0 flex-col" : ""}`} data-testid={testId}>
+    <div className={`paper overflow-hidden rounded-xl border border-line bg-background ${fill ? "flex h-full min-h-0 flex-col" : ""}`} data-testid={testId}>
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-line px-4 py-3">
         <div className="min-w-0">
           {heading ? <p className="mb-0.5 text-[15px] font-medium text-faint">{heading}</p> : null}
@@ -99,7 +99,7 @@ export function CodeViewer({
             type="button"
             aria-pressed={wrap}
             onClick={() => setWrap((v) => !v)}
-            className="inline-flex min-h-11 items-center gap-1.5 rounded px-3 py-1 text-[14px] text-muted max-sm:hidden transition-colors hover:bg-sunk hover:text-ink"
+            className="inline-flex min-h-11 items-center gap-2 rounded px-3 py-1 text-[14px] text-muted max-sm:hidden transition-colors hover:bg-sunk hover:text-ink"
           >
             {wrap ? <ArrowsOutLineHorizontal size={14} aria-hidden /> : <ArrowsInLineHorizontal size={14} aria-hidden />}
             {wrap ? "Unwrap" : "Wrap"}
@@ -108,14 +108,14 @@ export function CodeViewer({
       </div>
 
       {placed.length ? (
-        <ol className="flex flex-wrap items-center gap-2 border-b border-line bg-surface px-4 py-3" aria-label="Reading the patch">
+        <ol className="flex flex-wrap items-center gap-2 border-b border-line bg-surface px-4 py-3" aria-label="Notes on the patch">
           {placed.map((n) => (
             <li key={n.index}>
               <button
                 type="button"
                 onClick={() => jump(n.line, n.index)}
                 aria-pressed={activeNote === n.index}
-                className={`grid h-11 w-11 place-items-center rounded border text-[13px] font-semibold transition-colors ${
+                className={`grid h-11 w-11 place-items-center rounded border text-[13px] font-medium transition-colors ${
                   activeNote === n.index ? "border-accent bg-accent text-on-accent" : "border-line-strong text-muted hover:border-accent hover:text-ink"
                 }`}
                 aria-label={`Note ${n.index + 1}: ${n.note}`}
@@ -127,7 +127,7 @@ export function CodeViewer({
           <li className="ml-1 flex min-h-9 min-w-0 flex-1 basis-60 items-center text-[15px] text-muted" aria-live="polite">
             {activeNote !== null && placed.find((n) => n.index === activeNote)
               ? placed.find((n) => n.index === activeNote)?.note
-              : "Select a number to jump to the line and read what it does."}
+              : "Select a number to see the line."}
           </li>
         </ol>
       ) : null}
@@ -139,7 +139,7 @@ export function CodeViewer({
             if (line.kind === "hunk") {
               const hunk = hunks[line.hunk];
               return (
-                <div key={i} className="flex items-center gap-3 whitespace-nowrap border-y border-line bg-sunk px-4 py-1.5 text-[13px] text-faint">
+                <div key={i} className="flex items-center gap-3 whitespace-nowrap border-y border-line bg-sunk px-4 py-2 text-[13px] text-faint">
                   <span className="shrink-0 text-accent">{line.text.replace(/ @@.*$/, " @@")}</span>
                   {hunk?.context ? <span className="truncate text-muted">{hunk.context}</span> : null}
                 </div>
@@ -168,7 +168,7 @@ export function CodeViewer({
                       type="button"
                       onClick={() => jump(i, note.index)}
                       aria-label={`Note ${note.index + 1}`}
-                      className="absolute right-2 top-0.5 grid h-7 w-7 place-items-center rounded border border-accent bg-background text-[13px] font-semibold text-accent"
+                      className="absolute right-2 top-0.5 grid h-7 w-7 place-items-center rounded border border-accent bg-background text-[13px] font-medium text-accent"
                     >
                       {note.index + 1}
                     </button>

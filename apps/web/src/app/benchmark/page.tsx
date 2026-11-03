@@ -1,18 +1,12 @@
 import Link from "next/link";
-import {
-  data,
-  fmtTokens,
-  statusLabel,
-  statusTone,
-  usd,
-} from "@/lib/m5";
+import { data, fmtTokens, statusLabel, statusTone, usd } from "@/lib/m5";
 
 export const metadata = { title: "Benchmark" };
 
 const conditionLabel: Record<string, string> = {
-  B0: "B0 · deterministic rules",
-  B1: "B1 · single-shot AI",
-  B2: "B2 · oracle-guided AI",
+  B0: "B0 · Rules only",
+  B1: "B1 · One AI attempt",
+  B2: "B2 · AI with checker feedback",
 };
 
 export default function Page() {
@@ -23,100 +17,77 @@ export default function Page() {
     const accepted = rows.filter((c) => c.runs.B2?.accepted).length;
     return { family, total: rows.length, accepted };
   });
+  const describe = (id: string, maxAttempts: number) =>
+    id === "B0"
+      ? "Fixed rules read the incident data. They find a cause. They do not write a patch."
+      : id === "B1"
+        ? "One diagnosis and one patch. No checker feedback."
+        : `The same first attempt. Then a retry with feedback from the checker. Maximum ${maxAttempts} attempts.`;
 
   return (
-    <div className="space-y-8">
-      <header className="border-b border-line pb-6">
-        <h1 className="mt-2 text-2xl font-semibold tracking-tight">Benchmark</h1>
-        <p className="mt-2 max-w-3xl text-sm leading-6 text-muted">
-          The same six held-out incidents and the same initial evidence, compared across a
-          rule-only baseline, one-shot AI, and AI with bounded oracle feedback. Raw counts;
-          no statistical significance is claimed.
+    <div className="space-y-16">
+      <header className="max-w-[64ch]">
+        <h1 className="text-[32px] font-medium leading-[1.15]">Benchmark</h1>
+        <p className="mt-4 text-[15px] leading-[1.6] text-muted">
+          This page compares 3 methods on the same {heldOut.length} held-out incidents. The numbers are raw counts. They are not a statistical result.
         </p>
       </header>
 
-      <section className="grid gap-4 md:grid-cols-3">
+      <section className="grid gap-x-10 gap-y-12 border-t border-line pt-10 lg:grid-cols-[1fr_1fr_1.7fr]" aria-label="Results by method">
         {data.conditions.map((condition) => {
           const t = data.totals.by_condition?.[condition.id];
           const isB0 = condition.id === "B0";
+          const lead = condition.id === "B2";
+          const diagnosed = heldOut.filter((c) => c.runs.B0?.diagnosis_correct).length;
           return (
-            <div key={condition.id} className="rounded-panel border border-line bg-surface">
-              <div className="flex h-9 items-center justify-between border-b border-line px-3.5">
-                <h2 className="text-[13px] font-medium text-muted">
-                  {conditionLabel[condition.id] ?? condition.id}
-                </h2>
-                <span className="mono text-[13px] text-faint">
-                  {isB0 ? "no patch" : `${condition.max_attempts} attempt${condition.max_attempts === 1 ? "" : "s"}`}
-                </span>
-              </div>
-              <div className="grid grid-cols-3 gap-px bg-line">
+            <div key={condition.id} data-condition={condition.id}>
+              <h2 className="text-[14px] font-medium text-muted">{conditionLabel[condition.id] ?? condition.id}</h2>
+              <p className="mt-5 flex items-baseline gap-3">
+                <span className={`numeral ${lead ? "text-[104px]" : "text-[64px]"}`}>{isB0 ? diagnosed : t?.safe_accepted ?? 0}</span>
+                <span className="text-[20px] text-faint">/ {heldOut.length}</span>
+              </p>
+              <p className="mt-3 text-[15px]">{isB0 ? "causes found" : "safe patches accepted"}</p>
+              <dl className="mt-5 grid grid-cols-[auto_1fr] gap-x-6 gap-y-1 text-[14px]">
                 {isB0 ? (
                   <>
-                    <div className="bg-surface px-3 py-3">
-                      <p className="text-[13px] text-faint">Diagnosed</p>
-                      <p className="mt-1 text-lg font-semibold tabular-nums">
-                        {heldOut.filter((c) => c.runs.B0?.diagnosis_correct).length}/{heldOut.length}
-                      </p>
-                    </div>
-                    <div className="bg-surface px-3 py-3">
-                      <p className="text-[13px] text-faint">Patches</p>
-                      <p className="mt-1 text-lg font-semibold tabular-nums">0</p>
-                    </div>
-                    <div className="bg-surface px-3 py-3">
-                      <p className="text-[13px] text-faint">Accepted</p>
-                      <p className="mt-1 text-lg font-semibold tabular-nums">0</p>
-                    </div>
+                    <dt className="text-faint">Patches written</dt>
+                    <dd className="tabular-nums">0</dd>
                   </>
                 ) : (
                   <>
-                    <div className="bg-surface px-3 py-3">
-                      <p className="text-[13px] text-faint">Safe accepted</p>
-                      <p className="mt-1 text-lg font-semibold tabular-nums">
-                        {t?.safe_accepted ?? 0}/{heldOut.length}
-                      </p>
-                    </div>
-                    <div className="bg-surface px-3 py-3">
-                      <p className="text-[13px] text-faint">Unsafe accepted</p>
-                      <p className={`mt-1 text-lg font-semibold tabular-nums ${(t?.false_acceptances ?? 0) > 0 ? "text-bad" : ""}`}>
-                        {t?.false_acceptances ?? 0}
-                      </p>
-                    </div>
-                    <div className="bg-surface px-3 py-3">
-                      <p className="text-[13px] text-faint">Errors</p>
-                      <p className="mt-1 text-lg font-semibold tabular-nums">{t?.errors ?? 0}</p>
-                    </div>
+                    <dt className="text-faint">Unsafe patches accepted</dt>
+                    <dd className={`tabular-nums ${(t?.false_acceptances ?? 0) > 0 ? "text-bad" : ""}`}>{t?.false_acceptances ?? 0}</dd>
+                    <dt className="text-faint">Errors</dt>
+                    <dd className="tabular-nums">{t?.errors ?? 0}</dd>
+                    <dt className="text-faint">Not run</dt>
+                    <dd className="tabular-nums">{t?.not_run ?? 0}</dd>
                   </>
                 )}
-              </div>
-              <div className="border-t border-line px-3.5 py-2.5 text-[13px] leading-5 text-muted">
-                {condition.description}
-                {!isB0 && t ? ` · ${t.not_run} not run` : ""}
-              </div>
+              </dl>
+              <p className="mt-5 max-w-[40ch] text-[14px] leading-[1.55] text-muted">{describe(condition.id, condition.max_attempts)}</p>
             </div>
           );
         })}
       </section>
 
-      <section className="overflow-hidden rounded-panel border border-line bg-surface">
-        <div className="flex h-10 items-center justify-between border-b border-line px-4">
-          <h2 className="text-[13px] font-medium text-muted">
-            Per-case results
-          </h2>
+      <section aria-label="Results by case">
+        <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
+          <h2 className="text-[20px] font-medium">Results by case</h2>
           <span className="mono text-[13px] text-faint">
-            {data.model.id} · temp 0 · max {data.model.max_output_tokens?.toLocaleString()} tokens
+            {data.model.id} · temperature 0 · max {data.model.max_output_tokens?.toLocaleString()} tokens
           </span>
         </div>
-        <div className="overflow-x-auto">
+        <div className="mt-5 overflow-x-auto">
           <table className="w-full min-w-[980px] border-collapse text-left">
             <thead>
-              <tr className="border-b border-line text-[13px] text-faint">
-                <th className="px-4 py-2.5 font-medium">Case</th>
-                <th className="px-4 py-2.5 font-medium">B0 diagnosis</th>
-                <th className="px-4 py-2.5 font-medium">B1</th>
-                <th className="px-4 py-2.5 font-medium">B2</th>
-                <th className="px-4 py-2.5 text-right font-medium">Attempts</th>
-                <th className="px-4 py-2.5 text-right font-medium">Tokens</th>
-                <th className="px-4 py-2.5 text-right font-medium">Est. cost</th>
+              <tr className="border-b border-line-strong text-[13px] text-faint">
+                <th className="py-3 pr-4 font-medium">Case</th>
+                <th className="px-4 py-3 font-medium">B0 cause</th>
+                <th className="px-4 py-3 font-medium">B1</th>
+                <th className="px-4 py-3 font-medium">B2</th>
+                <th className="px-4 py-3 text-right font-medium">Attempts</th>
+                <th className="px-4 py-3 text-right font-medium">Tokens</th>
+                <th className="py-3 pl-4 text-right font-medium">Cost</th>
               </tr>
             </thead>
             <tbody>
@@ -129,47 +100,35 @@ export default function Page() {
                 const cell = (r: typeof b1) =>
                   r ? (
                     <div>
-                      <span className={`text-[13px] font-medium ${statusTone(r.status)}`}>
-                        {statusLabel(r.status)}
-                      </span>
-                      <span className="mono mt-0.5 block whitespace-nowrap text-[13px] text-faint">
-                        {r.oracle_verdict === "VERIFIED_FOR_TESTED_SCENARIOS" ? "VERIFIED" : r.oracle_verdict || "no oracle"}
-                        {r.attempts ? ` · ${r.attempts} att.` : ""}
+                      <span className={`text-[14px] font-medium ${statusTone(r.status)}`}>{statusLabel(r.status)}</span>
+                      <span className="mono mt-1 block whitespace-nowrap text-[13px] text-faint">
+                        {r.oracle_verdict === "VERIFIED_FOR_TESTED_SCENARIOS" ? "VERIFIED" : r.oracle_verdict || "no check"}
+                        {r.attempts ? ` · ${r.attempts} attempt${r.attempts === 1 ? "" : "s"}` : ""}
                       </span>
                     </div>
                   ) : (
-                    <span className="text-[13px] text-muted">not run</span>
+                    <span className="text-[14px] text-muted">not run</span>
                   );
                 return (
-                  <tr key={row.case.id} className="border-b border-line/70 last:border-0">
-                    <td className="px-4 py-3">
+                  <tr key={row.case.id} className="border-b border-line last:border-0">
+                    <td className="py-4 pr-4">
                       <Link href={`/incidents/${encodeURIComponent(row.case.id)}?cond=B2`} className="block">
-                        <span className="block text-sm font-medium text-ink hover:text-accent">
-                          {row.case.title}
-                        </span>
-                        <span className="mono mt-0.5 block text-[13px] text-faint">
+                        <span className="block text-[15px] font-medium text-ink hover:text-accent">{row.case.title}</span>
+                        <span className="mono mt-1 block text-[13px] text-faint">
                           {row.case.id} · {row.case.family}
                           {row.case.exposed ? " · exposed" : ""}
                         </span>
                       </Link>
                     </td>
-                    <td className="px-4 py-3">
-                      <span className={`text-[13px] ${b0?.diagnosis_correct ? "text-ok" : "text-bad"}`}>
-                        {b0?.diagnosis_correct ? "correct" : "wrong"}
-                      </span>
-                      <span className="mono mt-0.5 block text-[13px] text-faint">
-                        {b0?.diagnosis_category ?? "—"}
-                      </span>
+                    <td className="px-4 py-4">
+                      <span className={`text-[14px] ${b0?.diagnosis_correct ? "text-ok" : "text-bad"}`}>{b0?.diagnosis_correct ? "Correct" : "Wrong"}</span>
+                      <span className="mono mt-1 block text-[13px] text-faint">{b0?.diagnosis_category ?? "—"}</span>
                     </td>
-                    <td className="px-4 py-3">{cell(b1)}</td>
-                    <td className="px-4 py-3">{cell(b2)}</td>
-                    <td className="whitespace-nowrap px-4 py-3 text-right text-xs tabular-nums text-muted">
-                      {(b1?.attempts ?? 0) + (b2?.attempts ?? 0)}
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-right text-[13px] tabular-nums text-muted">
-                      {fmtTokens(tokens)}
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-right text-[13px] tabular-nums text-muted" title={cost > 0 ? "Estimated from list prices" : "The provider did not report pricing"}>
+                    <td className="px-4 py-4">{cell(b1)}</td>
+                    <td className="px-4 py-4">{cell(b2)}</td>
+                    <td className="whitespace-nowrap px-4 py-4 text-right text-[14px] tabular-nums text-muted">{(b1?.attempts ?? 0) + (b2?.attempts ?? 0)}</td>
+                    <td className="whitespace-nowrap px-4 py-4 text-right text-[14px] tabular-nums text-muted">{fmtTokens(tokens)}</td>
+                    <td className="whitespace-nowrap py-4 pl-4 text-right text-[14px] tabular-nums text-muted" title={cost > 0 ? "Estimate from list prices" : "The provider reported no price"}>
                       {cost > 0 ? usd(cost) : "—"}
                     </td>
                   </tr>
@@ -180,43 +139,39 @@ export default function Page() {
         </div>
       </section>
 
-      <section className="grid gap-4 md:grid-cols-2">
-        <div className="rounded-panel border border-line bg-surface">
-          <div className="border-b border-line px-4 py-2.5">
-            <h2 className="text-[13px] font-medium text-muted">
-              By fault family (B2, held-out)
-            </h2>
-          </div>
-          <ul className="divide-y divide-line/70">
+      <section className="grid gap-x-10 gap-y-10 border-t border-line pt-10 md:grid-cols-2">
+        <div>
+          <h2 className="text-[20px] font-medium">B2 by fault family</h2>
+          <ul className="mt-5 divide-y divide-line border-y border-line">
             {byFamily.map((f) => (
-              <li key={f.family} className="flex items-center justify-between px-4 py-2.5">
-                <span className="text-xs text-muted">{f.family}</span>
-                <span className="mono text-[13px]">
-                  {f.accepted}/{f.total} accepted
+              <li key={f.family} className="flex items-center justify-between py-3">
+                <span className="text-[14px] text-muted">{f.family}</span>
+                <span className="mono text-[14px]">
+                  {f.accepted} of {f.total} accepted
                 </span>
               </li>
             ))}
           </ul>
         </div>
-        <div className="rounded-panel border border-line bg-surface px-4 py-3.5">
-          <h2 className="text-[13px] font-medium text-muted">
-            Limits of this result
-          </h2>
-          <ul className="mt-2 space-y-1.5 text-[13px] leading-5 text-muted">
-            <li>Six held-out cases: raw counts, not a generalization claim or a success rate.</li>
-            <li>Zero observed false acceptances does not establish a zero real-world probability.</li>
-            <li>All provider evidence is tier F; no PayPal Sandbox transaction or signed webhook was used.</li>
-            <li>Costs are estimated from list prices and are labeled as estimates.</li>
-            <li>B0 diagnoses but cannot patch; it is not scored as a repair system.</li>
+        <div>
+          <h2 className="text-[20px] font-medium">Limits</h2>
+          <ul className="mt-5 space-y-3 text-[14px] leading-[1.55] text-muted">
+            <li>The test has {heldOut.length} held-out cases. The numbers are counts. They are not a success rate.</li>
+            <li>No false acceptance was seen. This does not prove that the real risk is zero.</li>
+            <li>All provider evidence is tier F. The test did not use a PayPal Sandbox payment or a signed webhook.</li>
+            <li>Costs are estimates from list prices.</li>
+            <li>B0 finds causes but cannot write patches. It is not a repair system.</li>
           </ul>
         </div>
       </section>
 
-      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4 text-[13px] text-faint">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line pt-5 text-[13px] text-faint">
         <span className="mono">
           corpus {data.digest.replace("sha256:", "").slice(0, 16)} · frozen {data.frozen_at.slice(0, 19)}Z
         </span>
-        <span>{heldOut.length} held-out · {data.cases.length - heldOut.length} exposed reference</span>
+        <span>
+          {heldOut.length} held-out · {data.cases.length - heldOut.length} exposed reference
+        </span>
       </div>
     </div>
   );

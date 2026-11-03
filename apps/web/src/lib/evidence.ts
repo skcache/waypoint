@@ -162,33 +162,33 @@ const NOTES: Record<string, DiffNote[]> = {
   [ACCEPTED_DIGEST]: [
     {
       match: "orderID, status, err := s.webhookOrder",
-      note: "Keeps the order's current local status instead of discarding it.",
+      note: "The code keeps the current local order status.",
     },
     {
       match: 'case "ORDER.APPROVED":',
-      note: "The ORDER.APPROVED case is removed, so this handler no longer writes an order status from a webhook event.",
+      note: "The ORDER.APPROVED case is gone. The handler does not write an order status from a webhook event.",
     },
     {
       match: "if status != StatusCapturedVerified",
-      note: "Fulfillment is skipped unless the local order is already CAPTURED_VERIFIED.",
+      note: "Fulfillment starts only if the local order is CAPTURED_VERIFIED.",
     },
     {
       match: "ev.CaptureID != verifiedCapture",
-      note: "Fulfillment is skipped unless the event names the order's verified provider capture.",
+      note: "Fulfillment starts only if the event names the verified provider capture.",
     },
     {
       match: "VALUES ($1::uuid, 'FULFILL', $2, $3)",
-      note: "The effect key is the constant 'FULFILL' (it was the event id). The existing ON CONFLICT (order_id, effect_key) DO NOTHING now covers every event for the order.",
+      note: "The effect key is the constant 'FULFILL'. Before, it was the event id. The ON CONFLICT rule now covers every event for the order.",
     },
   ],
   [UNSAFE_DIGEST]: [
     {
       match: "Seeded unsafe candidate",
-      note: "The patch's own comment states what it does: it removes the status write and keeps a per-event fulfillment key.",
+      note: "The comment in the patch says what it does. It removes the status write. It keeps a key for each event.",
     },
     {
       match: "_ = orderID",
-      note: "The status write is gone, but nothing in this diff changes the fulfillment key or adds a gate on capture.",
+      note: "The status write is gone. This diff does not change the fulfillment key. It does not add a gate on capture.",
     },
   ],
 };

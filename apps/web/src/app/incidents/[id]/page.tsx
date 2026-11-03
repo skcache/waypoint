@@ -37,19 +37,19 @@ function Panel({
 }) {
   return (
     <section className="overflow-hidden rounded-panel border border-line bg-surface">
-      <header className="flex h-9 items-center justify-between gap-3 border-b border-line px-3.5">
-        <h2 className="text-[13px] font-medium text-muted">{title}</h2>
+      <header className="flex h-10 items-center justify-between gap-3 border-b border-line px-4">
+        <h2 className="text-[14px] font-medium text-muted">{title}</h2>
         {meta}
       </header>
-      <div className="p-3.5">{children}</div>
+      <div className="p-4">{children}</div>
     </section>
   );
 }
 
 function Diff({ text }: { text: string }) {
-  if (!text) return <p className="text-xs text-faint">No patch was produced.</p>;
+  if (!text) return <p className="text-[13px] text-faint">No patch was produced.</p>;
   return (
-    <pre className="mono max-h-[520px] overflow-auto rounded border border-line bg-background p-3 text-[13px] leading-[1.65]">
+    <pre className="mono max-h-[520px] overflow-auto rounded-[8px] border border-line bg-background p-3 text-[13px] leading-[1.65]">
       {text.split("\n").map((line, i) => {
         const tone = line.startsWith("+")
           ? "text-ok"
@@ -77,18 +77,18 @@ function Ladder({ run }: { run: ReturnType<typeof runFor> }) {
     ["Patch generated", report?.final_ladder?.patch_generated as boolean | undefined],
     ["Patch applied", run.patch_applied],
     ["Build passed", run.build_passed],
-    ["Trusted tests passed", run.tests_passed],
-    ["Oracle verdict", run.oracle_verdict || "—"],
+    ["Tests passed", run.tests_passed],
+    ["Checker verdict", run.oracle_verdict || "—"],
     ["Accepted for review", run.accepted],
   ];
   return (
-    <div className="space-y-2">
-      <dl className="divide-y divide-line/70">
+    <div className="space-y-3">
+      <dl className="divide-y divide-line">
         {rows.map(([label, value]) => (
-          <div key={label} className="flex items-baseline justify-between gap-3 py-1.5">
-            <dt className="text-[13px] text-muted">{label}</dt>
+          <div key={label} className="flex items-baseline justify-between gap-3 py-2">
+            <dt className="text-[14px] text-muted">{label}</dt>
             <dd
-              className={`mono text-[13px] ${
+              className={`min-w-0 break-all text-right text-[14px] ${
                 value === true
                   ? "text-ok"
                   : value === false
@@ -100,19 +100,19 @@ function Ladder({ run }: { run: ReturnType<typeof runFor> }) {
                         : "text-ink"
               }`}
             >
-              {value === true ? "yes" : value === false ? "no" : String(value ?? "—")}
+              {value === true ? "Yes" : value === false ? "No" : String(value ?? "—")}
             </dd>
           </div>
         ))}
       </dl>
       {evalDoc?.accepted === false && evalDoc.reason ? (
-        <p className="rounded border border-line bg-background px-2.5 py-2 text-[13px] leading-5 text-muted">
+        <p className="rounded-[8px] border border-line bg-background px-3 py-2 text-[13px] leading-5 text-muted">
           {evalDoc.reason}
         </p>
       ) : null}
       <p className="text-[13px] leading-5 text-faint">
-        {fmtMs(run.latency_ms)} · {fmtTokens(run.prompt_tokens)} prompt /{" "}
-        {fmtTokens(run.completion_tokens)} completion · {usd(run.estimated_usd)}
+        {fmtMs(run.latency_ms)} · {fmtTokens(run.prompt_tokens)} tokens in,{" "}
+        {fmtTokens(run.completion_tokens)} out · {usd(run.estimated_usd)}
       </p>
     </div>
   );
@@ -146,8 +146,8 @@ export default async function Page({
           <Link href="/" className="text-[13px] text-faint hover:text-ink">
             ← Incidents
           </Link>
-          <h1 className="mt-1.5 text-xl font-semibold tracking-tight">{row.case.title}</h1>
-          <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px] text-faint">
+          <h1 className="mt-2 text-[24px] font-medium leading-[1.2]">{row.case.title}</h1>
+          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px] text-faint">
             <Mono>{row.case.id}</Mono>
             <span className="text-line-strong">/</span>
             <span>{row.case.family}</span>
@@ -169,22 +169,22 @@ export default async function Page({
         </dl>
       </div>
 
-      <div className="flex flex-wrap items-center gap-1.5">
+      <div className="flex flex-wrap items-center gap-2">
         {conditions.map((c) => (
           <Link
             key={c}
             href={`/incidents/${encodeURIComponent(id)}?cond=${c}`}
-            className={`rounded border px-2.5 py-1 text-[13px] ${
+            className={`inline-flex min-h-11 items-center rounded-[8px] border px-3 text-[14px] transition-colors ${
               active === c
                 ? "border-line-strong bg-surface text-ink"
                 : "border-transparent text-muted hover:text-ink"
             }`}
           >
-            {c === "B0" ? "B0 · rules" : c === "B1" ? "B1 · single shot" : "B2 · oracle-guided"}
+            {c === "B0" ? "B0 · Rules only" : c === "B1" ? "B1 · One attempt" : "B2 · With feedback"}
           </Link>
         ))}
         <span className="ml-auto text-[13px] text-faint">
-          Pre-repair: <span className="mono">{pre.verdict}</span> · {pre.order_status}
+          Before repair: <span className="mono">{pre.verdict}</span> · {pre.order_status}
         </span>
       </div>
 
@@ -196,8 +196,7 @@ export default async function Page({
           >
             {obs.length === 0 ? (
               <p className="text-[13px] leading-5 text-faint">
-                Provider observations are recorded in the run artifacts. This case has no
-                observation file attached to the selected condition.
+                The run files hold the provider events. No event file is attached to this condition.
               </p>
             ) : (
               <ol className="space-y-0">
@@ -226,12 +225,12 @@ export default async function Page({
             )}
           </Panel>
 
-          <Panel title="Pre-repair verdict">
+          <Panel title="Result before repair">
             <p className="text-[13px] leading-5 text-muted">
               <span className="mono text-ink">{pre.verdict}</span> · {pre.order_status}
             </p>
             {pre.failing?.length ? (
-              <ul className="mt-2 space-y-1.5">
+              <ul className="mt-2 space-y-2">
                 {pre.failing.map((f) => (
                   <li key={f} className="text-[13px] leading-5 text-bad">
                     {f}
@@ -239,29 +238,29 @@ export default async function Page({
                 ))}
               </ul>
             ) : (
-              <p className="mt-2 text-[13px] text-faint">No invariant counterexample recorded before repair.</p>
+              <p className="mt-2 text-[13px] text-faint">No counterexample before repair.</p>
             )}
           </Panel>
         </div>
 
         <div className="space-y-4 lg:col-span-6">
           <Panel
-            title="Model diagnosis"
+            title="AI diagnosis"
             meta={<Mono>{run?.diagnosis_category ?? "not run"}</Mono>}
           >
             {diag ? (
               <div className="space-y-3">
                 <div>
                   <p className="text-[13px] font-medium text-ink/70">Root cause</p>
-                  <p className="mt-1 text-[13px] leading-6 text-ink">{diag.root_cause}</p>
+                  <p className="mt-1 text-[14px] leading-6 text-ink">{diag.root_cause}</p>
                 </div>
                 <div>
                   <p className="text-[13px] font-medium text-ink/70">Mechanism</p>
-                  <p className="mt-1 text-xs leading-5 text-muted">{diag.mechanism}</p>
+                  <p className="mt-1 text-[13px] leading-5 text-muted">{diag.mechanism}</p>
                 </div>
                 <div>
                   <p className="text-[13px] font-medium text-ink/70">Proposed fix</p>
-                  <p className="mt-1 text-xs leading-5 text-muted">{diag.proposed_fix}</p>
+                  <p className="mt-1 text-[13px] leading-5 text-muted">{diag.proposed_fix}</p>
                 </div>
                 <div className="flex flex-wrap gap-x-4 gap-y-1 text-[13px] text-faint">
                   {diag.suspected_files?.length ? (
@@ -271,12 +270,12 @@ export default async function Page({
                     <span>evidence {diag.supporting_evidence.join(", ")}</span>
                   ) : null}
                   {diag.invariants_at_risk?.length ? (
-                    <span>invariants {diag.invariants_at_risk.join(", ")}</span>
+                    <span>rules {diag.invariants_at_risk.join(", ")}</span>
                   ) : null}
                 </div>
                 {diag.uncertainties?.length ? (
                   <div className="border-t border-line pt-2">
-                    <p className="text-[13px] font-medium text-ink/70">Uncertainties</p>
+                    <p className="text-[13px] font-medium text-ink/70">What the AI cannot know</p>
                     <ul className="mt-1 list-disc space-y-1 pl-4 text-[13px] leading-5 text-faint">
                       {diag.uncertainties.map((u) => (
                         <li key={u}>{u}</li>
@@ -286,22 +285,22 @@ export default async function Page({
                 ) : null}
               </div>
             ) : (
-              <p className="text-xs text-faint">
+              <p className="text-[13px] text-faint">
                 {run?.status === "DIAGNOSIS_ONLY"
-                  ? "B0 produces a deterministic diagnosis category only; it has no patch capability."
-                  : "No diagnosis recorded for this condition."}
+                  ? "B0 gives a cause category only. It cannot write a patch."
+                  : "No diagnosis for this condition."}
               </p>
             )}
           </Panel>
 
-          <Panel title="Proposed diff" meta={<Mono>{run?.diff ? `${run.diff.split("\n").length} lines` : "none"}</Mono>}>
+          <Panel title="Patch" meta={<Mono>{run?.diff ? `${run.diff.split("\n").length} lines` : "none"}</Mono>}>
             <Diff text={run?.diff ?? ""} />
           </Panel>
         </div>
 
         <div className="space-y-4 lg:col-span-3">
           <Panel
-            title="Independent verification"
+            title="Checker result"
             meta={
               <span className={`text-[13px] font-medium ${statusTone(run?.status ?? "")}`}>
                 {run ? statusLabel(run.status) : "not run"}
@@ -311,10 +310,10 @@ export default async function Page({
             <Ladder run={run} />
           </Panel>
 
-          <Panel title="Oracle findings">
+          <Panel title="Failed rules">
             {evalInvariants.length === 0 ? (
               <p className="text-[13px] leading-5 text-faint">
-                No non-passing invariant recorded for this condition.
+                No rule failed in this condition.
               </p>
             ) : (
               <ul className="space-y-2">
@@ -332,10 +331,8 @@ export default async function Page({
 
           <Panel title="Human decision">
             <DecisionForm caseId={row.case.id} condition={active} />
-            <p className="mt-3 border-t border-line pt-2 text-[13px] leading-4 text-faint">
-              The console is read-only for payment state. Recording is disabled unless an
-              operator configures a reviewer token; a recorded decision is a local note and
-              never merges, deploys, captures, refunds, or retries a payment.
+            <p className="mt-3 border-t border-line pt-2 text-[13px] leading-5 text-faint">
+              The console is read-only for payment state. Recording is off unless an operator sets a reviewer token. A recorded decision is a local note. It does not merge, deploy, capture, refund, or retry a payment.
             </p>
           </Panel>
         </div>

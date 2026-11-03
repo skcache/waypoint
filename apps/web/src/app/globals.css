@@ -24,14 +24,14 @@
   --sheet: oklch(0.985 0.004 250);
   --sheet-ink: oklch(0.22 0.06 262);
 
-  --c-bg: oklch(0.19 0.065 262);
-  --c-surface: oklch(0.235 0.07 262);
-  --c-sunk: oklch(0.15 0.055 262);
-  --c-text: oklch(0.96 0.01 250);
-  --c-muted: oklch(0.79 0.03 255);
-  --c-faint: oklch(0.67 0.04 256);
-  --c-line: oklch(0.31 0.06 262);
-  --c-line-strong: oklch(0.47 0.08 258);
+  --c-bg: oklch(0.17 0.04 262);
+  --c-surface: oklch(0.21 0.045 262);
+  --c-sunk: oklch(0.14 0.035 262);
+  --c-text: oklch(0.96 0.008 250);
+  --c-muted: oklch(0.78 0.025 255);
+  --c-faint: oklch(0.67 0.03 256);
+  --c-line: color-mix(in oklch, var(--c-text) 10%, transparent);
+  --c-line-strong: color-mix(in oklch, var(--c-text) 24%, transparent);
   --c-fail: oklch(0.86 0.15 85);
   --c-fail-soft: oklch(0.31 0.06 85);
   --c-pass: oklch(0.8 0.12 235);
@@ -41,13 +41,13 @@
   --c-accent: oklch(0.78 0.12 233);
   --c-on-accent: oklch(0.2 0.07 262);
 
-  --tile-held: oklch(0.3 0.09 260);
+  --tile-held: oklch(0.27 0.06 262);
   --tile-held-ink: oklch(0.93 0.02 250);
   --tile-lit: var(--pp-blue);
   --tile-lit-ink: oklch(0.99 0.004 250);
   --tile-fail: var(--pp-yellow);
   --tile-fail-ink: oklch(0.22 0.08 262);
-  --tile-na-line: oklch(0.5 0.07 258);
+  --tile-na-line: color-mix(in oklch, var(--c-text) 32%, transparent);
 
   --t-keyword: oklch(0.8 0.12 300);
   --t-string: oklch(0.82 0.1 175);
@@ -65,8 +65,8 @@
   --c-text: oklch(0.24 0.07 262);
   --c-muted: oklch(0.4 0.05 262);
   --c-faint: oklch(0.49 0.05 260);
-  --c-line: oklch(0.88 0.012 250);
-  --c-line-strong: oklch(0.64 0.03 255);
+  --c-line: color-mix(in oklch, var(--c-text) 10%, transparent);
+  --c-line-strong: color-mix(in oklch, var(--c-text) 28%, transparent);
   --c-fail: oklch(0.45 0.12 60);
   --c-fail-soft: oklch(0.95 0.07 90);
   --c-pass: oklch(0.45 0.15 252);
@@ -78,7 +78,7 @@
 
   --tile-held: oklch(0.89 0.025 250);
   --tile-held-ink: oklch(0.28 0.08 262);
-  --tile-na-line: oklch(0.62 0.03 255);
+  --tile-na-line: color-mix(in oklch, var(--c-text) 36%, transparent);
 
   --t-keyword: oklch(0.42 0.14 300);
   --t-string: oklch(0.42 0.1 175);
@@ -111,7 +111,7 @@
   --color-tile-ink: var(--tile-held-ink);
   --color-lit: var(--tile-lit);
   --color-lit-ink: var(--tile-lit-ink);
-  --radius-panel: 6px;
+  --radius-panel: 12px;
   --font-sans: "Archivo Variable", ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
 }
@@ -164,7 +164,7 @@
   /* The lead number: very light, very large, tightly set. */
   .numeral {
     font-weight: 240;
-    letter-spacing: -0.06em;
+    letter-spacing: -0.03em;
     line-height: 0.82;
     font-variant-numeric: lining-nums;
   }
@@ -177,18 +177,18 @@
   }
 
   .enter {
-    animation: enter 520ms cubic-bezier(0.16, 1, 0.3, 1) both;
+    animation: enter 400ms cubic-bezier(0.22, 1, 0.36, 1) both;
   }
 
   .line-pulse {
-    animation: line-pulse 1400ms ease-out 1;
+    animation: line-pulse 1400ms cubic-bezier(0.22, 1, 0.36, 1) 1;
   }
 }
 
 @keyframes enter {
   from {
     opacity: 0;
-    transform: translateY(10px);
+    transform: translateY(8px);
   }
   to {
     opacity: 1;
@@ -227,14 +227,14 @@
 
 /* A code slip: a raised navy panel in dark, a white sheet in light. */
 .paper {
-  --c-bg: oklch(0.22 0.065 262);
-  --c-surface: oklch(0.26 0.07 262);
-  --c-sunk: oklch(0.18 0.06 262);
-  --c-text: oklch(0.94 0.012 250);
-  --c-muted: oklch(0.78 0.03 255);
-  --c-faint: oklch(0.67 0.04 256);
-  --c-line: oklch(0.32 0.06 262);
-  --c-line-strong: oklch(0.48 0.08 258);
+  --c-bg: oklch(0.2 0.045 262);
+  --c-surface: oklch(0.235 0.05 262);
+  --c-sunk: oklch(0.17 0.04 262);
+  --c-text: oklch(0.94 0.01 250);
+  --c-muted: oklch(0.78 0.025 255);
+  --c-faint: oklch(0.67 0.03 256);
+  --c-line: color-mix(in oklch, var(--c-text) 10%, transparent);
+  --c-line-strong: color-mix(in oklch, var(--c-text) 24%, transparent);
   --c-fail: oklch(0.86 0.15 85);
   --c-fail-soft: oklch(0.32 0.06 85);
   --c-pass: oklch(0.8 0.12 235);
@@ -253,8 +253,8 @@
   --c-text: var(--sheet-ink);
   --c-muted: oklch(0.4 0.05 262);
   --c-faint: oklch(0.49 0.05 260);
-  --c-line: oklch(0.88 0.012 250);
-  --c-line-strong: oklch(0.64 0.03 255);
+  --c-line: color-mix(in oklch, var(--c-text) 10%, transparent);
+  --c-line-strong: color-mix(in oklch, var(--c-text) 28%, transparent);
   --c-fail: oklch(0.45 0.12 60);
   --c-fail-soft: oklch(0.95 0.07 90);
   --c-pass: oklch(0.45 0.15 252);

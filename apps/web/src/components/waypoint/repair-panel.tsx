@@ -18,7 +18,7 @@ export function RepairPanel({ doc }: { doc: DemoExport }) {
       <div className="h-[70svh] min-h-0 lg:h-auto lg:flex-1">
         <CodeViewer
           testId="demo-diff"
-          heading="The patch, exactly as the AI generated it"
+          heading="Patch from the AI, unchanged"
           file={doc.patch.changed_files[0] ?? "patch"}
           diff={doc.patch.diff}
           digest={doc.patch.digest}
@@ -29,9 +29,9 @@ export function RepairPanel({ doc }: { doc: DemoExport }) {
       <div data-testid="sandbox" className="shrink-0">
         <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
           <p className="text-[15px] font-medium">
-            Tested in a disposable Docker sandbox: {(total / 1000).toFixed(1)} s, {steps.every((s) => s.passed) ? "every step passed" : "a step failed"}
+            Sandbox test: {(total / 1000).toFixed(1)} s. {steps.every((s) => s.passed) ? "All steps passed." : "A step failed."}
           </p>
-          <p className="text-[13px] text-faint">Segment width is the recorded duration.</p>
+          <p className="text-[13px] text-faint">Width shows duration</p>
         </div>
         <div className="mt-3 flex h-9 gap-1" role="group" aria-label="Sandbox steps, widths are recorded durations">
           {steps.map((s) => (
@@ -50,8 +50,8 @@ export function RepairPanel({ doc }: { doc: DemoExport }) {
         <p className="mt-2 min-h-5 text-[14px] text-muted" aria-live="polite">
           {chosen ? (
             <>
-              <span className="mono font-semibold text-ink">{chosen.name}</span> took {formatMs(chosen.duration_ms)} ({Math.round((chosen.duration_ms / total) * 100)}% of the run) and{" "}
-              {chosen.passed ? "passed" : "failed"}. Command output stays in the local artifact directory and is not part of the public export.
+              <span className="mono font-medium text-ink">{chosen.name}</span>: {formatMs(chosen.duration_ms)}, {Math.round((chosen.duration_ms / total) * 100)}% of the run,{" "}
+              {chosen.passed ? "passed" : "failed"}
             </>
           ) : null}
         </p>

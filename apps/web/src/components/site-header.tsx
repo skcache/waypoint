@@ -18,7 +18,7 @@ export function SiteHeader() {
   return (
     <header className="border-b border-line bg-background">
       <div className="mx-auto flex h-14 w-full max-w-[1280px] items-center justify-between gap-3 px-3 sm:px-8 lg:px-12">
-        <Link href="/" className="flex min-h-11 shrink-0 items-center px-2 font-semibold tracking-[-0.01em]" aria-label="Waypoint home">
+        <Link href="/" className="flex min-h-11 shrink-0 items-center px-2 font-semibold" aria-label="Waypoint home">
           Waypoint
         </Link>
         <nav aria-label="Primary" className="flex items-center">
