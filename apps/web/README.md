@@ -24,10 +24,15 @@ The **Evidence** drawer holds the rule-by-rule comparison, the verification-orde
 the three order identities and the sandbox isolation. Nothing here calls a model, PayPal or a
 database. `/benchmark` and `/incidents/[id]` are the M5 review console.
 
+The public controls explore recorded evidence; they do not execute repairs.
+Run `make demo` locally to execute the recorded-model repair through the sandbox.
+
 Evidence rules: no webhook timeline, effect key or capture id is invented. Everything on the
 board comes from the oracle's own records; an export that lacks a field (for example an older
 `local.json`) shows "not recorded". `src/lib/evidence.ts` derives it and is unit-tested, as is the
 strip-treemap layout (`src/lib/treemap.ts`).
+Capture counts require that candidate's explicit provider capture id. A missing id
+means the count and ledger balance are unknown, regardless of the explanation text.
 
 - Run: `npm run dev` — or `make dev-web` from the repository root
 - Build: `npm run build`

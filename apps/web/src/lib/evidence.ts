@@ -282,11 +282,12 @@ export interface ReceiptModel {
   /** The raw final order status the oracle recorded. */
   status: string;
   capture?: string;
-  captured: number;
+  /** One capture is proven by its provider id; missing identity means unknown. */
+  captured: number | null;
   /** Effect keys are known only when the oracle printed a counterexample. */
   effects: { key?: string; flagged: boolean }[];
   fulfilled: number | null;
-  balanced: boolean;
+  balanced: boolean | null;
   ticks: { id: string; status: string }[];
   failed: string[];
   verdict: "VERIFIED" | "UNSAFE" | "INCONCLUSIVE";
@@ -312,8 +313,8 @@ export function receiptModel(doc: DemoExport, column: Column): ReceiptModel {
     : count === 1
       ? [{ key: undefined, flagged: false }]
       : [];
-  // The unsafe evaluation carries no capture id, but its own reason names "one payment".
-  const captured = e.provider_capture_id || /for one payment/i.test(e.reason) ? 1 : 0;
+  const capture = e.provider_capture_id?.trim() || undefined;
+  const captured = capture ? 1 : null;
   const fulfilled = count ?? (effects.length || null);
   return {
     column,
@@ -321,11 +322,11 @@ export function receiptModel(doc: DemoExport, column: Column): ReceiptModel {
     orderId,
     orderRole: LABELS[column].role,
     status: e.order_status,
-    capture: e.provider_capture_id,
+    capture,
     captured,
     effects,
     fulfilled,
-    balanced: fulfilled !== null && fulfilled === captured,
+    balanced: fulfilled === null || captured === null ? null : fulfilled === captured,
     ticks: e.invariants.map((i) => ({ id: i.id, status: i.status })),
     failed: failedIds(e),
     verdict: verdictWord(e.verdict),

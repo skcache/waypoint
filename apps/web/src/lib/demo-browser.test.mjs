@@ -67,6 +67,7 @@ try {
   // STEP 1, the incident: one lead number, one dominant board, the product in one sentence.
   const body = (await page.evaluate(() => document.body.textContent)).toLowerCase();
   assert.ok(body.includes("run is recorded") || body.includes("run is local"), "the page says what kind of run it shows");
+  assert.match(await text(page, '[data-testid="execution-boundary"]'), /explores saved evidence.*make demo.*locally/, "the page distinguishes evidence exploration from local execution");
   assert.ok(body.includes("separate checker tests each repair"), "the product is explained in one sentence");
   assert.ok((await text(page, '[data-testid="case-label"]')).includes("Duplicate fulfillment"), "the case is named");
   assert.equal(await text(page, '[data-testid="hero-value"]'), "2", "the lead number is the incident's fulfillment count");
@@ -226,6 +227,35 @@ try {
   await home.goto(`${base}/`, { waitUntil: "domcontentloaded", timeout: 20000 });
   await home.waitForFunction((id) => document.querySelector('[data-testid="demo-run-id"]')?.textContent?.trim() === id, { timeout: 20000 }, recordedRun.run.run_id);
   assert.ok((await home.evaluate(() => document.body.textContent)).toLowerCase().includes("duplicate fulfillment"), "public entry loads the recorded case");
+  assert.match(await text(home, '[data-testid="execution-boundary"]'), /explores saved evidence.*make demo.*locally/);
+
+  // An older export can describe a payment without exporting its capture id.
+  // The UI must show unknown for every candidate, even with that prose present.
+  const missing = structuredClone(run);
+  missing.run.run_id = "missing-capture-proof";
+  for (const field of ["pre_repair", "oracle", "unsafe"]) {
+    delete missing[field].provider_capture_id;
+    missing[field].reason = "2 fulfillment effects for one payment";
+  }
+  const unknown = await browser.newPage();
+  unknown.on("pageerror", (err) => pageErrors.push(`unknown: ${err}`));
+  await unknown.setViewport({ width: 390, height: 844 });
+  await unknown.setRequestInterception(true);
+  unknown.on("request", (req) => {
+    if (new URL(req.url()).pathname === "/demo/local.json") {
+      void req.respond({ status: 200, contentType: "application/json", body: JSON.stringify(missing) });
+    } else {
+      void req.continue();
+    }
+  });
+  await unknown.goto(`${base}/demo`, { waitUntil: "domcontentloaded" });
+  await unknown.waitForFunction(() => document.querySelector('[data-testid="demo-run-id"]')?.textContent?.trim() === "missing-capture-proof");
+  assert.equal(await text(unknown, '[data-testid="fact-captured"]'), "not recorded");
+  await step(unknown, 3);
+  for (const candidate of ["repair", "unsafe"]) {
+    await click(unknown, `[data-testid="candidate-${candidate}"]`);
+    assert.equal(await text(unknown, '[data-testid="fact-captured"]'), "not recorded", `${candidate}: no capture count is inferred from prose`);
+  }
 
   assert.equal(pageErrors.length, 0, `page errors: ${pageErrors.join("; ")}`);
   console.log(`demo-browser: PASS run=${run.run.run_id}`);

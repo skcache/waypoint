@@ -23,6 +23,15 @@ Built for the [PayPal AI Hackathon 2026](https://paypalaihackathon.devpost.com/)
 > here processes real money; all provider traffic is sandbox, and webhook events are
 > trusted **fixture** events, not PayPal-signed webhooks.
 
+## Regression checks
+
+[GitHub Actions](https://github.com/skcache/waypoint/actions/workflows/regression.yml)
+runs on pushes to `main` and pull requests. It requires the full PostgreSQL-backed
+Go suite and Docker repair checks, payment race checks, and the deterministic
+`make demo` path with web tests, production build and Brave smoke tests.
+The workflow uses fixture data and recorded model replies; no live model or
+PayPal credentials are needed. A release needs a successful run for its exact SHA.
+
 ## Quickstart — deterministic demo
 
 Prerequisites: Go 1.27+, Node 22 (`nvm use 22`), Docker, `make`.

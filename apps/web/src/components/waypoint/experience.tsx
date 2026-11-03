@@ -177,6 +177,9 @@ function Instrument({ doc, source }: { doc: DemoExport; source: EvidenceSource }
             <p className="max-w-[44ch] text-[13px] leading-[1.45] text-muted">
               Waypoint uses an AI to repair a payment bug. A separate checker tests each repair against {ruleCount} rules. This run is {source === "recorded" ? "recorded" : "local"}.
             </p>
+            <p className="mt-2 max-w-[44ch] text-[13px] leading-[1.45] text-muted" data-testid="execution-boundary">
+              This page explores saved evidence. Run <code>make demo</code> locally to execute a repair.
+            </p>
             <div key={step} className="enter mt-6" data-testid="hero">
               <div className="flex items-baseline gap-3">
                 <span className="numeral text-[clamp(5.5rem,8vw,7.4rem)]" data-testid="hero-value">{hero.value}</span>
@@ -278,11 +281,11 @@ function Instrument({ doc, source }: { doc: DemoExport; source: EvidenceSource }
                   </div>
                   <div>
                     <dt className="text-[13px] text-faint">Captured</dt>
-                    <dd className="text-[16px] font-medium" data-testid="fact-captured">{model.captured}</dd>
+                    <dd className="text-[16px] font-medium" data-testid="fact-captured">{model.captured ?? "not recorded"}</dd>
                   </div>
                   <div>
                     <dt className="text-[13px] text-faint">Fulfilled</dt>
-                    <dd className={`text-[16px] font-medium ${model.balanced ? "" : "text-bad"}`} data-testid="fact-fulfilled">{model.fulfilled ?? "?"}</dd>
+                    <dd className={`text-[16px] font-medium ${model.balanced === false ? "text-bad" : ""}`} data-testid="fact-fulfilled">{model.fulfilled ?? "?"}</dd>
                   </div>
                   <div>
                     <dt className="text-[13px] text-faint">Checker</dt>

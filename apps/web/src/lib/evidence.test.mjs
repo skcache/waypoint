@@ -174,6 +174,25 @@ test("looks fixed, is not: the repair and the unsafe patch share a surface and d
   assert.equal(before.ticks.length, 14);
 });
 
+test("capture counts require the candidate's own provider id, never narrative text", async () => {
+  const { receiptModel, storyFigures } = await import("./evidence.ts");
+  for (const [column, field] of [["before", "pre_repair"], ["repair", "oracle"], ["unsafe", "unsafe"]]) {
+    for (const id of [undefined, "", "   "]) {
+      const missing = structuredClone(doc);
+      missing[field].provider_capture_id = id;
+      missing[field].reason = "the merchant recorded 2 fulfillment effects for one payment";
+      const model = receiptModel(missing, column);
+      assert.equal(model.capture, undefined);
+      assert.equal(model.captured, null, `${column}: missing capture identity means unknown, not zero or one`);
+      assert.equal(model.balanced, null, "an unknown count cannot establish a balance or mismatch");
+      if (column === "before") assert.equal(storyFigures(missing).incident.captured, null);
+    }
+    const explicit = structuredClone(doc);
+    explicit[field].reason = "no capture count in this explanation";
+    assert.equal(receiptModel(explicit, column).captured, 1, "the explicit provider id supports the count");
+  }
+});
+
 test("rule tiles carry the oracle's own titles and give failed rules more space", () => {
   const before = ruleTiles(doc.pre_repair);
   assert.deepEqual(before.map((t) => t.id), Array.from({ length: 14 }, (_, i) => `I${i + 1}`));

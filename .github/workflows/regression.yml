@@ -1,0 +1,102 @@
+name: Regression
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: regression-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PAYPAL_SPIKE_LIVE: '0'
+  LLM_LIVE: '0'
+
+jobs:
+  backend:
+    name: Go and PostgreSQL regressions
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:17.7
+        env:
+          POSTGRES_USER: waypoint
+          POSTGRES_PASSWORD: waypoint
+          POSTGRES_DB: waypoint_test
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U waypoint -d waypoint_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      REQUIRE_DATABASE_TESTS: '1'
+      # Each test package derives its own _test database. A shared
+      # TEST_DATABASE_URL would let parallel suites reset each other's schema.
+      DATABASE_URL: postgres://waypoint:waypoint@localhost:5433/waypoint_test?sslmode=disable
+    defaults:
+      run:
+        working-directory: apps/api
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: apps/api/go.mod
+          cache-dependency-path: apps/api/go.sum
+      - name: Format, vet and build
+        run: |
+          test -z "$(gofmt -l .)"
+          go vet ./...
+          go vet -tags 'f1_repair fault_reproduction' ./...
+          go build ./...
+      - name: Full Go suite with required PostgreSQL and Docker sandbox
+        run: go test -count=1 -timeout 900s ./...
+      - name: Payment and state race checks
+        run: go test -race -count=1 -timeout 300s ./internal/merchant ./internal/oracle ./internal/domain
+
+  demo:
+    name: Web and deterministic repair demo
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: apps/api/go.mod
+          cache-dependency-path: apps/api/go.sum
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - name: Install dependencies
+        run: |
+          go -C apps/api mod download
+          npm --prefix apps/web ci
+      - name: Web lint and demo path safety
+        run: |
+          npm --prefix apps/web run lint
+          make test-demo-paths
+      - name: Install Brave for browser regressions
+        # Official Debian/Ubuntu package repository: https://brave.com/linux/
+        run: |
+          sudo curl -fsSLo /usr/share/keyrings/brave-browser-archive-keyring.gpg https://brave-browser-apt-release.s3.brave.com/brave-browser-archive-keyring.gpg
+          sudo curl -fsSLo /etc/apt/sources.list.d/brave-browser-release.sources https://brave-browser-apt-release.s3.brave.com/brave-browser.sources
+          sudo apt-get update
+          sudo apt-get install -y brave-browser
+      - name: Recorded repair, unsafe rejection, web tests, build and browser smoke
+        run: |
+          cp .env.example .env
+          CHROME_PATH="$(command -v brave-browser)" make demo
