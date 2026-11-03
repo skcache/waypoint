@@ -121,12 +121,12 @@ export function Board({
               onClick={() => onSelect(selected === t.id ? null : t.id)}
               style={tileStyle(t.status, lit, variant)}
               className={`flex size-full min-w-0 overflow-hidden rounded-[16px] text-left transition-[filter,outline-color] duration-200 hover:brightness-110 ${PAD[variant]} ${
-                variant === "wide" ? "flex-row items-center gap-6" : "flex-col justify-between"
+                variant === "wide" ? "flex-row items-center gap-6" : "flex-col"
               } ${selected === t.id ? "outline outline-2 outline-offset-2 outline-accent" : "outline outline-2 outline-offset-2 outline-transparent"}`}
             >
               {variant === "wide" ? (
                 <>
-                  <span className="numeral shrink-0 text-[56px]">{t.id}</span>
+                  <span className="idmark shrink-0 text-[56px]">{t.id}</span>
                   <span className="min-w-0 flex-1">
                     <span className="block text-[13px] font-medium">{word}</span>
                     <span className="block text-[20px] font-medium leading-[1.2]" style={clamp(2)}>{t.title}</span>
@@ -136,15 +136,15 @@ export function Board({
               ) : (
                 <>
                   <span className="flex items-baseline justify-between gap-2">
-                    <span className={`numeral ${variant === "big" ? "text-[56px]" : variant === "mid" ? "text-[28px]" : "text-[20px]"}`}>{t.id}</span>
+                    <span className={`idmark ${variant === "big" ? "text-[56px]" : variant === "mid" ? "text-[28px]" : "text-[20px]"}`}>{t.id}</span>
                     {variant === "big" ? <span className="text-[14px] font-medium">{word}</span> : null}
                   </span>
                   {variant === "big" ? (
-                    <span className="block text-[20px] font-medium leading-[1.25] [overflow-wrap:anywhere]">{t.title}</span>
+                    <span className="mt-4 block text-[20px] font-medium leading-[1.25] [overflow-wrap:anywhere]">{t.title}</span>
                   ) : variant === "mid" && titleLines >= 2 ? (
-                    <span className="block min-h-0 text-[13px] font-medium leading-[1.25]" style={clamp(titleLines)}>{t.title}</span>
+                    <span className="mt-3 block min-h-0 text-[13px] font-medium leading-[1.25]" style={clamp(titleLines)}>{t.title}</span>
                   ) : null}
-                  <span className="block">
+                  <span className="mt-auto block pt-3">
                     {facts.length ? (
                       <span className="mb-2 block space-y-1 text-[14px] leading-snug">
                         {facts.map((f) => (

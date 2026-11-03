@@ -100,7 +100,7 @@ export function EvidenceDrawer({ doc, source, open, onClose }: { doc: DemoExport
                       className="grid w-full grid-cols-[minmax(0,1fr)_repeat(3,3.4rem)] items-center gap-1 py-3 text-left transition-colors hover:bg-surface sm:grid-cols-[minmax(0,1fr)_repeat(3,4.6rem)]"
                     >
                       <span className="flex min-w-0 items-baseline gap-3 pr-1">
-                        <span className="w-9 shrink-0 text-[16px] font-medium">{row.id}</span>
+                        <span className="mono w-10 shrink-0 text-[15px] font-medium">{row.id}</span>
                         <span className="min-w-0 break-words text-[14px] leading-snug text-muted">{(row.repair ?? row.before ?? row.unsafe)?.title ?? row.summary}</span>
                       </span>
                       {COLS.map((c) => (

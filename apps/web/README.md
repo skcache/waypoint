@@ -39,7 +39,7 @@ strip-treemap layout (`src/lib/treemap.ts`).
 Design: dark by default with a light toggle (`html[data-theme]`, remembered per browser). The
 palette borrows PayPal's: navy ground, PayPal blue for what the checker accepted and its yellow for
 what failed (a colour inspiration for the PayPal hackathon, not affiliation or endorsement).
-Archivo for text and the lead number, Geist Mono for ids and code only; no text under 12.5px;
+Atkinson Hyperlegible Next for text and the lead number (it keeps I, l and 1 apart), Geist Mono for rule ids and code; no text under 12.5px;
 status is never colour alone; patch annotations are bound to the patch digest.
 
 See the repository root `README.md` for full project context.

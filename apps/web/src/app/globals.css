@@ -112,7 +112,7 @@
   --color-lit: var(--tile-lit);
   --color-lit-ink: var(--tile-lit-ink);
   --radius-panel: 12px;
-  --font-sans: "Archivo Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Atkinson Hyperlegible Next Variable", ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
@@ -159,6 +159,14 @@
     font-family: var(--font-mono);
     font-variant-numeric: tabular-nums;
     font-size: max(0.92em, 12.5px);
+  }
+
+  /* A rule id such as I13. Mono keeps the capital I apart from the digit 1. */
+  .idmark {
+    font-family: var(--font-mono);
+    font-weight: 300;
+    letter-spacing: -0.04em;
+    line-height: 1;
   }
 
   /* The lead number: very light, very large, tightly set. */

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { GeistMono } from "geist/font/mono";
 
-import "@fontsource-variable/archivo/wdth.css";
+import "@fontsource-variable/atkinson-hyperlegible-next/index.css";
 import { SiteHeader } from "@/components/site-header";
 import { themeScript } from "@/components/theme-toggle";
 import "./globals.css";

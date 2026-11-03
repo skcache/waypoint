@@ -160,7 +160,7 @@ function Instrument({ doc, source }: { doc: DemoExport; source: EvidenceSource }
           <span className="text-[18px] font-semibold">Waypoint</span>
           <span className="truncate text-[14px] text-faint max-sm:hidden" data-testid="case-label">{caseLabel}</span>
         </div>
-        <nav aria-label="Primary" className="flex items-center gap-1">
+        <nav aria-label="Primary" className="flex items-center gap-1 sm:-mr-3">
           <button type="button" onClick={() => setDrawer(true)} className="inline-flex min-h-11 items-center rounded-[10px] px-4 text-[15px] font-medium text-muted transition-colors hover:text-ink">
             Evidence
           </button>
@@ -177,7 +177,7 @@ function Instrument({ doc, source }: { doc: DemoExport; source: EvidenceSource }
             <p className="max-w-[44ch] text-[13px] leading-[1.45] text-muted">
               Waypoint uses an AI to repair a payment bug. A separate checker tests each repair against {ruleCount} rules. This run is {source === "recorded" ? "recorded" : "local"}.
             </p>
-            <div key={step} className="enter mt-5" data-testid="hero">
+            <div key={step} className="enter mt-6" data-testid="hero">
               <div className="flex items-baseline gap-3">
                 <span className="numeral text-[clamp(5.5rem,8vw,7.4rem)]" data-testid="hero-value">{hero.value}</span>
                 <span className="text-[20px] font-medium text-muted">{hero.unit}</span>
@@ -186,7 +186,7 @@ function Instrument({ doc, source }: { doc: DemoExport; source: EvidenceSource }
             </div>
           </div>
 
-          <nav aria-label="Walkthrough" className="order-3 mt-6 min-h-0 lg:order-none lg:flex-1 lg:overflow-y-auto lg:pb-6 lg:pr-2 lg:[mask-image:linear-gradient(to_bottom,black_calc(100%-24px),transparent)]">
+          <nav aria-label="Walkthrough" className="order-3 mt-8 min-h-0 lg:order-none lg:flex-1 lg:overflow-y-auto lg:pb-6 lg:pr-2 lg:[mask-image:linear-gradient(to_bottom,black_calc(100%-24px),transparent)]">
             <p className="text-[13px] font-medium text-faint" data-testid="step-count">Step {step + 1} of {STEPS.length}</p>
             <ol className="mt-2 border-t border-line">
               {STEPS.map((title, i) => {
@@ -252,7 +252,7 @@ function Instrument({ doc, source }: { doc: DemoExport; source: EvidenceSource }
           </div>
         </div>
 
-        <section aria-label="Stage" className="order-2 mt-8 flex min-h-0 flex-col lg:order-none lg:mt-0 lg:pt-1">
+        <section aria-label="Stage" className="order-2 mt-8 flex min-h-0 flex-col lg:order-none lg:mt-0 lg:pt-4">
           {step === 1 ? (
             <div key="repair" className="enter flex min-h-0 flex-1 flex-col">
               <RepairPanel doc={doc} />
@@ -263,7 +263,7 @@ function Instrument({ doc, source }: { doc: DemoExport; source: EvidenceSource }
             </div>
           ) : (
             <div key="board" className="flex min-h-0 flex-1 flex-col">
-              <div className="flex flex-wrap items-end justify-between gap-x-10 gap-y-3 pb-4" data-testid="candidate-facts" data-candidate={boardCol}>
+              <div className="flex flex-wrap items-end justify-between gap-x-10 gap-y-3 pb-6" data-testid="candidate-facts" data-candidate={boardCol}>
                 <div>
                   <p className="text-[20px] font-medium">{model.label}</p>
                   <p className="text-[13px] text-faint">
@@ -293,12 +293,12 @@ function Instrument({ doc, source }: { doc: DemoExport; source: EvidenceSource }
               <div className="h-[64svh] min-h-[432px] lg:h-auto lg:min-h-0 lg:flex-1">
                 <Board tiles={tiles} lit={model.verdict === "VERIFIED"} selected={picked} onSelect={setPicked} label={`${model.label}: ${tiles.length} rules`} />
               </div>
-              <div className="mt-4 grid gap-x-10 gap-y-3 lg:min-h-[96px] lg:grid-cols-[1.35fr_1fr]">
+              <div className="mt-6 grid gap-x-10 gap-y-3 lg:min-h-[96px] lg:grid-cols-[1.35fr_1fr]">
                 <div className="text-[15px] leading-[1.5]" aria-live="polite" data-testid="inspector">
                   {tile ? (
                     <>
                       <p>
-                        <b className="font-medium">{tile.id} · {stateWord(tile.status)}.</b> {tile.title}
+                        <b className="font-medium"><span className="mono">{tile.id}</span> · {stateWord(tile.status)}.</b> {tile.title}
                       </p>
                       {counterexampleFacts(tile.counterexample).length ? (
                         <p className="mt-1 text-muted">{counterexampleFacts(tile.counterexample).join(" · ")}</p>
@@ -353,10 +353,10 @@ function StepBody({
       <div className="space-y-3">
         <p className={p}>
           A customer paid {amount} one time. The ledger shows {fig.incident.fulfilled ?? "more than 1"} fulfillments for this payment.
-          {fig.incident.statusFlagged ? ` The order status is ${humanStatus(models.before.status)}. The checker flags this (rule I8).` : ""}
+          {fig.incident.statusFlagged ? (<> The order status is {humanStatus(models.before.status)}. The checker flags this (rule <span className="mono">I8</span>).</>) : null}
         </p>
         <p className={p}>Each tile on the board is one rule. A failed rule has a large tile.</p>
-        {fig.incident.failed.length ? <p className="text-[14px] font-medium">Failed rules: {fig.incident.failed.join(", ")}</p> : null}
+        {fig.incident.failed.length ? <p className="text-[14px] font-medium">Failed rules: <span className="mono">{fig.incident.failed.join(", ")}</span></p> : null}
       </div>
     );
   }
@@ -425,7 +425,7 @@ function StepBody({
                 >
                   <span className="flex-1">
                     <span className="block text-[15px] font-medium">{mm.label}</span>
-                    <span className="block text-[13px] text-faint">{verdictWord(mm.verdict)}{mm.failed.length ? ` · fails ${mm.failed.join(", ")}` : " · no failed rule"}</span>
+                    <span className="block text-[13px] text-faint">{verdictWord(mm.verdict)}{mm.failed.length ? <> · fails <span className="mono">{mm.failed.join(", ")}</span></> : " · no failed rule"}</span>
                   </span>
                   <span className="text-[14px] tabular-nums text-faint">{mm.fulfilled ?? "?"} fulfillment{mm.fulfilled === 1 ? "" : "s"}</span>
                 </button>
