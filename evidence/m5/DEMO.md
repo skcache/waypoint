@@ -1,5 +1,9 @@
 # M5 deterministic demo — verified payment repair
 
+> For the unified recorded-model demo (F3 duplicate webhook), run `make demo`
+> from the repository root; see [`../../DEMO.md`](../../DEMO.md). This page
+> remains the M5 workbench walkthrough.
+
 This is a five-minute, offline walkthrough of the committed M5 evidence. It
 makes **no model calls, no PayPal calls and no payment mutations**. Every number
 below is read from `evidence/m5/results.json` and

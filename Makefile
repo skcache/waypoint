@@ -11,7 +11,14 @@ include .env
 export
 endif
 
-.PHONY: help dev-api dev-web dev-merchant merchant-reset db-up db-down db-migrate db-reset test test-api test-integration test-web lint lint-api lint-web build-api build-web demo-m5 clean
+.PHONY: help node-check setup dev-api dev-web dev-merchant merchant-reset db-up db-down db-migrate db-reset test test-api test-integration test-web lint lint-api lint-web build-api build-web demo demo-live demo-check demo-m5 clean
+
+node-check: ## Fail early when Node is older than the pinned major
+	@node -e 'const m=+process.versions.node.split(".")[0]; if (m < 22) { console.error("Node 22+ is required (nvm use 22)"); process.exit(1); }'
+
+setup: node-check ## Install Go and Node dependencies for a clean checkout
+	cd $(API_DIR) && go mod download
+	cd $(WEB_DIR) && npm ci
 
 help: ## List available targets
 	@grep -h -E '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "}; {printf "  %-12s %s\n", $$1, $$2}'
@@ -67,6 +74,19 @@ build-api: ## Build the API binary to apps/api/bin/server
 
 build-web: ## Production build of the web app
 	cd $(WEB_DIR) && npm run build
+
+demo: ## Deterministic recorded-model repair demo (tier F; no live model or PayPal)
+	@bash scripts/demo.sh
+
+demo-live: ## Optional fresh hosted-model repair (requires LLM_* credentials; may cost money)
+	@test -n "$$LLM_API_KEY" || (echo "demo-live: export LLM_API_BASE_URL, LLM_API_KEY and LLM_MODEL first" >&2; exit 1)
+	@make --no-print-directory db-up
+	@make --no-print-directory db-migrate
+	cd $(API_DIR) && go run ./cmd/repair -fault F3 -out ../../tmp/demo-live -attempts 2
+
+demo-check: ## Full DB-backed verification, then the deterministic demo
+	cd $(API_DIR) && REQUIRE_DATABASE_TESTS=1 go test -count=1 -timeout 900s ./...
+	@$(MAKE) --no-print-directory demo
 
 demo-m5: ## Deterministic M5 demo checks and workbench entry point (no model calls, no payments)
 	cd $(API_DIR) && go test ./internal/bench -run 'TestCommitted' -v

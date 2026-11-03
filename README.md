@@ -23,6 +23,31 @@ Built for the [PayPal AI Hackathon 2026](https://paypalaihackathon.devpost.com/)
 > here processes real money; all provider traffic is sandbox, and webhook events are
 > trusted **fixture** events, not PayPal-signed webhooks.
 
+## Quickstart — deterministic demo
+
+Prerequisites: Go 1.27+, Node 22 (`nvm use 22`), Docker, `make`.
+
+No model key, PayPal credentials, or payment is required. The demo replays a
+**recorded** hosted-model repair, runs the candidate in the real Docker sandbox,
+and prints the independent oracle verdict plus the seeded unsafe counterexample.
+
+```bash
+cp .env.example .env
+make setup                  # go mod download + npm ci
+make demo                   # starts PostgreSQL, migrates, replays F3, verifies
+make dev-web                # http://localhost:3000/incidents
+```
+
+Expected: `ACCEPTED_FOR_HUMAN_REVIEW`, `VERIFIED_FOR_TESTED_SCENARIOS`, one
+generated diff, and `I13: the merchant recorded 2 fulfillment effects for one
+payment` for the seeded unsafe candidate. All provider evidence is tier F; no
+PayPal Sandbox capture is made. Full instructions and shutdown:
+[`DEMO.md`](DEMO.md).
+
+For an optional fresh hosted-model run, provide `LLM_API_BASE_URL`,
+`LLM_API_KEY`, and `LLM_MODEL`, then run `make demo-live`. It may cost money and
+still does not touch PayPal.
+
 ## Current status
 
 | Area | State |
@@ -282,7 +307,7 @@ are in `evidence/m5/workbench/`.
 
 ```bash
 make dev-api                # Go API on http://localhost:8080
-make dev-web                # Next.js on http://localhost:3000 (V1 static preview)
+make dev-web                # Next.js review console on http://localhost:3000
 curl -s http://localhost:8080/healthz   # => {"status":"ok"}
 curl -s http://localhost:8080/readyz    # 200 when the database + schema are ready
 ```
@@ -325,7 +350,7 @@ not (see the fixture's durable journal).
 ```text
 apps/api       Go services: API (cmd/server), merchant fixture (cmd/merchant),
                PayPal sandbox developer CLI (cmd/paypal-spike), internal packages
-apps/web       Next.js web application (static preview; V2 UI planned)
+apps/web       Next.js incident/benchmark review console
 compose.yaml   Local PostgreSQL development service
 ```
 

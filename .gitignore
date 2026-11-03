@@ -58,3 +58,6 @@ pgdata/
 .DS_Store
 .idea/
 .decisions.jsonl
+
+# Local demo artifacts
+/tmp/
