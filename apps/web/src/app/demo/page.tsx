@@ -2,9 +2,9 @@ import { Showcase } from "@/components/showcase";
 import { loadRecordedDemo } from "@/lib/recorded";
 
 export const metadata = {
-  title: "Local repair replay",
+  title: "Local repair run",
   description:
-    "The local Waypoint repair replay, using the same sanitized evidence projection as the public recorded case file.",
+    "A local Waypoint repair run, using the same sanitized evidence projection as the public recorded case file. Falls back to committed evidence when no local export exists.",
 };
 
 export default async function DemoPage() {

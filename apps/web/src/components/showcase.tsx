@@ -22,8 +22,15 @@ import type {
 import {
   captureObservation,
   failedInvariants,
+  faultTitle,
   humanStatus,
+  modelLabel,
+  modelNote,
   money,
+  observationTierLabel,
+  runKindLabel,
+  sourceLabel,
+  tierNote,
   originalOrder,
   shortId,
   shortTime,
@@ -50,38 +57,60 @@ type DiffLine = {
   newNo?: number;
 };
 
-const stageTitles: Record<StageId, { title: string; description: string }> = {
-  incident: {
-    title: "A late event rewinds a verified capture.",
-    description:
-      "The original order stays approved; the verification order captures once. Four provider interactions show how the duplicate effect appears.",
-  },
-  diagnosis: {
-    title: "The model identifies the broken path.",
-    description:
-      "A recorded hosted-model diagnosis explains the failure, names the source path, and proposes the scoped repair.",
-  },
-  patch: {
-    title: "The candidate changes one webhook handler.",
-    description:
-      "The generated patch is applied inside a disposable worktree. The diff below is the candidate output, not a merged change.",
-  },
-  verification: {
-    title: "Build and tests run in a disposable sandbox.",
-    description:
-      "Build, trusted tests, fixture execution, and the independent judge run against the candidate in a disposable Docker environment.",
-  },
-  oracle: {
-    title: "A separate judge evaluates the ledger invariants.",
-    description:
-      "A separate judge re-reads the durable ledger and evaluates the financial invariants for the tested scenario.",
-  },
-  review: {
-    title: "The candidate stops at human review.",
-    description:
-      "The repair reaches human review only as evidence. No patch is merged, deployed, or allowed to move money.",
-  },
-};
+function stageCopy(doc: DemoExport, stage: StageId): { title: string; description: string } {
+  const failed = failedInvariants(doc.pre_repair.invariants);
+  switch (stage) {
+    case "incident": {
+      if (captureObservation(doc)?.capture_status === "COMPLETED") {
+        const duplicate = failed.some((item) => item.id === "I13");
+        return {
+          title: "The verified capture is not the final order state.",
+          description: duplicate
+            ? `The original incident order ends ${humanStatus(doc.incident.order_status)}. The pre-repair oracle records a verified capture and duplicate fulfillment effects for that payment.`
+            : `The original incident order ends ${humanStatus(doc.incident.order_status)}. The pre-repair oracle records a verified capture for that payment.`,
+        };
+      }
+      return {
+        title: "The pre-repair ledger fails.",
+        description: `The pre-repair oracle flags ${failed.length} invariant${failed.length === 1 ? "" : "s"} for this ${faultTitle(doc.incident.fault).toLowerCase()} case.`,
+      };
+    }
+    case "diagnosis":
+      return {
+        title: "The model proposes a cause.",
+        description: `${modelLabel(doc)} output explains the failure, names the source path, and proposes the scoped repair. This is a hypothesis, not the oracle verdict.`,
+      };
+    case "patch": {
+      const webhook = doc.patch.changed_files.some((file) => file.endsWith("webhook.go"));
+      const count = doc.patch.changed_files.length;
+      return {
+        title: webhook
+          ? "The candidate changes the webhook handler."
+          : `The candidate changes ${count} file${count === 1 ? "" : "s"}.`,
+        description:
+          "The generated patch is applied inside a disposable worktree. The diff below is the candidate output, not a merged change.",
+      };
+    }
+    case "verification":
+      return {
+        title: "Build and tests run in a disposable sandbox.",
+        description:
+          "Build, trusted tests, fixture execution, and the independent judge run against the candidate in a disposable Docker environment.",
+      };
+    case "oracle":
+      return {
+        title: "A separate judge evaluates the ledger invariants.",
+        description:
+          "A separate judge re-reads the durable ledger and evaluates the financial invariants for the tested scenario.",
+      };
+    case "review":
+      return {
+        title: "The candidate stops at human review.",
+        description:
+          "The repair reaches human review only as evidence. No patch is merged, deployed, or allowed to move money.",
+      };
+  }
+}
 
 function Showcase({ initial, variant }: ShowcaseProps) {
   const [doc, setDoc] = useState<DemoExport | null>(initial);
@@ -174,9 +203,9 @@ function Hero({ doc, source }: { doc: DemoExport; source: "recorded" | "local" }
           <div className="flex flex-wrap items-center gap-x-3 gap-y-2 font-mono text-[10px] uppercase tracking-[0.16em] text-faint">
             <span>Payment repair system</span>
             <span className="h-px w-8 bg-line-strong" />
-            <span>{source === "local" ? "local replay" : "recorded evidence"}</span>
+            <span>{sourceLabel(doc, source)}</span>
             <span className="border border-line px-1.5 py-0.5 text-[10px] tracking-[0.1em] text-muted">
-              tier F
+              tier {doc.run.evidence_tier}
             </span>
             <span className="normal-case tracking-normal">no live payments</span>
           </div>
@@ -207,7 +236,7 @@ function Hero({ doc, source }: { doc: DemoExport; source: "recorded" | "local" }
             </Link>
           </div>
         </div>
-        <CaseTeaser doc={doc} source={source} />
+        <CaseTeaser doc={doc} />
       </div>
     </section>
   );
@@ -219,7 +248,7 @@ function DemoIntro({ doc, source }: { doc: DemoExport; source: "recorded" | "loc
       <div className="flex flex-wrap items-end justify-between gap-6">
         <div>
           <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-faint">
-            {source === "local" ? "Local make demo replay" : "Recorded repair evidence"}
+            {sourceLabel(doc, source)}
           </p>
           <h1 className="mt-3 text-3xl font-semibold tracking-[-0.045em] sm:text-4xl">
             {titleFor(doc)}
@@ -230,14 +259,14 @@ function DemoIntro({ doc, source }: { doc: DemoExport; source: "recorded" | "loc
           </p>
         </div>
         <span className="border border-line px-2 py-1 font-mono text-[10px] uppercase tracking-[0.12em] text-muted">
-          tier {doc.run.evidence_tier} · {source === "local" ? "replay" : "recorded"}
+          tier {doc.run.evidence_tier} · {runKindLabel(doc.run.kind)}
         </span>
       </div>
     </section>
   );
 }
 
-function CaseTeaser({ doc, source }: { doc: DemoExport; source: "recorded" | "local" }) {
+function CaseTeaser({ doc }: { doc: DemoExport }) {
   const before = doc.pre_repair.verdict;
   const after = doc.oracle.verdict;
   const verified = after === "VERIFIED_FOR_TESTED_SCENARIOS";
@@ -248,7 +277,7 @@ function CaseTeaser({ doc, source }: { doc: DemoExport; source: "recorded" | "lo
           <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-faint">Case {doc.incident.fault}</p>
           <p className="mt-1 text-lg font-semibold tracking-tight">{titleFor(doc)}</p>
         </div>
-        <span className="font-mono text-[10px] text-faint">{source === "local" ? "local" : "recorded"}</span>
+        <span className="font-mono text-[10px] text-faint">{runKindLabel(doc.run.kind)}</span>
       </div>
       <div className="grid grid-cols-[1fr_auto] items-end gap-5 border-b border-line py-5">
         <div>
@@ -291,7 +320,7 @@ function CaseTeaser({ doc, source }: { doc: DemoExport; source: "recorded" | "lo
         </div>
       </div>
       <p className="mt-4 border-t border-line pt-3 font-mono text-[9px] leading-4 text-faint">
-        Tier F = deterministic fixture evidence. No live PayPal call.
+        {tierNote(doc)}
       </p>
     </aside>
   );
@@ -313,6 +342,7 @@ function CaseFile({
   setCandidate: (mode: CandidateMode) => void;
 }) {
   const failed = failedInvariants(doc.pre_repair.invariants);
+  const copy = stageCopy(doc, stage);
   return (
     <section id="case-file" className="scroll-mt-20 pt-10 sm:pt-12">
       <CaseHeader doc={doc} source={source} />
@@ -324,10 +354,10 @@ function CaseFile({
               {STAGES.find((item) => item.id === stage)?.label}
             </p>
             <h2 className="mt-2 max-w-[780px] text-balance text-2xl font-semibold tracking-[-0.035em] sm:text-3xl">
-              {stageTitles[stage].title}
+              {copy.title}
             </h2>
             <p className="mt-2 max-w-[68ch] text-[13px] leading-6 text-muted">
-              {stageTitles[stage].description}
+              {copy.description}
             </p>
           </div>
           <p className="font-mono text-[10px] text-faint">{stageMeta(doc, stage)}</p>
@@ -360,7 +390,7 @@ function CaseHeader({ doc, source }: { doc: DemoExport; source: "recorded" | "lo
           <span className="text-line-strong">/</span>
           <span>{doc.incident.fault}</span>
           <span className="text-line-strong">/</span>
-          <span>{source === "local" ? "local replay" : "recorded replay"}</span>
+          <span>{sourceLabel(doc, source)}</span>
         </div>
         <h2 className="mt-2 text-2xl font-semibold tracking-[-0.035em] sm:text-[28px]">
           {titleFor(doc)}
@@ -401,7 +431,11 @@ function StageRail({
 }) {
   function move(next: number) {
     const bounded = (next + STAGES.length) % STAGES.length;
-    setStage(STAGES[bounded].id);
+    const nextStage = STAGES[bounded].id;
+    setStage(nextStage);
+    requestAnimationFrame(() => {
+      document.getElementById(`stage-tab-${nextStage}`)?.focus();
+    });
   }
 
   return (
@@ -479,7 +513,7 @@ function IncidentStage({ doc, failed }: { doc: DemoExport; failed: DemoInvariant
 
         <div className="mt-7 border-y border-line bg-surface px-4 py-4">
           <div className="flex items-baseline justify-between gap-3">
-            <h3 className="text-sm font-medium tracking-tight">What failed before the repair</h3>
+            <h3 className="text-sm font-medium tracking-tight">What the pre-repair oracle found</h3>
             <span className="font-mono text-[11px] uppercase tracking-[0.08em] text-bad">{humanStatus(doc.pre_repair.verdict)}</span>
           </div>
           <p className="mt-2 max-w-[70ch] text-[13px] leading-6 text-muted">{doc.pre_repair.reason}</p>
@@ -495,22 +529,25 @@ function IncidentStage({ doc, failed }: { doc: DemoExport; failed: DemoInvariant
           ) : null}
         </div>
 
+        <LedgerCounterexamples items={failed} />
 
         <div className="mt-7 border-l-2 border-accent bg-surface px-3 py-2.5">
           <p className="flex items-start gap-2 text-[11px] leading-5 text-ink">
             <Fingerprint size={14} weight="bold" className="mt-0.5 shrink-0 text-accent" aria-hidden />
-            Provider observations belong to the verification order, not the original incident.
+            Provider calls belong to the verification order, not the original incident.
           </p>
         </div>
 
         <div className="mt-7">
           <div className="flex items-baseline justify-between gap-3 border-b border-line pb-3">
-            <h3 className="text-sm font-medium tracking-tight">Provider events</h3>
-            <span className="font-mono text-[10px] text-faint">{observations.length} recorded · tier F</span>
+            <h3 className="text-sm font-medium tracking-tight">Provider calls</h3>
+            <span className="font-mono text-[10px] text-faint">
+              {observations.length} recorded · tier {observationTierLabel(doc)}
+            </span>
           </div>
           <div className="grid grid-cols-[38px_1fr_auto] gap-3 border-b border-line px-3 py-2 font-mono text-[9px] uppercase tracking-[0.1em] text-faint">
             <span>Seq</span>
-            <span>Event</span>
+            <span>Call</span>
             <span>UTC</span>
           </div>
           <div>
@@ -551,11 +588,73 @@ function IncidentStage({ doc, failed }: { doc: DemoExport; failed: DemoInvariant
             })}
           </div>
         </div>
+        {!observations.some((item) => /webhook/i.test(item.method)) ? (
+          <p className="mt-3 text-[10px] leading-4 text-faint">
+            This artifact contains {observations.length} provider calls and no webhook delivery rows.
+            Any webhook explanation in Diagnosis is a model hypothesis, not an observed row.
+          </p>
+        ) : null}
 
       </div>
 
       <EventDetail observation={observation} />
     </div>
+  );
+}
+
+function LedgerCounterexamples({ items }: { items: DemoInvariant[] }) {
+  const evidenced = items.filter((item) => item.counterexample);
+  if (!evidenced.length) return null;
+  return (
+    <section className="mt-6 border border-line bg-surface px-4 py-4" data-testid="ledger-counterexamples">
+      <div className="flex items-baseline justify-between gap-3">
+        <h3 className="text-sm font-medium tracking-tight">Pre-repair ledger counterexamples</h3>
+        <span className="font-mono text-[10px] text-faint">oracle evidence</span>
+      </div>
+      <p className="mt-2 max-w-[70ch] text-[11px] leading-5 text-muted">
+        These are the oracle&apos;s recorded counterexamples. They are separate from the provider
+        call sequence.
+      </p>
+      <ul className="mt-3 divide-y divide-line/70 border-t border-line">
+        {evidenced.map((item) => {
+          const c = item.counterexample;
+          if (!c) return null;
+          return (
+            <li key={item.id} className="py-3">
+              <div className="flex items-baseline gap-2">
+                <span className="font-mono text-[10px] text-bad">{item.id}</span>
+                <span className="text-[11px] leading-5 text-ink">{item.summary}</span>
+              </div>
+              {c.order_id ? (
+                <p className="mt-1 pl-8 font-mono text-[10px] text-faint">order {shortId(c.order_id, 8, 4)}</p>
+              ) : null}
+              {item.id === "I13" && c.effect_count ? (
+                <div className="mt-1.5 pl-8">
+                  <p className="font-mono text-[11px] text-bad">{c.effect_count} fulfillment effects</p>
+                  {c.effects?.length ? (
+                    <ul className="mt-1 flex flex-wrap gap-x-4 gap-y-1 font-mono text-[10px] text-muted">
+                      {c.effects.map((effect) => <li key={effect}>{effect}</li>)}
+                    </ul>
+                  ) : null}
+                </div>
+              ) : null}
+              {item.id === "I8" && c.final_status ? (
+                <p className="mt-1.5 pl-8 font-mono text-[10px] leading-5 text-muted">
+                  final status {humanStatus(c.final_status)}
+                  {c.confirm_event_id ? ` · journal confirmation event ${c.confirm_event_id}` : ""}
+                </p>
+              ) : null}
+              {item.id === "I14" && c.event_id ? (
+                <p className="mt-1.5 pl-8 font-mono text-[10px] leading-5 text-muted">
+                  ledger fulfillment event {c.event_id}
+                  {c.final_status ? ` · order status ${humanStatus(c.final_status)}` : ""}
+                </p>
+              ) : null}
+            </li>
+          );
+        })}
+      </ul>
+    </section>
   );
 }
 
@@ -592,7 +691,7 @@ function EventDetail({ observation }: { observation?: DemoObservation }) {
       <div className="flex items-center justify-between gap-3 border-b border-line px-4 py-3">
         <div>
           <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-faint">
-            Selected event · verification order
+            Selected call · verification order
           </p>
           <p className="mt-1 font-mono text-sm text-ink">
             {String(observation.seq).padStart(2, "0")} / {observation.method}
@@ -609,7 +708,7 @@ function EventDetail({ observation }: { observation?: DemoObservation }) {
         ))}
       </dl>
       <p className="border-t border-line px-4 py-3 font-mono text-[10px] leading-4 text-faint">
-        Raw event detail, without inferred timestamps or effects.
+        Raw observation detail, without inferred timestamps or effects.
       </p>
     </aside>
   );
@@ -622,6 +721,13 @@ function DiagnosisStage({ doc }: { doc: DemoExport }) {
       <div>
         {diagnosis ? (
           <>
+            <div className="mb-5 border-l-2 border-accent bg-surface px-3 py-2.5">
+              <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-accent">Model hypothesis</p>
+              <p className="mt-1 text-[11px] leading-5 text-muted">
+                This is the {modelLabel(doc).toLowerCase()}&apos;s explanation, not an independent verdict.
+                The oracle in stage 05 is the separate check.
+              </p>
+            </div>
             <p className="max-w-[780px] text-balance text-xl font-medium leading-[1.35] tracking-[-0.025em] text-ink sm:text-2xl">
               {diagnosis.root_cause}
             </p>
@@ -649,7 +755,7 @@ function DiagnosisStage({ doc }: { doc: DemoExport }) {
               </div>
             ) : null}
             {diagnosis.uncertainties?.length ? (
-              <details className="mt-6 border-t border-line pt-4">
+              <details open className="mt-6 border-t border-line pt-4">
                 <summary className="flex items-center gap-2 text-[11px] font-medium text-muted">
                   Model uncertainties
                   <CaretDown size={13} weight="bold" />
@@ -667,16 +773,16 @@ function DiagnosisStage({ doc }: { doc: DemoExport }) {
         )}
       </div>
       <aside className="border-t border-line pt-5 lg:border-l lg:border-t-0 lg:pl-7 lg:pt-0">
-        <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-faint">Recorded model</p>
+        <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-faint">{modelLabel(doc)}</p>
         <p className="mt-2 break-words font-mono text-sm text-ink">{doc.run.model}</p>
-        <p className="mt-2 text-[11px] leading-5 text-muted">
-          Recorded hosted-model reply. No model call is running for this page.
-        </p>
+        <p className="mt-2 text-[11px] leading-5 text-muted">{modelNote(doc)}</p>
         <dl className="mt-6 divide-y divide-line/70">
           <MetaRow label="Mode" value={doc.run.model_mode} />
           <MetaRow label="Evidence tier" value={doc.run.evidence_tier} />
           <MetaRow label="Finished" value={utcTimestamp(doc.run.finished_at)} />
-          {doc.run.model_recorded_at ? <MetaRow label="Recorded" value={utcTimestamp(doc.run.model_recorded_at)} /> : null}
+          {doc.run.model_recorded_at ? (
+            <MetaRow label={doc.run.kind === "live" ? "Model output" : "Recorded"} value={utcTimestamp(doc.run.model_recorded_at)} />
+          ) : null}
           <MetaRow label="Prompt tokens" value={doc.run.prompt_tokens.toLocaleString("en-US")} />
           <MetaRow label="Completion tokens" value={doc.run.completion_tokens.toLocaleString("en-US")} />
         </dl>
@@ -709,11 +815,14 @@ function PatchStage({ doc }: { doc: DemoExport }) {
       <div className="min-w-0">
         <div className="flex flex-wrap items-start justify-between gap-4 border-b border-line pb-4">
           <div>
-            <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-faint">Patch summary</p>
+            <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-faint">Candidate patch summary</p>
             <h3 className="mt-1 text-base font-medium tracking-tight text-ink">{doc.patch.summary}</h3>
           </div>
           <span className="font-mono text-[10px] text-faint">{doc.patch.changed_files.length} changed</span>
         </div>
+        <p className="mt-3 text-[10px] leading-4 text-faint">
+          Model-authored summary. The diff below is the reviewable source of truth.
+        </p>
         <DiffViewer text={doc.patch.diff} />
       </div>
       <aside className="border-t border-line pt-5 lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0">
@@ -988,7 +1097,7 @@ function OracleStage({
           <p className={`mt-2 border-l-2 pl-2 font-mono text-[10px] leading-4 ${isVerified ? "border-ok text-muted" : "border-bad text-bad"}`}>
             {unsafe
               ? `HISTORICAL ORACLE EVIDENCE · ${doc.unsafe.fresh_trusted_gate.executed ? "fresh trusted gate below" : "fresh trusted gate not run"}`
-              : "TESTED FIXTURE SCENARIO ONLY · TIER F"}
+              : `TESTED ${doc.run.evidence_tier === "R" ? "PROVIDER" : "FIXTURE"} SCENARIO ONLY · TIER ${doc.run.evidence_tier}`}
           </p>
           <p className="mt-6 max-w-[62ch] text-[13px] leading-6 text-muted">{active.reason}</p>
           {unsafe ? (
@@ -1018,8 +1127,9 @@ function OracleStage({
             <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-faint">What the oracle established</p>
             <p className="mt-2 max-w-[62ch] text-[11px] leading-5 text-muted">
               The compiled candidate fixture was replayed, the durable ledger was re-read, and
-              the listed financial invariants were evaluated for this scenario. This is tier-F
-              evidence, not a claim about live PayPal behavior or untested scenarios.
+              the listed financial invariants were evaluated for this scenario. This is tier
+              {doc.run.evidence_tier} evidence, not a claim about live PayPal behavior or untested
+              scenarios.
             </p>
           </div>
           {!unsafe && capture ? (
@@ -1122,7 +1232,7 @@ function ReviewStage({ doc, onCompare }: { doc: DemoExport; onCompare: () => voi
           <MetaRow label="Human approval required" value={<YesNo value={human.human_approval_required} />} />
         </dl>
         <p className="mt-6 border-t border-line pt-4 text-[11px] leading-5 text-muted">
-          Review recording is disabled in this hosted evidence view. No visitor can record an
+          This view is read-only. Review recording is disabled here, so no visitor can record an
           approval from this page.
         </p>
         <button
@@ -1197,13 +1307,47 @@ function EmptyState({ title, body }: { title: string; body: string }) {
 
 function EvidenceSkeleton() {
   return (
-    <div className="py-12">
-      <div className="h-3 w-32 bg-line" />
-      <div className="mt-5 h-14 w-2/3 bg-line/70" />
-      <div className="mt-4 h-4 w-1/3 bg-line/50" />
-      <div className="mt-12 grid gap-4 lg:grid-cols-2">
-        <div className="h-64 border border-line bg-surface" />
-        <div className="h-64 border border-line bg-surface" />
+    <div className="py-10" aria-busy="true" aria-live="polite">
+      <div className="h-2.5 w-40 animate-pulse bg-line motion-reduce:animate-none" />
+      <div className="mt-4 h-12 w-3/5 animate-pulse bg-line/70 motion-reduce:animate-none" />
+      <div className="mt-3 h-3 w-2/5 animate-pulse bg-line/50 motion-reduce:animate-none" />
+      <div className="mt-8 grid grid-cols-3 border-y border-line sm:grid-cols-6">
+        {[0, 1, 2, 3, 4, 5].map((item) => (
+          <div key={item} className="border-r border-line px-3 py-4 last:border-r-0 sm:px-4">
+            <div className="h-2 w-5 animate-pulse bg-line motion-reduce:animate-none" />
+            <div className="mt-2 h-3 w-16 animate-pulse bg-line/70 motion-reduce:animate-none" />
+            <div className="mt-1.5 h-2 w-12 animate-pulse bg-line/50 motion-reduce:animate-none" />
+          </div>
+        ))}
+      </div>
+      <div className="mt-8 grid gap-8 lg:grid-cols-[1.1fr_.9fr]">
+        <div className="border border-line bg-surface p-5">
+          <div className="h-2.5 w-28 animate-pulse bg-line/70 motion-reduce:animate-none" />
+          <div className="mt-4 h-6 w-4/5 animate-pulse bg-line/60 motion-reduce:animate-none" />
+          <div className="mt-3 space-y-2">
+            <div className="h-2.5 w-full animate-pulse bg-line/50 motion-reduce:animate-none" />
+            <div className="h-2.5 w-11/12 animate-pulse bg-line/50 motion-reduce:animate-none" />
+            <div className="h-2.5 w-3/4 animate-pulse bg-line/50 motion-reduce:animate-none" />
+          </div>
+          <div className="mt-6 border-t border-line pt-4">
+            <div className="h-2.5 w-24 animate-pulse bg-line/60 motion-reduce:animate-none" />
+            <div className="mt-3 space-y-2">
+              <div className="h-2.5 w-full animate-pulse bg-line/40 motion-reduce:animate-none" />
+              <div className="h-2.5 w-10/12 animate-pulse bg-line/40 motion-reduce:animate-none" />
+            </div>
+          </div>
+        </div>
+        <div className="border border-line bg-surface p-5">
+          <div className="h-2.5 w-24 animate-pulse bg-line/70 motion-reduce:animate-none" />
+          <div className="mt-4 divide-y divide-line/70">
+            {[0, 1, 2, 3, 4].map((item) => (
+              <div key={item} className="flex justify-between gap-4 py-3">
+                <div className="h-2.5 w-24 animate-pulse bg-line/50 motion-reduce:animate-none" />
+                <div className="h-2.5 w-20 animate-pulse bg-line/40 motion-reduce:animate-none" />
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
       <p className="mt-4 font-mono text-[10px] text-faint">Loading evidence file.</p>
     </div>
@@ -1216,9 +1360,8 @@ function EvidenceError({ message }: { message: string }) {
       <WarningCircle size={24} weight="bold" className="text-bad" aria-hidden />
       <h1 className="mt-4 text-2xl font-semibold tracking-tight">Evidence unavailable</h1>
       <p className="mt-3 text-sm leading-6 text-muted">
-        The public case file expects the committed sanitized evidence at
-        <span className="mx-1 font-mono text-[12px] text-ink">public/demo/recorded.json</span>.
-        Run <span className="font-mono text-[12px] text-ink">make demo</span> for a fresh local
+        The public case file expects the committed sanitized evidence at{" "}
+        <span className="font-mono text-[12px] text-ink">public/demo/recorded.json</span>. Run <span className="font-mono text-[12px] text-ink">make demo</span> for a fresh local
         replay.
       </p>
       {message ? <p className="mt-3 font-mono text-[10px] leading-5 text-faint">{message}</p> : null}

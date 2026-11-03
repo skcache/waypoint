@@ -52,6 +52,51 @@ export function faultTitle(fault: string): string {
   return FAULT_TITLES[fault] ?? `Payment incident ${fault}`;
 }
 
+export function runKindLabel(kind?: string): string {
+  if (kind === "recorded") return "recorded";
+  if (kind === "replay") return "replay";
+  if (kind === "live") return "live";
+  return "unknown";
+}
+
+export function sourceLabel(doc: DemoExport, source: "recorded" | "local"): string {
+  if (source === "recorded") return "recorded evidence";
+  if (doc.run.kind === "live") return "local live run";
+  if (doc.run.kind === "replay") return "local replay";
+  return "local recorded run";
+}
+
+export function modelLabel(doc: DemoExport): string {
+  if (doc.run.kind === "live") return "Hosted model";
+  if (doc.run.kind === "replay") return "Replayed model";
+  return "Recorded model";
+}
+
+export function modelNote(doc: DemoExport): string {
+  if (doc.run.kind === "replay") {
+    return "Replayed recorded model output. No hosted model is called for this page.";
+  }
+  if (doc.run.kind === "live") {
+    return "Hosted-model output captured for this run. No model call is running for this page.";
+  }
+  return "Recorded hosted-model reply. No model call is running for this page.";
+}
+
+export function tierNote(doc: DemoExport): string {
+  if (doc.run.evidence_tier === "F") {
+    return "Tier F: deterministic fixture evidence. No live PayPal call.";
+  }
+  if (doc.run.evidence_tier === "R") {
+    return "Tier R: real provider evidence recorded by this run.";
+  }
+  return `Tier ${doc.run.evidence_tier || "unknown"}: evidence tier is recorded per observation.`;
+}
+
+export function observationTierLabel(doc: DemoExport): string {
+  const tiers = Array.from(new Set((doc.incident.observations ?? []).map((item) => item.tier).filter(Boolean)));
+  return tiers.length ? tiers.join(" / ") : "unknown";
+}
+
 export function shortId(value?: string, head = 8, tail = 4): string {
   if (!value) return "not exported";
   if (value.length <= head + tail + 1) return value;
@@ -118,9 +163,9 @@ export function stageMeta(
 ): string {
   switch (stage) {
     case "incident":
-      return `${doc.incident.observations.length} events`;
+      return `${doc.incident.observations.length} provider calls`;
     case "diagnosis":
-      return "recorded replay";
+      return runKindLabel(doc.run.kind);
     case "patch":
       return `${doc.patch.changed_files.length} file${doc.patch.changed_files.length === 1 ? "" : "s"}`;
     case "verification": {

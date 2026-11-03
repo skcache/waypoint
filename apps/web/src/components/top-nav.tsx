@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 const links = [
   { href: "/", label: "Case file", short: "Case" },
   { href: "/benchmark", label: "Benchmark", short: "Benchmark" },
-  { href: "/demo", label: "Local replay", short: "Replay" },
+  { href: "/demo", label: "Local run", short: "Run" },
 ] as const;
 
 export function TopNav() {

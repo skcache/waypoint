@@ -55,11 +55,37 @@ try {
   const lower = text.toLowerCase();
   assert.ok(lower.includes("original incident order"), "original order is labelled");
   assert.ok(lower.includes("verification order"), "verification order is labelled");
+  assert.ok(lower.includes("the verified capture is not the final order state"), "incident narrative is constrained to observed state");
+  assert.ok(!lower.includes("a late event rewinds"), "incident narrative does not assert an unobserved webhook");
   assert.ok(
     text.includes(run.incident.original_order_id ?? run.incident.order_id),
     "original order id is visible",
   );
   assert.ok(text.includes(run.incident.verification_order_id), "verification order id is visible");
+
+  // The stage rail must be keyboard navigable.
+  await page.focus('[data-stage="incident"]');
+  await page.keyboard.press("ArrowRight");
+  await page.waitForFunction(
+    () =>
+      document.querySelector('[data-stage="diagnosis"]')?.getAttribute("aria-selected") === "true" &&
+      document.activeElement?.getAttribute("data-stage") === "diagnosis",
+  );
+  assert.equal(
+    await page.evaluate(() => document.activeElement?.getAttribute("data-stage")),
+    "diagnosis",
+    "arrow keys move the active stage and focus",
+  );
+  await page.keyboard.press("ArrowLeft");
+  await page.waitForFunction(
+    () => document.querySelector('[data-stage="incident"]')?.getAttribute("aria-selected") === "true",
+  );
+
+  // The pre-repair oracle counterexamples must show the duplicate fulfillment
+  // directly, rather than asking the four provider calls to imply it.
+  const ledger = await page.$eval('[data-testid="ledger-counterexamples"]', (el) => el.textContent ?? "");
+  assert.ok(ledger.includes("I13") && ledger.includes("evt-cap-1") && ledger.includes("evt-cap-2"), "I13 ledger counterexample is visible");
+  assert.ok(ledger.includes("2 fulfillment effects"), "duplicate effect count is visible");
 
   // Select the capture event, then inspect its detail.
   const rows = await page.$$('[data-testid="observation-row"]');
@@ -72,8 +98,17 @@ try {
   );
 
   await page.click('[data-stage="diagnosis"]');
-  await page.waitForFunction(() => document.body.innerText.includes("recorded hosted-model diagnosis"));
-  assert.ok((await page.evaluate(() => document.body.innerText)).includes("Recorded hosted-model reply"));
+  await page.waitForFunction(() => document.body.innerText.toLowerCase().includes("model hypothesis"));
+  const diagnosisText = (await page.evaluate(() => document.body.innerText)).toLowerCase();
+  assert.ok(
+    diagnosisText.includes(run.run.kind === "replay" ? "replayed recorded model output" : "recorded hosted-model reply"),
+    "model provenance is accurate",
+  );
+  assert.ok(
+    diagnosisText.includes("no merchant_webhook_events") &&
+      diagnosisText.includes("not directly observed"),
+    "the model's webhook uncertainty is visible",
+  );
 
   await page.click('[data-stage="patch"]');
   const diff = await page.$eval('[data-testid="demo-diff"]', (el) => el.textContent ?? "");

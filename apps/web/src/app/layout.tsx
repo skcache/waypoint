@@ -33,18 +33,18 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
               <TopNav />
             </div>
             <p className="hidden font-mono text-[10px] uppercase tracking-[0.12em] text-faint lg:block">
-              Tier F evidence / no live payments
+              Read-only evidence / no live payments
             </p>
           </header>
           <main className="flex-1 py-8 sm:py-10">{children}</main>
           <footer className="flex flex-col justify-between gap-4 border-t border-line py-7 text-[11px] leading-5 text-muted sm:flex-row sm:items-start">
             <p className="max-w-[78ch]">
-              Waypoint records evidence. It does not move money. Provider interactions are
-              deterministic tier-F fixtures; no PayPal Sandbox transaction or signed webhook
-              was used. A repair reaches human review only as a candidate.
+              Waypoint records evidence. It does not move money. Run mode and evidence tier
+              are labeled on each case file; no live PayPal capture is made from this view.
+              A repair reaches human review only as a candidate.
             </p>
             <p className="shrink-0 font-mono text-[10px] text-faint">
-              RECORDED / REPLAY / NO LIVE CAPTURES
+              READ-ONLY / NO LIVE CAPTURES
             </p>
           </footer>
         </div>
