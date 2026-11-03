@@ -477,4 +477,37 @@ func TestExportRecordedEvidenceIsSanitizedAndTyped(t *testing.T) {
 	if doc.HumanReview.DeveloperTreeApplied || doc.HumanReview.Deployed || !doc.HumanReview.CandidatePatchAppliedInDisposableWorktree {
 		t.Fatalf("human review = %+v", doc.HumanReview)
 	}
+	want, err := os.ReadFile(filepath.Join(root, "evidence", "m4-unsafe-f3", "patch.diff"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if doc.Unsafe.Diff != string(want) || doc.Unsafe.DiffDigest != diffDigest(want) {
+		t.Fatalf("unsafe diff does not match the recorded seeded patch bytes")
+	}
+	if len(doc.Unsafe.ChangedFiles) != 1 || doc.Unsafe.ChangedFiles[0] != "apps/api/internal/merchant/webhook.go" {
+		t.Fatalf("unsafe changed files = %v", doc.Unsafe.ChangedFiles)
+	}
+}
+
+func TestReadUnsafeDiffIsOptionalAndValidated(t *testing.T) {
+	dir := t.TempDir()
+	evalPath := filepath.Join(dir, "eval.json")
+	got, err := readUnsafeDiff(evalPath)
+	if err != nil || got.text != "" || got.files != nil {
+		t.Fatalf("missing sibling diff should export nothing: %+v %v", got, err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "patch.diff"), []byte("not a diff\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := readUnsafeDiff(evalPath); err == nil {
+		t.Fatal("a non-diff sibling must be rejected")
+	}
+	ok := "diff --git a/x.go b/x.go\n--- a/x.go\n+++ b/x.go\n@@ -1 +1 @@\n-a\n+b\n"
+	if err := os.WriteFile(filepath.Join(dir, "patch.diff"), []byte(ok), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	got, err = readUnsafeDiff(evalPath)
+	if err != nil || len(got.files) != 1 || got.files[0] != "x.go" || got.digest != diffDigest([]byte(ok)) {
+		t.Fatalf("valid diff: %+v %v", got, err)
+	}
 }

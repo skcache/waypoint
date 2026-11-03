@@ -10,6 +10,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -265,6 +266,12 @@ type unsafe struct {
 	EvaluatedAt string      `json:"evaluated_at,omitempty"`
 	Invariants  []invariant `json:"invariants"`
 	FreshGate   freshGate   `json:"fresh_trusted_gate"`
+	// Diff is the seeded candidate's own patch, read from the file beside the
+	// recorded unsafe evaluation. It is optional: a recorded evaluation with no
+	// sibling patch.diff simply exports without it.
+	Diff         string   `json:"diff,omitempty"`
+	DiffDigest   string   `json:"diff_digest,omitempty"`
+	ChangedFiles []string `json:"changed_files,omitempty"`
 }
 
 type freshGate struct {
@@ -399,6 +406,10 @@ func run(from, out, mode, source, sourceLabel, unsafePath, unsafeSource, unsafeL
 	if err != nil {
 		return err
 	}
+	unsafeDiff, err := readUnsafeDiff(unsafePath)
+	if err != nil {
+		return err
+	}
 
 	recordedAt := ""
 	if sourceReport != "" {
@@ -485,6 +496,7 @@ func run(from, out, mode, source, sourceLabel, unsafePath, unsafeSource, unsafeL
 			Kind: "seeded", Source: unsafeSource, Provenance: "Recorded M4 independent oracle evaluation; this is not a fresh judge run.",
 			Verdict: unsafeEval.Verdict, Reason: unsafeEval.Reason, EvaluatedAt: unsafeEval.EvaluatedAt,
 			Invariants: unsafeEval.Invariants, FreshGate: fresh,
+			Diff: unsafeDiff.text, DiffDigest: unsafeDiff.digest, ChangedFiles: unsafeDiff.files,
 		},
 		HumanReview: humanReview{
 			Status: rep.Status,
@@ -746,6 +758,40 @@ func steps(att *repair.Attempt) []step {
 		})
 	}
 	return out
+}
+
+type seededDiff struct {
+	text   string
+	digest string
+	files  []string
+}
+
+// readUnsafeDiff returns the seeded unsafe candidate's patch stored beside its
+// recorded evaluation. The patch must be a git-style unified diff; its digest
+// and file list are derived from the bytes, never taken from a label.
+func readUnsafeDiff(evalPath string) (seededDiff, error) {
+	path := filepath.Join(filepath.Dir(evalPath), "patch.diff")
+	raw, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return seededDiff{}, nil
+	}
+	if err != nil {
+		return seededDiff{}, fmt.Errorf("read unsafe candidate diff: %w", err)
+	}
+	text := string(raw)
+	if !strings.HasPrefix(text, "diff --git ") {
+		return seededDiff{}, fmt.Errorf("unsafe candidate diff is not a git unified diff")
+	}
+	var files []string
+	for _, line := range strings.Split(text, "\n") {
+		if strings.HasPrefix(line, "+++ b/") {
+			files = append(files, strings.TrimPrefix(line, "+++ b/"))
+		}
+	}
+	if len(files) == 0 {
+		return seededDiff{}, fmt.Errorf("unsafe candidate diff changes no files")
+	}
+	return seededDiff{text: text, digest: diffDigest(raw), files: files}, nil
 }
 
 func readFreshGate(path string) (freshGate, error) {
