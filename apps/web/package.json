@@ -10,7 +10,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "node --test src/lib/review-guard.test.mjs"
+    "test": "node --test src/lib/review-guard.test.mjs",
+    "test:browser": "node src/lib/demo-browser.test.mjs"
   },
   "dependencies": {
     "next": "16.4.2",
@@ -24,6 +25,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.4.2",
+    "puppeteer-core": "^24.43.1",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

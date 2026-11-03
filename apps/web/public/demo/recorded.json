@@ -1,0 +1,422 @@
+{
+  "schema_version": 1,
+  "run": {
+    "kind": "recorded",
+    "mode": "oracle",
+    "model_mode": "recorded hosted model",
+    "model": "deepseek/deepseek-v4.1-flash",
+    "model_calls": [
+      {
+        "purpose": "diagnosis",
+        "model": "deepseek/deepseek-v4.1-flash",
+        "prompt_tokens": 12273,
+        "completion_tokens": 2142,
+        "latency_ms": 8961
+      },
+      {
+        "purpose": "patch",
+        "model": "deepseek/deepseek-v4.1-flash",
+        "prompt_tokens": 10366,
+        "completion_tokens": 9455,
+        "latency_ms": 24720
+      }
+    ],
+    "prompt_tokens": 22639,
+    "completion_tokens": 11597,
+    "usage_source": "provider-reported",
+    "run_id": "M3-INC-F3-732229b4-03f6-4af1-bbee-6cb80c53619b",
+    "base_revision": "7cd25ae2c689685f28c6f395ab55aecc9d19521c",
+    "revision_source": "git-resolve",
+    "evidence_tier": "F",
+    "finished_at": "2026-10-22T02:23:36Z",
+    "model_recorded_at": "2026-10-22T02:23:36Z",
+    "source": "evidence/m4-live/f3",
+    "source_label": "M4 recorded F3 hosted run"
+  },
+  "incident": {
+    "id": "M3-INC-F3-732229b4-03f6-4af1-bbee-6cb80c53619b",
+    "fault": "F3",
+    "order_id": "732229b4-03f6-4af1-bbee-6cb80c53619b",
+    "order_status": "APPROVED",
+    "evidence_tier": "F",
+    "total_minor": 1234,
+    "currency": "USD",
+    "observations": [
+      {
+        "seq": 1,
+        "at": "2026-10-22T02:23:20.038029833Z",
+        "method": "create",
+        "request_id_durable_before_call": false,
+        "mutation_applied": false,
+        "idempotent_replay": false,
+        "response_dropped": false,
+        "definite_refusal": false,
+        "tier": "F"
+      },
+      {
+        "seq": 2,
+        "at": "2026-10-22T02:23:20.041594083Z",
+        "method": "read",
+        "request_id_durable_before_call": false,
+        "mutation_applied": false,
+        "idempotent_replay": false,
+        "response_dropped": false,
+        "definite_refusal": false,
+        "tier": "F"
+      },
+      {
+        "seq": 3,
+        "at": "2026-10-22T02:23:20.042517208Z",
+        "method": "read",
+        "request_id_durable_before_call": false,
+        "mutation_applied": false,
+        "idempotent_replay": false,
+        "response_dropped": false,
+        "definite_refusal": false,
+        "tier": "F"
+      },
+      {
+        "seq": 4,
+        "at": "2026-10-22T02:23:20.04375075Z",
+        "method": "capture",
+        "request_id_durable_before_call": false,
+        "mutation_applied": false,
+        "idempotent_replay": false,
+        "response_dropped": false,
+        "definite_refusal": false,
+        "tier": "F"
+      }
+    ]
+  },
+  "pre_repair": {
+    "accepted": false,
+    "reason": "order did not reach CAPTURED_VERIFIED (status APPROVED); counterexample: I8: final order status rolled back from a verified capture",
+    "order_status": "APPROVED",
+    "verdict": "UNSAFE",
+    "evaluated_at": "2026-10-22T02:22:08.899281Z",
+    "invariants": [
+      {
+        "id": "I1",
+        "status": "PASS",
+        "summary": "all local amounts are minor-unit integers with explicit currency; all provider-bound amounts are exact two-decimal renderings"
+      },
+      {
+        "id": "I2",
+        "status": "PASS",
+        "summary": "every outbound operation carried exactly the server-side order amount and currency"
+      },
+      {
+        "id": "I3",
+        "status": "PASS",
+        "summary": "every capture attempt is preceded by an observed buyer approval belonging to the same order"
+      },
+      {
+        "id": "I4",
+        "status": "PASS",
+        "summary": "every outbound mutation was preceded by its durable operation row (probed before the call); no capture identity was replaced while an earlier attempt remained unresolved"
+      },
+      {
+        "id": "I5",
+        "status": "PASS",
+        "summary": "no ambiguity was converted to failure; no new identity followed an ambiguous outcome; no false failure contradicts provider evidence"
+      },
+      {
+        "id": "I6",
+        "status": "PASS",
+        "summary": "every completed-capture claim is corroborated by matching provider evidence (order, amount, currency, COMPLETED status)"
+      },
+      {
+        "id": "I7",
+        "status": "PASS",
+        "summary": "at most one applied capture effect per logical order; no duplicate capture pathway; idempotent replays returned the original capture"
+      },
+      {
+        "id": "I8",
+        "status": "FAIL",
+        "summary": "final order status rolled back from a verified capture"
+      },
+      {
+        "id": "I9",
+        "status": "PASS",
+        "summary": "every significant local state carries its explicit journal event"
+      },
+      {
+        "id": "I10",
+        "status": "NOT_APPLICABLE",
+        "summary": "no refund activity in the executed scenarios (refunds are not required for M2)"
+      },
+      {
+        "id": "I11",
+        "status": "PASS",
+        "summary": "M2 performs no apply/deploy step and exposes no patch-application mechanism; the verdict is an advisory output only (automatic-apply prevention for a future pipeline is out of M2 scope)"
+      },
+      {
+        "id": "I12",
+        "status": "PASS",
+        "summary": "provenance is explicit across provider observations and the journal; scripted interactions are labelled F, never R"
+      },
+      {
+        "id": "I13",
+        "status": "FAIL",
+        "summary": "the merchant recorded 2 fulfillment effects for one payment"
+      },
+      {
+        "id": "I14",
+        "status": "FAIL",
+        "summary": "a fulfillment effect exists for an order that is not CAPTURED_VERIFIED"
+      }
+    ]
+  },
+  "diagnosis": {
+    "root_cause": "The F3 legacy webhook handler (legacyApplyWebhookEvent) treats the provider event payload as the source of truth: it writes ORDER.APPROVED directly onto merchant_orders and keys fulfillment by event id, so a late/duplicate approval event rewinds an already-verified capture back to APPROVED and can mint duplicate fulfillment effects.",
+    "mechanism": "Capture completed normally: the CAPTURE operation row is SUCCEEDED with ProviderCaptureID CAP-SCRIPT-0001 (EV-4) and the provider confirms a COMPLETED capture of 12.34 USD under the same request id (EV-9, EV-13), which is the path that seals the order as CAPTURED_VERIFIED. The order row nevertheless reads Status=APPROVED with UpdatedAt 19:22:08.856107 (EV-2), i.e. ~11 ms AFTER the capture operation was updated at 19:22:08.845393 (EV-4) and after the provider capture confirmation (EV-9). The only code path in the supplied sources that writes StatusApproved from an inbound event is legacyApplyWebhookEvent's ORDER.APPROVED branch, which unconditionally UPDATEs merchant_orders.status; the canonical applyWebhookEvent never advances or rewinds payment state from an event. The result is a financially inconsistent record: money is captured provider-side (EV-1 claimed_capture_id CAP-SCRIPT-0001, EV-9, EV-13) while the local order is presented as merely APPROVED, and the same handler's event-id-keyed effect_key allows more than one fulfillment effect for one capture.",
+    "proposed_fix": "Stop wiring the legacy handler: have HandleWebhook dispatch to the canonical applyWebhookEvent (remove the F3 legacy selection in fixture_wiring.go). The canonical handler must remain the only event path: record a durable receipt keyed by provider event id, never write order status from an event, fulfill only when the local order is already CAPTURED_VERIFIED and the event's capture id equals the sealed provider_capture_id, and use a stable per-order effect key (e.g. 'FULFILL') so redelivered or distinct events for the same capture yield exactly one fulfillment effect.",
+    "suspected_files": [
+      "apps/api/internal/merchant/webhook.go",
+      "apps/api/internal/merchant/fixture_wiring.go"
+    ],
+    "supporting_evidence": [
+      "EV-1",
+      "EV-2",
+      "EV-4",
+      "EV-9",
+      "EV-13"
+    ],
+    "invariants_at_risk": [
+      "I6"
+    ],
+    "uncertainties": [
+      "No merchant_webhook_events or merchant_fulfillment_effects rows are included in the evidence, so the specific ORDER.APPROVED delivery (and any duplicate fulfillment effect) is inferred from timestamp ordering and the F3 wiring, not directly observed.",
+      "fixture_wiring.go, which selects the legacy handler, is referenced in the sources but was not provided for inspection, so the exact wiring line is unconfirmed.",
+      "Evidence tier is F (scripted fixture), so this diagnosis describes the fixture's seeded defect and does not establish behavior of a real PayPal Sandbox or production integration.",
+      "The evidence cannot establish whether any downstream consumer already acted on the rewound APPROVED status or on a duplicated fulfillment effect."
+    ]
+  },
+  "patch": {
+    "summary": "The F3 legacy webhook handler (legacyApplyWebhookEvent) trusted the event payload as the source of truth: it rewound merchant_orders.status to APPROVED on any ORDER.APPROVED event (even after a verified capture) and keyed fulfillment by event id, allowing duplicate effects. This patch makes the legacy handler apply the canonical event semantics: it no longer writes order status from an event, it fulfills only when the local order is already CAPTURED_VERIFIED and the event's capture id matches the sealed provider_capture_id, and it uses the stable per-order effect key 'FULFILL' so redelivered or distinct events for one capture yield exactly one fulfillment effect. The F3 wiring is left intact; the defective behavior it exposes is fixed.",
+    "changed_files": [
+      "apps/api/internal/merchant/webhook.go"
+    ],
+    "digest": "sha256:5625ca9426f661ea7c381cc9c9edcabaa66316d6f962b1522f545d91cc0534fe",
+    "diff": "diff --git a/apps/api/internal/merchant/webhook.go b/apps/api/internal/merchant/webhook.go\nindex 58d9a23..d84ca2b 100644\n--- a/apps/api/internal/merchant/webhook.go\n+++ b/apps/api/internal/merchant/webhook.go\n@@ -96,7 +96,7 @@ func (s *Service) legacyApplyWebhookEvent(ctx context.Context, ev WebhookEvent)\n \t}\n \tdefer func() { _ = tx.Rollback(ctx) }()\n \n-\torderID, _, err := s.webhookOrder(ctx, tx, ev.ProviderOrderID)\n+\torderID, status, err := s.webhookOrder(ctx, tx, ev.ProviderOrderID)\n \tif err != nil {\n \t\treturn err\n \t}\n@@ -108,14 +108,20 @@ func (s *Service) legacyApplyWebhookEvent(ctx context.Context, ev WebhookEvent)\n \t}\n \n \tswitch ev.Type {\n-\tcase \"ORDER.APPROVED\":\n-\t\tif _, err := tx.Exec(ctx, `UPDATE merchant_orders SET status = $2, updated_at = now() WHERE id = $1::uuid`, orderID, StatusApproved); err != nil {\n+\tcase \"PAYMENT.CAPTURE.COMPLETED\":\n+\t\tif status != StatusCapturedVerified {\n+\t\t\tbreak\n+\t\t}\n+\t\tverifiedCapture, err := s.verifiedCaptureID(ctx, tx, orderID)\n+\t\tif err != nil {\n \t\t\treturn err\n \t\t}\n-\tcase \"PAYMENT.CAPTURE.COMPLETED\":\n+\t\tif ev.CaptureID == \"\" || ev.CaptureID != verifiedCapture {\n+\t\t\tbreak\n+\t\t}\n \t\tif _, err := tx.Exec(ctx, `\n \t\t\tINSERT INTO merchant_fulfillment_effects (order_id, effect_key, event_id, tier)\n-\t\t\tVALUES ($1::uuid, $2, $2, $3)\n+\t\t\tVALUES ($1::uuid, 'FULFILL', $2, $3)\n \t\t\tON CONFLICT (order_id, effect_key) DO NOTHING`,\n \t\t\torderID, ev.ID, s.evidenceTier()); err != nil {\n \t\t\treturn err\n"
+  },
+  "verification": {
+    "ladder": {
+      "diagnosis_produced": true,
+      "patch_generated": true,
+      "patch_applied": true,
+      "build_passed": true,
+      "tests_passed": true,
+      "oracle_verdict": "VERIFIED_FOR_TESTED_SCENARIOS",
+      "accepted": true
+    },
+    "steps": [
+      {
+        "name": "gofmt",
+        "exit_code": 0,
+        "timed_out": false,
+        "duration_ms": 363,
+        "passed": true
+      },
+      {
+        "name": "build",
+        "exit_code": 0,
+        "timed_out": false,
+        "duration_ms": 24310,
+        "passed": true
+      },
+      {
+        "name": "tests",
+        "exit_code": 0,
+        "timed_out": false,
+        "duration_ms": 7379,
+        "passed": true
+      },
+      {
+        "name": "fixture",
+        "exit_code": 0,
+        "timed_out": false,
+        "duration_ms": 1360,
+        "passed": true
+      },
+      {
+        "name": "judge",
+        "exit_code": 0,
+        "timed_out": false,
+        "duration_ms": 16514,
+        "passed": true
+      }
+    ],
+    "sandbox": "docker image golang:1.27-alpine; internal network wp-net-df38acc71ceb; disposable postgres wp-db-bc2b7d217348; non-root uid 501; memory 2g; cpus 2; pids 256; read-only root; read-only module cache; separate pristine judge cache"
+  },
+  "oracle": {
+    "accepted": true,
+    "reason": "exactly one fulfillment effect is backed by an authenticated capture event; the oracle verified the tested scenario",
+    "order_status": "CAPTURED_VERIFIED",
+    "verdict": "VERIFIED_FOR_TESTED_SCENARIOS",
+    "evaluated_at": "2026-10-22T02:23:36.432062008Z",
+    "invariants": [
+      {
+        "id": "I1",
+        "status": "PASS",
+        "summary": "all local amounts are minor-unit integers with explicit currency; all provider-bound amounts are exact two-decimal renderings"
+      },
+      {
+        "id": "I2",
+        "status": "PASS",
+        "summary": "every outbound operation carried exactly the server-side order amount and currency"
+      },
+      {
+        "id": "I3",
+        "status": "PASS",
+        "summary": "every capture attempt is preceded by an observed buyer approval belonging to the same order"
+      },
+      {
+        "id": "I4",
+        "status": "PASS",
+        "summary": "every outbound mutation was preceded by its durable operation row (probed before the call); no capture identity was replaced while an earlier attempt remained unresolved"
+      },
+      {
+        "id": "I5",
+        "status": "PASS",
+        "summary": "no ambiguity was converted to failure; no new identity followed an ambiguous outcome; no false failure contradicts provider evidence"
+      },
+      {
+        "id": "I6",
+        "status": "PASS",
+        "summary": "every completed-capture claim is corroborated by matching provider evidence (order, amount, currency, COMPLETED status)"
+      },
+      {
+        "id": "I7",
+        "status": "PASS",
+        "summary": "at most one applied capture effect per logical order; no duplicate capture pathway; idempotent replays returned the original capture"
+      },
+      {
+        "id": "I8",
+        "status": "PASS",
+        "summary": "every capture confirmation is terminal in the journal and in the final order status"
+      },
+      {
+        "id": "I9",
+        "status": "PASS",
+        "summary": "every significant local state carries its explicit journal event"
+      },
+      {
+        "id": "I10",
+        "status": "NOT_APPLICABLE",
+        "summary": "no refund activity in the executed scenarios (refunds are not required for M2)"
+      },
+      {
+        "id": "I11",
+        "status": "PASS",
+        "summary": "M2 performs no apply/deploy step and exposes no patch-application mechanism; the verdict is an advisory output only (automatic-apply prevention for a future pipeline is out of M2 scope)"
+      },
+      {
+        "id": "I12",
+        "status": "PASS",
+        "summary": "provenance is explicit across provider observations and the journal; scripted interactions are labelled F, never R"
+      },
+      {
+        "id": "I13",
+        "status": "PASS",
+        "summary": "at most one fulfillment effect per payment"
+      },
+      {
+        "id": "I14",
+        "status": "PASS",
+        "summary": "every fulfillment effect is backed by an authenticated event naming the verified capture"
+      }
+    ]
+  },
+  "unsafe": {
+    "kind": "seeded",
+    "source": "evidence/m4-unsafe-f3/eval.json",
+    "provenance": "Recorded M4 independent oracle evaluation; this is not a fresh judge run.",
+    "verdict": "UNSAFE",
+    "reason": "oracle verdict is UNSAFE, not VERIFIED_FOR_TESTED_SCENARIOS; counterexample: I13: the merchant recorded 2 fulfillment effects for one payment",
+    "evaluated_at": "2026-10-22T02:25:36.065185Z",
+    "invariants": [
+      {
+        "id": "I1",
+        "status": "PASS",
+        "summary": "all local amounts are minor-unit integers with explicit currency; all provider-bound amounts are exact two-decimal renderings"
+      },
+      {
+        "id": "I2",
+        "status": "PASS",
+        "summary": "every outbound operation carried exactly the server-side order amount and currency"
+      },
+      {
+        "id": "I3",
+        "status": "PASS",
+        "summary": "every capture attempt is preceded by an observed buyer approval belonging to the same order"
+      },
+      {
+        "id": "I4",
+        "status": "PASS",
+        "summary": "every outbound mutation was preceded by its durable operation row (probed before the call); no capture identity was replaced while an earlier attempt remained unresolved"
+      },
+      {
+        "id": "I5",
+        "status": "PASS",
+        "summary": "no ambiguity was converted to failure; no new identity followed an ambiguous outcome; no false failure contradicts provider evidence"
+      },
+      {
+        "id": "I6",
+        "status": "PASS",
+        "summary": "every completed-capture claim is corroborated by matching provider evidence (order, amount, currency, COMPLETED status)"
+      },
+      {
+        "id": "I7",
+        "status": "PASS",
+        "summary": "at most one applied capture effect per logical order; no duplicate capture pathway; idempotent replays returned the original capture"
+      },
+      {
+        "id": "I8",
+        "status": "PASS",
+        "summary": "every capture confirmation is terminal in the journal and in the final order status"
+      },
+      {
+        "id": "I9",
+        "status": "PASS",
+        "summary": "every significant local state carries its explicit journal event"
+      },
+      {
+        "id": "I10",
+        "status": "NOT_APPLICABLE",
+        "summary": "no refund activity in the executed scenarios (refunds are not required for M2)"
+      },
+      {
+        "id": "I11",
+        "status": "PASS",
+        "summary": "M2 performs no apply/deploy step and exposes no patch-application mechanism; the verdict is an advisory output only (automatic-apply prevention for a future pipeline is out of M2 scope)"
+      },
+      {
+        "id": "I12",
+        "status": "PASS",
+        "summary": "provenance is explicit across provider observations and the journal; scripted interactions are labelled F, never R"
+      },
+      {
+        "id": "I13",
+        "status": "FAIL",
+        "summary": "the merchant recorded 2 fulfillment effects for one payment"
+      },
+      {
+        "id": "I14",
+        "status": "PASS",
+        "summary": "every fulfillment effect is backed by an authenticated event naming the verified capture"
+      }
+    ],
+    "fresh_trusted_gate": {
+      "executed": false,
+      "result": "not_run"
+    }
+  },
+  "human_review": {
+    "status": "ACCEPTED_FOR_HUMAN_REVIEW",
+    "candidate_patch_applied_in_disposable_worktree": true,
+    "developer_tree_applied": false,
+    "deployed": false,
+    "human_approval_required": true
+  }
+}
