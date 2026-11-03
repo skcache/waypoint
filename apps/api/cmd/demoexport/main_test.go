@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/skcache/waypoint/apps/api/internal/repair"
 )
 
 func repoRoot(t *testing.T) string {
@@ -23,6 +25,17 @@ func repoRoot(t *testing.T) string {
 			t.Fatal("repository root not found")
 		}
 		dir = parent
+	}
+}
+
+func TestFinalAttemptPrefersTheAcceptedCandidate(t *testing.T) {
+	rep := &repair.Report{Attempts: []repair.Attempt{
+		{Ladder: repair.Ladder{Accepted: false}, Diff: "rejected"},
+		{Ladder: repair.Ladder{Accepted: true}, Diff: "accepted"},
+	}}
+	att := finalAttempt(rep)
+	if att == nil || att.Diff != "accepted" {
+		t.Fatalf("final attempt = %+v", att)
 	}
 }
 

@@ -273,7 +273,11 @@ func run(from, out, mode, source, sourceLabel, unsafePath, unsafeSource, unsafeL
 	if err != nil {
 		return err
 	}
-	diff := rep.Attempts[0].Diff
+	att := finalAttempt(rep)
+	if att == nil {
+		return fmt.Errorf("report has no candidate attempt")
+	}
+	diff := att.Diff
 	if data, err := os.ReadFile(filepath.Join(from, "patch.diff")); err == nil {
 		diff = string(data)
 	}
@@ -405,26 +409,41 @@ func diag(d *repair.Diagnosis) *diagnosis {
 	}
 }
 
+func finalAttempt(rep *repair.Report) *repair.Attempt {
+	for i := len(rep.Attempts) - 1; i >= 0; i-- {
+		if rep.Attempts[i].Ladder.Accepted {
+			return &rep.Attempts[i]
+		}
+	}
+	if len(rep.Attempts) == 0 {
+		return nil
+	}
+	return &rep.Attempts[len(rep.Attempts)-1]
+}
+
 func patchSummary(rep *repair.Report) string {
-	if len(rep.Attempts) == 0 || rep.Attempts[0].Patch == nil {
+	att := finalAttempt(rep)
+	if att == nil || att.Patch == nil {
 		return ""
 	}
-	return rep.Attempts[0].Patch.Summary
+	return att.Patch.Summary
 }
 
 func changedFiles(rep *repair.Report) []string {
-	if len(rep.Attempts) == 0 {
+	att := finalAttempt(rep)
+	if att == nil {
 		return nil
 	}
-	return rep.Attempts[0].Changed
+	return att.Changed
 }
 
 func steps(rep *repair.Report) []step {
-	if len(rep.Attempts) == 0 {
+	att := finalAttempt(rep)
+	if att == nil {
 		return nil
 	}
-	out := make([]step, 0, len(rep.Attempts[0].Steps))
-	for _, s := range rep.Attempts[0].Steps {
+	out := make([]step, 0, len(att.Steps))
+	for _, s := range att.Steps {
 		out = append(out, step{
 			Name: s.Step, ExitCode: s.ExitCode, TimedOut: s.TimedOut,
 			DurationMS: s.DurationMS, Passed: s.ExitCode == 0 && !s.TimedOut,
