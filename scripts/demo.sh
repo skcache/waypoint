@@ -36,14 +36,26 @@ for _ in $(seq 1 30); do
 done
 docker compose exec -T db pg_isready -U waypoint -d waypoint >/dev/null
 
-echo "==> applying migrations"
-make --no-print-directory db-migrate >/dev/null
-
 # Fixed generated-artifact directory; never a caller-supplied cleanup target.
 OUT="$(prepare_demo_dir "$ROOT")" || {
   echo "demo: refusing unsafe demo artifact directory (symlink or unexpected target)" >&2
   exit 1
 }
+
+echo "==> applying migrations"
+migrated=0
+for _ in $(seq 1 8); do
+  if make --no-print-directory db-migrate >"$OUT/migrate.log" 2>&1; then
+    migrated=1
+    break
+  fi
+  sleep 1
+done
+if [ "$migrated" -ne 1 ]; then
+  echo "demo: migrations did not complete" >&2
+  cat "$OUT/migrate.log" >&2
+  exit 1
+fi
 
 echo "==> replaying the recorded F3 repair (no model call)"
 cd "$ROOT/apps/api"
