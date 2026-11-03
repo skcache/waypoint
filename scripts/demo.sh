@@ -43,9 +43,10 @@ OUT="$(prepare_demo_dir "$ROOT")" || {
 }
 
 echo "==> applying migrations"
+MIGRATE_LOG="$ROOT/tmp/demo-migrate.log"
 migrated=0
 for _ in $(seq 1 8); do
-  if make --no-print-directory db-migrate >"$OUT/migrate.log" 2>&1; then
+  if make --no-print-directory db-migrate >"$MIGRATE_LOG" 2>&1; then
     migrated=1
     break
   fi
@@ -53,7 +54,7 @@ for _ in $(seq 1 8); do
 done
 if [ "$migrated" -ne 1 ]; then
   echo "demo: migrations did not complete" >&2
-  cat "$OUT/migrate.log" >&2
+  cat "$MIGRATE_LOG" >&2
   exit 1
 fi
 
