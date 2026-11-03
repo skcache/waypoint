@@ -71,7 +71,7 @@ func TestPipelineRepairsF2WithABoundaryDouble(t *testing.T) {
 	rep := repair.Run(context.Background(), repair.Options{
 		RepoRoot: root, BaseRef: "HEAD", Fault: "F2", OutDir: out, Runner: sharedSandbox(t),
 		Mode: "oracle", MaxAttempts: 1, Model: model, Evidence: ev,
-		Allow: allow, RepoStatusBefore: before,
+		Allow: allow, RepoStatusBefore: before, CheckRepoStatus: true,
 		Revision: "test-revision", RevisionSource: "test", IncidentID: ev.IncidentID,
 	})
 	if rep.Status != repair.StatusAccepted {
@@ -141,7 +141,7 @@ func TestPipelineRepairsF3WithABoundaryDouble(t *testing.T) {
 	rep := repair.Run(context.Background(), repair.Options{
 		RepoRoot: root, BaseRef: "HEAD", Fault: "F3", OutDir: out, Runner: sharedSandbox(t),
 		Mode: "oracle", MaxAttempts: 1, Model: model, Evidence: ev,
-		Allow: allow, RepoStatusBefore: before,
+		Allow: allow, RepoStatusBefore: before, CheckRepoStatus: true,
 		Revision: "test-revision", RevisionSource: "test", IncidentID: ev.IncidentID,
 	})
 	if rep.Status != repair.StatusAccepted {
@@ -191,7 +191,7 @@ func TestPipelineRejectsSeededUnsafeF3Candidate(t *testing.T) {
 	rep := repair.Run(context.Background(), repair.Options{
 		RepoRoot: root, BaseRef: "HEAD", Fault: "F3", OutDir: out, Runner: sharedSandbox(t),
 		Mode: "oracle", MaxAttempts: 1, Model: model, Evidence: ev,
-		Allow: allow, RepoStatusBefore: before,
+		Allow: allow, RepoStatusBefore: before, CheckRepoStatus: true,
 		Revision: "test-revision", RevisionSource: "test", IncidentID: ev.IncidentID,
 	})
 	if rep.Status != repair.StatusNotVerified {
@@ -217,4 +217,5 @@ func TestPipelineRejectsSeededUnsafeF3Candidate(t *testing.T) {
 	if !strings.Contains(testsStep, "fulfillment effects = 2") {
 		t.Fatalf("trusted test did not report the duplicate fulfillment:\n%s", testsStep)
 	}
+	t.Logf("trusted tests reported:\n%s", testsStep)
 }

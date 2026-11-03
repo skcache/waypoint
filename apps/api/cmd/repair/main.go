@@ -181,6 +181,8 @@ func run(model repair.Model, replaySource, repoFlag, baseRef, fault, outDir, mod
 
 	incidentJSON, _ := json.MarshalIndent(ev.Incident, "", "  ")
 	_ = os.WriteFile(filepath.Join(outDir, "incident.json"), append(incidentJSON, '\n'), 0o600)
+	observationsJSON, _ := json.MarshalIndent(ev.Observations, "", "  ")
+	_ = os.WriteFile(filepath.Join(outDir, "observations.json"), append(observationsJSON, '\n'), 0o600)
 	preJSON, _ := json.MarshalIndent(preVerdict, "", "  ")
 	_ = os.WriteFile(filepath.Join(outDir, "pre-repair-eval.json"), append(preJSON, '\n'), 0o600)
 
@@ -207,7 +209,7 @@ func run(model repair.Model, replaySource, repoFlag, baseRef, fault, outDir, mod
 	rep := repair.Run(ctx, repair.Options{
 		RepoRoot: root, BaseRef: baseSHA, Fault: fault, OutDir: outDir,
 		Mode: mode, MaxAttempts: attempts, Model: model, Evidence: ev, Allow: allow,
-		RepoStatusBefore: statusBefore, Revision: rev, RevisionSource: revSource,
+		RepoStatusBefore: statusBefore, CheckRepoStatus: true, Revision: rev, RevisionSource: revSource,
 		IncidentID: incidentID, ReplaySource: replaySource,
 	})
 
@@ -219,7 +221,7 @@ func run(model repair.Model, replaySource, repoFlag, baseRef, fault, outDir, mod
 		baseRep := repair.Run(ctx, repair.Options{
 			RepoRoot: root, BaseRef: baseSHA, Fault: fault, OutDir: baseOut,
 			Mode: "baseline", MaxAttempts: 1, Model: model, Evidence: ev, Allow: allow,
-			RepoStatusBefore: statusBefore, Revision: rev, RevisionSource: revSource,
+			RepoStatusBefore: statusBefore, CheckRepoStatus: true, Revision: rev, RevisionSource: revSource,
 			IncidentID: incidentID, ReplaySource: replaySource,
 		})
 		rep.Baseline = &repair.Baseline{

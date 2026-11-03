@@ -134,7 +134,7 @@ func TestPipelineRepairsTheHeldOutDefectWithABoundaryDouble(t *testing.T) {
 	rep := repair.Run(context.Background(), repair.Options{
 		RepoRoot: root, BaseRef: "HEAD", Fault: "F4", OutDir: out, Runner: sharedSandbox(t),
 		Mode: "oracle", MaxAttempts: 2, Model: model, Evidence: ev,
-		Allow: repair.DefaultAllowlist(), RepoStatusBefore: before,
+		Allow: repair.DefaultAllowlist(), RepoStatusBefore: before, CheckRepoStatus: true,
 		Revision: "test-revision", RevisionSource: "test", IncidentID: ev.IncidentID,
 	})
 
@@ -275,7 +275,7 @@ func TestPipelineRepairsF1WithBoundaryDouble(t *testing.T) {
 		RepoRoot: root, BaseRef: "HEAD", Fault: "F1", OutDir: out,
 		Runner: sharedSandbox(t),
 		Mode:   "oracle", MaxAttempts: 2, Model: model, Evidence: ev,
-		Allow: repair.DefaultAllowlist(), RepoStatusBefore: before,
+		Allow: repair.DefaultAllowlist(), RepoStatusBefore: before, CheckRepoStatus: true,
 		Revision: "test-revision", RevisionSource: "test", IncidentID: ev.IncidentID,
 	})
 	if rep.Status != repair.StatusAccepted {

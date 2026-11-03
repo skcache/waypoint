@@ -508,11 +508,13 @@ func runRepair(ctx context.Context, opts Options, c Case, ws, sha string, ev rep
 	}
 	out := filepath.Join(art, cond)
 	_ = os.MkdirAll(out, 0o700)
+	before, _ := repair.RepoStatus(opts.RepoRoot)
 	start := time.Now()
 	rep := repair.Run(ctx, repair.Options{
 		RepoRoot: opts.RepoRoot, BaseRef: sha, Fault: "benchmark", CaseID: c.ID,
 		OutDir: out, Mode: mode, MaxAttempts: attempts, Model: benchModel{cfg: opts.Model},
-		Evidence: ev, Allow: allow, RepoStatusBefore: "", Revision: sha, RevisionSource: "bench-mutation",
+		Evidence: ev, Allow: allow, RepoStatusBefore: before, CheckRepoStatus: true,
+		Revision: sha, RevisionSource: "bench-mutation",
 		IncidentID: "M5-INC-" + c.ID,
 	})
 	r := Result{CaseID: c.ID, Condition: cond, Attempts: len(rep.Attempts), Artifacts: out}

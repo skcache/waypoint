@@ -27,9 +27,13 @@ type Options struct {
 	Evidence         Evidence
 	Allow            Allowlist
 	RepoStatusBefore string
-	Revision         string
-	RevisionSource   string
-	IncidentID       string
+	// CheckRepoStatus requires the before/after comparison even when the
+	// repository starts clean (RepoStatusBefore == ""). The empty string is a
+	// valid clean-tree status, not a disable sentinel.
+	CheckRepoStatus bool
+	Revision        string
+	RevisionSource  string
+	IncidentID      string
 	// ReplaySource is non-empty only for the deterministic recorded-model demo.
 	// It labels the report as a replay and prevents any claim of a live call.
 	ReplaySource string
@@ -196,11 +200,20 @@ func Run(ctx context.Context, opts Options) *Report {
 		if err == nil {
 			a.Changed = changed
 			a.Ladder.PatchApplied = true
-			if diff, derr := ws.Diff(); derr == nil {
-				a.Diff = diff
-				a.PatchDigest = patchDigest(diff)
-				_ = os.WriteFile(filepath.Join(dir, "patch.diff"), []byte(diff), 0o600)
+			diff, digest, derr := captureReviewableDiff(ws, dir)
+			if derr != nil {
+				a.Error = "the candidate diff is not reviewable; refusing to verify: " + derr.Error()
+				a.FinishedAt = time.Now().UTC()
+				ws.Close()
+				rep.Attempts = append(rep.Attempts, a)
+				rep.Status = StatusError
+				rep.Error = a.Error
+				rep.Limitations = append(rep.Limitations,
+					"the candidate was applied but its complete unified diff or patch digest could not be produced; no acceptance was possible")
+				break
 			}
+			a.Diff = diff
+			a.PatchDigest = digest
 			v := (&Verifier{
 				Workspace: ws, Runner: runner, Fault: opts.Fault, CaseID: opts.CaseID, ArtifactDir: dir,
 				Changed: changed, BaseRevision: opts.Revision, PatchDigest: a.PatchDigest,
@@ -241,15 +254,46 @@ func Run(ctx context.Context, opts Options) *Report {
 	}
 
 	// 4. Isolation proof: the developer's tree must be byte-for-byte unchanged.
-	if opts.RepoStatusBefore != "" {
-		if after, err := RepoStatus(opts.RepoRoot); err != nil || after != opts.RepoStatusBefore {
-			rep.Status = StatusError
-			rep.Limitations = append(rep.Limitations,
-				"the developer's working tree changed during the run; this is a pipeline defect and the results must not be trusted")
-			return finish(rep, opts)
-		}
+	if err := verifyRepoUnchanged(opts.RepoRoot, opts.RepoStatusBefore, opts.CheckRepoStatus); err != nil {
+		rep.Status = StatusError
+		rep.Error = err.Error()
+		rep.Limitations = append(rep.Limitations, err.Error())
+		return finish(rep, opts)
 	}
 	return finish(rep, opts)
+}
+
+// verifyRepoUnchanged is explicit about whether the check is enabled: the
+// empty porcelain status is a valid clean tree, not a disable flag.
+func verifyRepoUnchanged(repo, before string, enabled bool) error {
+	if !enabled {
+		return nil
+	}
+	after, err := RepoStatus(repo)
+	if err != nil {
+		return fmt.Errorf("could not verify the developer tree is unchanged: %w", err)
+	}
+	if after != before {
+		return fmt.Errorf("the developer's working tree changed during the run; this is a pipeline defect and the results must not be trusted")
+	}
+	return nil
+}
+
+// captureReviewableDiff is the only bridge from an applied candidate to the
+// verifier. Without a complete diff and digest there is nothing a human can
+// review, and the candidate must not proceed to acceptance.
+func captureReviewableDiff(ws *Workspace, dir string) (string, string, error) {
+	diff, err := ws.Diff()
+	if err != nil {
+		return "", "", err
+	}
+	if strings.TrimSpace(diff) == "" {
+		return "", "", fmt.Errorf("the candidate produced an empty diff")
+	}
+	if err := os.WriteFile(filepath.Join(dir, "patch.diff"), []byte(diff), 0o600); err != nil {
+		return "", "", fmt.Errorf("write candidate diff: %w", err)
+	}
+	return diff, patchDigest(diff), nil
 }
 
 func (r *Report) aggregate(m CallMeta) {
