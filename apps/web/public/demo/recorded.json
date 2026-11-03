@@ -38,6 +38,8 @@
     "id": "M3-INC-F3-732229b4-03f6-4af1-bbee-6cb80c53619b",
     "fault": "F3",
     "order_id": "732229b4-03f6-4af1-bbee-6cb80c53619b",
+    "original_order_id": "732229b4-03f6-4af1-bbee-6cb80c53619b",
+    "verification_order_id": "b602689d-a9bb-455c-8b3e-0124df8e613d",
     "order_status": "APPROVED",
     "evidence_tier": "F",
     "total_minor": 1234,

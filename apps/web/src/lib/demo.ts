@@ -53,6 +53,8 @@ export interface DemoIncident {
   id: string;
   fault: string;
   order_id: string;
+  original_order_id?: string;
+  verification_order_id?: string;
   order_status: string;
   evidence_tier: string;
   total_minor: number;

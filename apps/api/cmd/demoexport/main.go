@@ -64,16 +64,18 @@ type modelCall struct {
 }
 
 type incident struct {
-	ID            string        `json:"id"`
-	Fault         string        `json:"fault"`
-	OrderID       string        `json:"order_id"`
-	OrderStatus   string        `json:"order_status"`
-	EvidenceTier  string        `json:"evidence_tier"`
-	TotalMinor    int64         `json:"total_minor"`
-	Currency      string        `json:"currency"`
-	CheckoutError string        `json:"checkout_error,omitempty"`
-	CaptureError  string        `json:"capture_error,omitempty"`
-	Observations  []observation `json:"observations"`
+	ID                  string        `json:"id"`
+	Fault               string        `json:"fault"`
+	OrderID             string        `json:"order_id"`
+	OriginalOrderID     string        `json:"original_order_id"`
+	VerificationOrderID string        `json:"verification_order_id"`
+	OrderStatus         string        `json:"order_status"`
+	EvidenceTier        string        `json:"evidence_tier"`
+	TotalMinor          int64         `json:"total_minor"`
+	Currency            string        `json:"currency"`
+	CheckoutError       string        `json:"checkout_error,omitempty"`
+	CaptureError        string        `json:"capture_error,omitempty"`
+	Observations        []observation `json:"observations"`
 }
 
 type incidentFile struct {
@@ -369,6 +371,7 @@ func run(from, out, mode, source, sourceLabel, unsafePath, unsafeSource, unsafeL
 	}
 	inc := incident{
 		ID: rawIncident.IncidentID, Fault: rawIncident.FaultFamily, OrderID: rawIncident.OrderID,
+		OriginalOrderID: rawIncident.OrderID, VerificationOrderID: obs.OrderID,
 		OrderStatus: rawIncident.OrderStatus, EvidenceTier: rawIncident.EvidenceTier,
 		TotalMinor: rawIncident.TotalMinor, Currency: rawIncident.Currency,
 		CheckoutError: rawIncident.CheckoutError, CaptureError: rawIncident.CaptureError,

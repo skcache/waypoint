@@ -229,6 +229,12 @@ func TestExportUsesAcceptedAttemptEvidenceOnly(t *testing.T) {
 	if doc.Oracle.Verdict != verifiedVerdict || doc.Oracle.Reason != "reason-two" {
 		t.Fatalf("oracle = %+v", doc.Oracle)
 	}
+	if doc.Incident.OriginalOrderID != "incident-order" || doc.Incident.VerificationOrderID != "order-2" {
+		t.Fatalf("order identity = original %q verification %q", doc.Incident.OriginalOrderID, doc.Incident.VerificationOrderID)
+	}
+	if doc.Incident.OriginalOrderID == doc.Incident.VerificationOrderID {
+		t.Fatal("original and verification orders must remain distinct")
+	}
 	if len(doc.Incident.Observations) != 2 {
 		t.Fatalf("observations = %+v", doc.Incident.Observations)
 	}
@@ -437,6 +443,9 @@ func TestExportRecordedEvidenceIsSanitizedAndTyped(t *testing.T) {
 	}
 	if doc.Incident.Fault != "F3" || doc.Incident.ID == "" {
 		t.Fatalf("incident = %+v", doc.Incident)
+	}
+	if doc.Incident.OriginalOrderID == "" || doc.Incident.VerificationOrderID == "" || doc.Incident.OriginalOrderID == doc.Incident.VerificationOrderID {
+		t.Fatalf("order identity = original %q verification %q", doc.Incident.OriginalOrderID, doc.Incident.VerificationOrderID)
 	}
 	if len(doc.Incident.Observations) == 0 {
 		t.Fatal("observations were not exported")
