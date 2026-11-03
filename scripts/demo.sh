@@ -156,11 +156,11 @@ check_page() {
   echo "  $path 200"
 }
 
-check_page "/" "Incidents"
-check_page "/incidents" "Held-out payment-integration defects"
+check_page "/" "Duplicate fulfillment"
+check_page "/incidents" "Duplicate fulfillment"
 check_page "/incidents/H1-identity-rewrite" "A retry rewrites the durable capture request id"
 check_page "/benchmark" "Benchmark"
-check_page "/demo" "Loading repair evidence"
+check_page "/demo" "Case file"
 
 if [ -n "${CHROME_PATH:-}" ]; then
   echo "==> browser smoke: /demo"

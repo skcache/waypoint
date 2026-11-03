@@ -1,6 +1,6 @@
-// Minimal browser-level smoke test for the /demo page. It requires a running
-// Next.js server and a Chrome/Chromium binary (CHROME_PATH). It checks the
-// actual rendered run, not just HTTP status or a page title.
+// Browser-level smoke test for the showcase case file. It requires a running
+// Next.js server and a Chrome/Chromium binary (CHROME_PATH). It exercises the
+// actual stage switches and candidate switch, not just HTTP status.
 import puppeteer from "puppeteer-core";
 import assert from "node:assert/strict";
 
@@ -11,20 +11,28 @@ if (!base || !chrome) {
   process.exit(2);
 }
 
-const dataPath = process.env.DEMO_DATA === "recorded" ? "/demo/recorded.json" : "/demo/local.json";
+const forceRecorded = process.env.DEMO_DATA === "recorded";
+const dataPath = forceRecorded ? "/demo/recorded.json" : "/demo/local.json";
+const pagePath = forceRecorded ? "/demo?source=recorded" : "/demo";
+const recordedRes = await fetch(`${base}/demo/recorded.json`, { cache: "no-store" });
+assert.equal(recordedRes.status, 200, "/demo/recorded.json must be served");
+const recordedRun = await recordedRes.json();
+assert.ok(recordedRun.run?.run_id, "recorded export has a run id");
 const res = await fetch(`${base}${dataPath}`, { cache: "no-store" });
 assert.equal(res.status, 200, `${dataPath} must be served`);
 const run = await res.json();
-assert.ok(run.run?.run_id, "local export has a run id");
-assert.ok(run.run?.evidence_layout, "local export declares its evidence layout");
+assert.ok(run.run?.run_id, "export has a run id");
+assert.ok(run.run?.evidence_layout, "export declares its evidence layout");
 const observations = run.incident?.observations ?? [];
-assert.ok(observations.length >= 4, "local export contains the F3 provider observations");
+assert.ok(observations.length >= 4, "export contains the F3 provider observations");
 const sequences = observations.map((o) => o.seq);
 assert.deepEqual(sequences, [...sequences].sort((a, b) => a - b), "observation sequence is ordered");
 assert.equal(new Set(sequences).size, sequences.length, "observation sequence is unique");
 assert.ok(observations.every((o) => o.tier === "F"), "observations carry their tier provenance");
-const captureID = observations.map((o) => o.capture_id).find(Boolean);
-assert.ok(captureID, "local export contains a captured provider observation");
+const capture = observations.find((o) => o.capture_id);
+assert.ok(capture?.capture_id, "export contains a captured provider observation");
+assert.ok(run.incident.original_order_id, "export preserves the original order id");
+assert.ok(run.incident.verification_order_id, "export preserves the verification order id");
 
 const browser = await puppeteer.launch({
   executablePath: chrome,
@@ -33,10 +41,10 @@ const browser = await puppeteer.launch({
 });
 try {
   const page = await browser.newPage();
-  await page.setViewport({ width: 1440, height: 1100, deviceScaleFactor: 1 });
+  await page.setViewport({ width: 1440, height: 1000, deviceScaleFactor: 1 });
   const pageErrors = [];
   page.on("pageerror", (err) => pageErrors.push(String(err)));
-  await page.goto(`${base}/demo`, { waitUntil: "domcontentloaded", timeout: 20000 });
+  await page.goto(`${base}${pagePath}`, { waitUntil: "domcontentloaded", timeout: 20000 });
   await page.waitForFunction(
     (id) => document.querySelector('[data-testid="demo-run-id"]')?.textContent?.trim() === id,
     { timeout: 20000 },
@@ -44,26 +52,102 @@ try {
   );
 
   const text = await page.evaluate(() => document.body.innerText);
-  const diff = await page.$eval('[data-testid="demo-diff"]', (el) => el.textContent ?? "");
-  const human = await page.$eval('[data-testid="demo-human"]', (el) => el.textContent ?? "");
-  const unsafe = await page.$eval('[data-testid="demo-unsafe"]', (el) => el.textContent ?? "");
-  const oracle = await page.$eval('[data-testid="demo-oracle"]', (el) => el.textContent ?? "");
-
-  assert.ok(text.includes(run.run.run_id), "page renders the run id");
-  assert.ok(oracle.includes("VERIFIED_FOR_TESTED_SCENARIOS"), "oracle verdict is visible");
-  assert.ok(diff.includes("'FULFILL'"), "generated diff is visible");
-  assert.ok(text.includes(captureID.slice(0, 12)), "capture identity is visible");
-  assert.ok(unsafe.includes("I13") && unsafe.includes("2 fulfillment effects"), "I13 counterexample is visible");
-  assert.ok(human.includes("Candidate patch in disposable worktree") && human.includes("yes"), "candidate worktree fact is visible");
-  assert.ok(human.includes("Developer tree applied") && human.includes("no"), "developer tree remains unchanged");
-  assert.ok(human.includes("Deployed") && human.includes("no"), "deployment is false");
-  assert.ok(human.includes("Human approval required") && human.includes("yes"), "human boundary is visible");
+  const lower = text.toLowerCase();
+  assert.ok(lower.includes("original incident order"), "original order is labelled");
+  assert.ok(lower.includes("verification order"), "verification order is labelled");
   assert.ok(
-    text.includes("No merge, push, deploy, capture, refund, or payment retry exists"),
+    text.includes(run.incident.original_order_id ?? run.incident.order_id),
+    "original order id is visible",
+  );
+  assert.ok(text.includes(run.incident.verification_order_id), "verification order id is visible");
+
+  // Select the capture event, then inspect its detail.
+  const rows = await page.$$('[data-testid="observation-row"]');
+  assert.ok(rows.length >= 4, "provider event rows render");
+  await rows[rows.length - 1].click();
+  await page.waitForFunction(
+    (captureId) => document.body.innerText.includes(captureId),
+    { timeout: 5000 },
+    capture.capture_id,
+  );
+
+  await page.click('[data-stage="diagnosis"]');
+  await page.waitForFunction(() => document.body.innerText.includes("recorded hosted-model diagnosis"));
+  assert.ok((await page.evaluate(() => document.body.innerText)).includes("Recorded hosted-model reply"));
+
+  await page.click('[data-stage="patch"]');
+  const diff = await page.$eval('[data-testid="demo-diff"]', (el) => el.textContent ?? "");
+  assert.ok(diff.includes("'FULFILL'"), "generated diff is visible");
+
+  await page.click('[data-stage="verification"]');
+  const execution = (await page.evaluate(() => document.body.innerText)).toLowerCase();
+  assert.ok(execution.includes("disposable sandbox"), "sandbox evidence is visible");
+  assert.ok(execution.includes("judge"), "judge step is visible");
+
+  await page.click('[data-stage="oracle"]');
+  const oracle = await page.$eval('[data-testid="demo-oracle"]', (el) => el.textContent ?? "");
+  assert.ok(oracle.includes("VERIFIED"), "oracle verdict is visible");
+  assert.ok(oracle.includes("I13"), "verified invariant list is visible");
+
+  await page.evaluate(() => {
+    const button = [...document.querySelectorAll("button")].find(
+      (candidate) => candidate.textContent?.trim() === "Unsafe seed",
+    );
+    button?.click();
+  });
+  await page.waitForSelector('[data-testid="demo-unsafe"]');
+  const unsafe = await page.$eval('[data-testid="demo-unsafe"]', (el) => el.textContent ?? "");
+  assert.ok(unsafe.includes("I13") && unsafe.includes("2 fulfillment effects"), "I13 counterexample is visible");
+  assert.ok(unsafe.includes("Historical independent-oracle evidence"), "historical provenance is explicit");
+  if (run.unsafe.fresh_trusted_gate.executed) {
+    assert.ok(unsafe.includes("Fresh trusted gate"), "fresh gate is labelled when executed");
+  } else {
+    assert.ok(unsafe.includes("not run for this recorded artifact"), "missing fresh gate is explicit");
+  }
+
+  await page.click('[data-stage="review"]');
+  const human = await page.$eval('[data-testid="demo-human"]', (el) => el.textContent ?? "");
+  assert.ok(human.includes("Disposable worktree only"), "candidate worktree fact is visible");
+  assert.ok(human.includes("Unchanged"), "developer tree is unchanged");
+  assert.ok(human.includes("Not performed"), "deployment is false");
+  assert.ok(human.includes("Still required"), "human approval is required");
+  assert.ok(
+    human.includes("No merge, push, deploy, capture, refund, or payment retry exists"),
     "human-review boundary copy is visible",
   );
-  assert.equal(pageErrors.length, 0, `page errors: ${pageErrors.join("; ")}`);
 
+  const overflow = await page.evaluate(() => ({
+    scrollWidth: document.documentElement.scrollWidth,
+    clientWidth: document.documentElement.clientWidth,
+  }));
+  assert.ok(overflow.scrollWidth <= overflow.clientWidth + 1, "desktop page has no horizontal overflow");
+
+  await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 1 });
+  await page.goto(`${base}${pagePath}`, { waitUntil: "domcontentloaded" });
+  await page.waitForSelector('[data-stage="incident"]');
+  const mobileOverflow = await page.evaluate(() => ({
+    scrollWidth: document.documentElement.scrollWidth,
+    clientWidth: document.documentElement.clientWidth,
+  }));
+  assert.ok(mobileOverflow.scrollWidth <= mobileOverflow.clientWidth + 1, "mobile page has no horizontal overflow");
+  await page.click('a[href="/benchmark"]');
+  await page.waitForFunction(() => document.body.innerText.includes("held-out incidents"));
+  assert.ok((await page.evaluate(() => document.body.innerText)).includes("Benchmark"), "mobile navigation reaches the benchmark");
+
+  const home = await browser.newPage();
+  home.on("pageerror", (err) => pageErrors.push(`home: ${err}`));
+  await home.setViewport({ width: 1440, height: 1000, deviceScaleFactor: 1 });
+  await home.goto(`${base}/`, { waitUntil: "domcontentloaded", timeout: 20000 });
+  await home.waitForFunction(
+    (id) => document.querySelector('[data-testid="demo-run-id"]')?.textContent?.trim() === id,
+    { timeout: 20000 },
+    recordedRun.run.run_id,
+  );
+  const homeText = await home.evaluate(() => document.body.innerText);
+  assert.ok(homeText.includes("Case file"), "public entry exposes the case file");
+  assert.ok(homeText.includes("Duplicate fulfillment"), "public entry loads recorded evidence");
+
+  assert.equal(pageErrors.length, 0, `page errors: ${pageErrors.join("; ")}`);
   if (process.env.DEMO_SCREENSHOT) {
     await page.screenshot({ path: process.env.DEMO_SCREENSHOT, fullPage: true });
   }
