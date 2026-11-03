@@ -30,6 +30,9 @@ type Options struct {
 	Revision         string
 	RevisionSource   string
 	IncidentID       string
+	// ReplaySource is non-empty only for the deterministic recorded-model demo.
+	// It labels the report as a replay and prevents any claim of a live call.
+	ReplaySource string
 	// Runner is the OS-enforced candidate execution boundary. When nil, Run
 	// opens a Docker sandbox and closes it; when provided (tests), the caller
 	// owns its lifetime. There is no host fallback.
@@ -79,6 +82,10 @@ func Run(ctx context.Context, opts Options) *Report {
 		"The model proposes; the independent oracle and the fixture acceptance rules decide. VERIFIED_FOR_TESTED_SCENARIOS covers only the scenario that actually executed.",
 		"Nothing was applied to the developer's working tree, committed, pushed, merged or deployed. A human owns any integration decision.",
 	)
+	if opts.ReplaySource != "" {
+		rep.Limitations = append(rep.Limitations,
+			"Model replies were replayed verbatim from "+opts.ReplaySource+"; no hosted model was called. Recorded token and latency values are provenance, not measurements of this replay.")
+	}
 	if err := os.MkdirAll(opts.OutDir, 0o700); err != nil {
 		rep.Limitations = append(rep.Limitations, "artifact directory could not be created: "+err.Error())
 		return rep

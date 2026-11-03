@@ -38,12 +38,17 @@ func main() {
 	attempts := flag.Int("attempts", 2, "maximum candidate attempts in oracle mode (hard cap 3)")
 	dsn := flag.String("dsn", os.Getenv("TEST_DATABASE_URL"), "PostgreSQL test DSN (database name must end in _test)")
 	checkModel := flag.Bool("check-model", false, "validate hosted model configuration and exit (no model call)")
+	replayDir := flag.String("replay", "", "replay recorded model replies from this directory (deterministic; no hosted call)")
 	compare := flag.Bool("compare-baseline", false, "also run a single-shot baseline with the same model and compare outcomes")
 	dumpPrompt := flag.Bool("dump-prompt", false, "write the exact diagnosis prompt to the output directory and exit (no model call)")
 	flag.Parse()
 
-	cfg, cfgErr := llm.ConfigFromEnv(os.Getenv)
+	if *checkModel && *replayDir != "" {
+		fmt.Fprintln(os.Stderr, "-check-model and -replay are mutually exclusive")
+		os.Exit(2)
+	}
 	if *checkModel {
+		cfg, cfgErr := llm.ConfigFromEnv(os.Getenv)
 		if cfgErr != nil {
 			fmt.Println("NOT_CONFIGURED")
 			fmt.Fprintln(os.Stderr, cfgErr)
@@ -53,7 +58,7 @@ func main() {
 		os.Exit(0)
 	}
 	if *outDir == "" {
-		fmt.Fprintln(os.Stderr, "usage: repair -fault F1|F2|F3|F4 -out <dir> [-mode oracle|baseline] [-attempts 2] [-base-ref HEAD]")
+		fmt.Fprintln(os.Stderr, "usage: repair -fault F1|F2|F3|F4 -out <dir> [-mode oracle|baseline] [-attempts 2] [-base-ref HEAD] [-replay <dir>]")
 		os.Exit(2)
 	}
 	switch *fault {
@@ -62,21 +67,57 @@ func main() {
 		fmt.Fprintf(os.Stderr, "invalid -fault %q (want F1, F2, F3 or F4)\n", *fault)
 		os.Exit(2)
 	}
-	if cfgErr != nil {
-		// No hosted model: write the honest artifact and stop. No fake AI run.
-		root, _ := repoRoot(*repo)
-		rev, src := oracle.DetectRevision()
-		rep := repair.NotConfigured(repair.Options{
-			RepoRoot: root, BaseRef: *baseRef, Fault: *fault, Mode: *mode,
-			OutDir: *outDir, Revision: rev, RevisionSource: src,
-			IncidentID: "M3-INC-" + *fault + "-not-configured",
-		}, cfgErr)
-		fmt.Printf("status: %s\n", rep.Status)
-		fmt.Fprintf(os.Stderr, "hosted model not configured: %v\n", cfgErr)
-		os.Exit(3)
+
+	var model repair.Model
+	var replaySource string
+	if *replayDir != "" {
+		root, err := repoRoot(*repo)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "repair:", err)
+			os.Exit(1)
+		}
+		dir := *replayDir
+		if !filepath.IsAbs(dir) {
+			dir = filepath.Join(root, dir)
+		}
+		recorded, err := repair.NewRecordedModel(dir)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "repair: recorded replay:", err)
+			os.Exit(1)
+		}
+		model = recorded
+		replaySource = dir
+		if relPath, err := filepath.Rel(root, dir); err == nil && !strings.HasPrefix(relPath, "..") {
+			replaySource = relPath
+		}
+		if base := recorded.RecordedBase(); base != "" {
+			replaySource = fmt.Sprintf("%s (recorded at %s)", replaySource, base)
+		}
+		fmt.Printf("model: RECORDED REPLAY %s (no hosted call)\n", recorded.Name())
+	} else {
+		cfg, cfgErr := llm.ConfigFromEnv(os.Getenv)
+		if cfgErr != nil {
+			// No hosted model: write the honest artifact and stop. No fake AI run.
+			root, _ := repoRoot(*repo)
+			rev, src := oracle.DetectRevision()
+			rep := repair.NotConfigured(repair.Options{
+				RepoRoot: root, BaseRef: *baseRef, Fault: *fault, Mode: *mode,
+				OutDir: *outDir, Revision: rev, RevisionSource: src,
+				IncidentID: "M3-INC-" + *fault + "-not-configured",
+			}, cfgErr)
+			fmt.Printf("status: %s\n", rep.Status)
+			fmt.Fprintf(os.Stderr, "hosted model not configured: %v\n", cfgErr)
+			os.Exit(3)
+		}
+		hosted, err := repair.NewLLMModel(cfg)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "repair:", err)
+			os.Exit(1)
+		}
+		model = hosted
 	}
 
-	if err := run(cfg, *repo, *baseRef, *fault, *outDir, *mode, *attempts, *dsn, *compare, *dumpPrompt); err != nil {
+	if err := run(model, replaySource, *repo, *baseRef, *fault, *outDir, *mode, *attempts, *dsn, *compare, *dumpPrompt); err != nil {
 		fmt.Fprintln(os.Stderr, "repair:", err)
 		os.Exit(1)
 	}
@@ -84,7 +125,7 @@ func main() {
 
 const merchantFaultDefault = "F1"
 
-func run(cfg llm.Config, repoFlag, baseRef, fault, outDir, mode string, attempts int, dsn string, compare, dumpPrompt bool) error {
+func run(model repair.Model, replaySource, repoFlag, baseRef, fault, outDir, mode string, attempts int, dsn string, compare, dumpPrompt bool) error {
 	ctx := context.Background()
 	root, err := repoRoot(repoFlag)
 	if err != nil {
@@ -97,11 +138,6 @@ func run(cfg llm.Config, repoFlag, baseRef, fault, outDir, mode string, attempts
 		return err
 	}
 	rev, revSource := baseSHA, "git-resolve"
-
-	model, err := repair.NewLLMModel(cfg)
-	if err != nil {
-		return err
-	}
 
 	if err := os.MkdirAll(outDir, 0o700); err != nil {
 		return err
@@ -172,7 +208,7 @@ func run(cfg llm.Config, repoFlag, baseRef, fault, outDir, mode string, attempts
 		RepoRoot: root, BaseRef: baseSHA, Fault: fault, OutDir: outDir,
 		Mode: mode, MaxAttempts: attempts, Model: model, Evidence: ev, Allow: allow,
 		RepoStatusBefore: statusBefore, Revision: rev, RevisionSource: revSource,
-		IncidentID: incidentID,
+		IncidentID: incidentID, ReplaySource: replaySource,
 	})
 
 	if compare && mode != "baseline" {
@@ -184,7 +220,7 @@ func run(cfg llm.Config, repoFlag, baseRef, fault, outDir, mode string, attempts
 			RepoRoot: root, BaseRef: baseSHA, Fault: fault, OutDir: baseOut,
 			Mode: "baseline", MaxAttempts: 1, Model: model, Evidence: ev, Allow: allow,
 			RepoStatusBefore: statusBefore, Revision: rev, RevisionSource: revSource,
-			IncidentID: incidentID,
+			IncidentID: incidentID, ReplaySource: replaySource,
 		})
 		rep.Baseline = &repair.Baseline{
 			Mode:      "baseline (single shot, no oracle feedback)",
