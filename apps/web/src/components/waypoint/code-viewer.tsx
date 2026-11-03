@@ -5,7 +5,7 @@ import { ArrowsInLineHorizontal, ArrowsOutLineHorizontal } from "@phosphor-icons
 
 import { diffStats, parseDiff, tokenizeLine, type TokenKind } from "@/lib/diff";
 import type { DiffNote } from "@/lib/evidence";
-import { CopyChip } from "./ui";
+import { CopyChip } from "./kit";
 
 const TOKEN_COLOR: Record<TokenKind, string | undefined> = {
   keyword: "var(--t-keyword)",
@@ -40,6 +40,7 @@ export function CodeViewer({
   notes = [],
   testId,
   heading,
+  fill = false,
 }: {
   file: string;
   diff: string;
@@ -47,6 +48,8 @@ export function CodeViewer({
   notes?: DiffNote[];
   testId?: string;
   heading?: string;
+  /** Fill the parent height and scroll inside it, like a sheet. */
+  fill?: boolean;
 }) {
   const { lines, hunks } = useMemo(() => parseDiff(diff), [diff]);
   const stats = useMemo(() => diffStats(diff), [diff]);
@@ -78,7 +81,7 @@ export function CodeViewer({
   }
 
   return (
-    <div className="overflow-hidden rounded-panel bg-surface" data-testid={testId}>
+    <div className={`paper overflow-hidden rounded-[20px] bg-background ${fill ? "flex h-full min-h-0 flex-col" : ""}`} data-testid={testId}>
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-line px-4 py-3">
         <div className="min-w-0">
           {heading ? <p className="mb-0.5 text-[15px] font-medium text-faint">{heading}</p> : null}
@@ -102,7 +105,7 @@ export function CodeViewer({
       </div>
 
       {placed.length ? (
-        <ol className="flex flex-wrap items-center gap-2 border-b border-line bg-sunk px-4 py-3" aria-label="Reading the patch">
+        <ol className="flex flex-wrap items-center gap-2 border-b border-line bg-surface px-4 py-3" aria-label="Reading the patch">
           {placed.map((n) => (
             <li key={n.index}>
               <button
@@ -126,7 +129,7 @@ export function CodeViewer({
         </ol>
       ) : null}
 
-      <div className="max-h-[560px] overflow-auto">
+      <div className={fill ? "min-h-0 flex-1 overflow-auto" : "max-h-[560px] overflow-auto"}>
         <div className={`mono text-[14px] leading-[1.7] max-sm:min-w-max ${wrap ? "" : "min-w-max"}`}>
           {lines.map((line, i) => {
             if (line.kind === "meta") return null;

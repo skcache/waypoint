@@ -140,3 +140,17 @@ test("effect keys are shown once when key and event match", async () => {
   assert.equal(cleanEffect("FULFILL (evt-cap-9)"), "FULFILL (evt-cap-9)");
   assert.equal(cleanEffect("plain"), "plain");
 });
+
+test("every invariant in the export has the oracle's title and a short map label", async () => {
+  const { shortLabel, totalStepMs, formatMs } = await import("./evidence.ts");
+  for (const e of [doc.pre_repair, doc.oracle, doc.unsafe]) {
+    for (const inv of e.invariants) {
+      assert.ok(inv.title && inv.title.length > 8, `${inv.id} has a title`);
+      assert.ok(shortLabel(inv).length <= 32, `${inv.id} short label fits a cell`);
+    }
+  }
+  assert.equal(shortLabel({ id: "I99", title: "Custom oracle title" }), "Custom oracle title");
+  assert.equal(totalStepMs(doc.verification.steps), doc.verification.steps.reduce((a, s) => a + s.duration_ms, 0));
+  assert.equal(formatMs(363), "363 ms");
+  assert.equal(formatMs(24310), "24.3 s");
+});

@@ -265,3 +265,34 @@ export function ledgerAutopsy(e: DemoEval): LedgerRow[] {
   });
   return rows;
 }
+
+// Short names for the map cells. The oracle's full title is always shown in the
+// detail; these are presentation text keyed by the oracle's stable invariant id.
+const SHORT_LABELS: Record<string, string> = {
+  I1: "Integer minor units",
+  I2: "Amount bound to order",
+  I3: "Approval is not capture",
+  I4: "Durable before the call",
+  I5: "Ambiguity is not failure",
+  I6: "Capture needs provider proof",
+  I7: "One order, one effect",
+  I8: "No silent rollback",
+  I9: "Divergence is explicit",
+  I10: "Refunds need proof",
+  I11: "Unsafe never applies",
+  I12: "Evidence provenance",
+  I13: "One fulfillment per payment",
+  I14: "Fulfillment needs capture proof",
+};
+
+export function shortLabel(inv: { id: string; title?: string; summary?: string }): string {
+  return SHORT_LABELS[inv.id] ?? inv.title ?? inv.summary ?? inv.id;
+}
+
+export function totalStepMs(steps: DemoStep[]): number {
+  return steps.reduce((sum, s) => sum + s.duration_ms, 0);
+}
+
+export function formatMs(ms: number): string {
+  return ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(1)} s`;
+}

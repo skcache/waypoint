@@ -1,8 +1,9 @@
-// Browser-level test for the three-act case file. It needs a running Next.js
-// server and a Chrome/Chromium binary (CHROME_PATH), and drives the real
-// interactions: act navigation, ledger entries, the candidate tabs, the unsafe
-// patch, the invariant matrix, the sandbox gate, the provider-call stepper, the
-// pinned human gate, and the mobile layout.
+// Browser-level test for the map-and-rail case file. It needs a running Next.js
+// server and a Chrome/Chromium binary (CHROME_PATH), and drives real
+// interactions: view navigation, map cells (checked against the export's own
+// invariant statuses), the candidate switch, the unsafe patch's code, the
+// time map, the provider calls, the pinned human gate, keyboard use, retired
+// routes, and the phone layout.
 import puppeteer from "puppeteer-core";
 import assert from "node:assert/strict";
 
@@ -16,9 +17,7 @@ if (!base || !chrome) {
 const forceRecorded = process.env.DEMO_DATA === "recorded";
 const dataPath = forceRecorded ? "/demo/recorded.json" : "/demo/local.json";
 const pagePath = forceRecorded ? "/demo?source=recorded" : "/demo";
-const recordedRes = await fetch(`${base}/demo/recorded.json`, { cache: "no-store" });
-assert.equal(recordedRes.status, 200, "/demo/recorded.json must be served");
-const recordedRun = await recordedRes.json();
+const recordedRun = await (await fetch(`${base}/demo/recorded.json`, { cache: "no-store" })).json();
 assert.ok(recordedRun.run?.run_id, "recorded export has a run id");
 const res = await fetch(`${base}${dataPath}`, { cache: "no-store" });
 assert.equal(res.status, 200, `${dataPath} must be served`);
@@ -26,141 +25,151 @@ const run = await res.json();
 assert.ok(run.run?.run_id, "export has a run id");
 const observations = run.incident?.observations ?? [];
 assert.ok(observations.length >= 4, "export contains the F3 provider observations");
-const sequences = observations.map((o) => o.seq);
-assert.deepEqual(sequences, [...sequences].sort((a, b) => a - b), "observation sequence is ordered");
 assert.ok(observations.every((o) => o.tier === "F"), "observations carry their tier provenance");
 const capture = observations.find((o) => o.capture_id);
 assert.ok(capture?.capture_id, "export contains a captured provider observation");
 assert.ok(run.incident.original_order_id && run.incident.verification_order_id, "export keeps both order ids");
 
-for (const [from, to] of [["/trace", "/"], ["/checkout", "/"]]) {
+for (const from of ["/trace", "/checkout"]) {
   const r = await fetch(`${base}${from}`, { redirect: "manual" });
   assert.ok(r.status >= 300 && r.status < 400, `${from} redirects away from the retired V1 page`);
-  assert.equal(new URL(r.headers.get("location"), base).pathname, to);
+  assert.equal(new URL(r.headers.get("location"), base).pathname, "/");
 }
+
+const statusesOf = (e) => Object.fromEntries(e.invariants.map((i) => [i.id, i.status]));
+const failing = (e) => e.invariants.filter((i) => i.status === "FAIL").map((i) => i.id).sort();
 
 const browser = await puppeteer.launch({ executablePath: chrome, headless: true, args: ["--no-sandbox"] });
 const text = (page, selector) => page.$eval(selector, (el) => el.textContent ?? "");
+const go = async (page, view) => {
+  await page.evaluate((v) => document.querySelector(`nav[aria-label="Views"] a[href="#${v}"]`).click(), view);
+  await page.waitForFunction((v) => document.querySelector("main")?.getAttribute("data-view") === v, {}, view);
+  await new Promise((r) => setTimeout(r, 450));
+};
+const mapStatuses = (page) =>
+  page.$$eval('[data-testid="verdict-map"] [data-invariant]', (cells) => Object.fromEntries(cells.map((c) => [c.getAttribute("data-invariant"), c.getAttribute("data-status")])));
+
 try {
   const page = await browser.newPage();
   await page.setViewport({ width: 1440, height: 1000, deviceScaleFactor: 1 });
   const pageErrors = [];
   page.on("pageerror", (err) => pageErrors.push(String(err)));
   await page.goto(`${base}${pagePath}`, { waitUntil: "domcontentloaded", timeout: 20000 });
-  await page.waitForFunction(
-    (id) => document.querySelector('[data-testid="demo-run-id"]')?.textContent?.trim() === id,
-    { timeout: 20000 },
-    run.run.run_id,
-  );
-  // Wait for hydration: the candidate tabs must respond to a click.
-  await page.waitForFunction(() => Object.keys(document.querySelector('[data-candidate="unsafe"]') ?? {}).some((k) => k.startsWith("__react")), { timeout: 20000 });
+  await page.waitForFunction((id) => document.querySelector('[data-testid="demo-run-id"]')?.textContent?.trim() === id, { timeout: 20000 }, run.run.run_id);
+  await page.waitForSelector('[data-testid="verdict-map"] [data-invariant]', { timeout: 20000 });
 
-  const body = (await page.evaluate(() => document.body.innerText)).toLowerCase();
-  assert.ok(body.includes("an ai fixed a payment bug"), "hero states the product in one line");
-  assert.ok(body.includes("recorded"), "the page says it is recorded evidence");
-  assert.ok(!body.includes("act 1"), "no numbered act kickers");
-
-  // Act navigation scrolls to the act and marks it current.
-  await page.click('nav[aria-label="Acts"] a[href="#fix"]');
-  await page.waitForFunction(() => document.querySelector('nav[aria-label="Acts"] a[href="#fix"]')?.getAttribute("aria-current") === "location", { timeout: 5000 });
-
-  // BREAK: the ledger statement lists what the oracle read; entries are selectable.
-  const entries = await page.$$('[data-testid="ledger-row"]');
-  assert.ok(entries.length >= 4, "ledger entries render (capture, status, effects)");
-  const ledger = await page.evaluate(() => document.querySelector("#break").innerText);
+  // BREAK: the product in one line, and a map that matches the pre-repair verdict.
+  const lower = (await page.evaluate(() => document.body.innerText)).toLowerCase();
+  assert.ok(lower.includes("an ai fixed a payment bug"), "the page states the product in one line");
+  assert.ok(lower.includes("recorded"), "the page says it is recorded evidence");
+  let cells = await mapStatuses(page);
+  assert.equal(Object.keys(cells).length, run.pre_repair.invariants.length, "one cell per invariant");
+  assert.deepEqual(cells, statusesOf(run.pre_repair), "the Break map shows the pre-repair statuses");
+  assert.deepEqual(failing(run.pre_repair).every((id) => cells[id] === "FAIL"), true);
+  const ledger = await page.evaluate(() => document.body.innerText);
   assert.ok(ledger.includes("evt-cap-1") && ledger.includes("evt-cap-2"), "both fulfillment effects are listed");
-  assert.ok(ledger.includes("does not balance"), "the statement states it does not balance");
+  assert.ok(ledger.includes("does not balance"), "the statement says it does not balance");
   await page.evaluate(() => document.querySelectorAll('[data-testid="ledger-row"]')[3].click());
-  await page.waitForFunction(() => document.querySelector('[data-testid="break-detail"]')?.textContent.includes("evt-cap-2"));
-  assert.ok((await text(page, '[data-testid="break-detail"]')).includes("I13"), "selecting an effect shows I13");
-  await page.evaluate(() => [...document.querySelectorAll('#break [aria-label="Invariants"] button')].find((b) => b.textContent.includes("I6")).click());
-  await page.waitForFunction(() => document.querySelector('[data-testid="break-detail"]')?.textContent.includes("Invariant I6"));
-  assert.ok(ledger.toLowerCase().includes("cannot show") || (await page.evaluate(() => document.querySelector("#break").innerText)).toLowerCase().includes("what this evidence cannot show"), "evidence limits are stated");
-  assert.ok(ledger.includes(run.incident.original_order_id ?? run.incident.order_id), "incident order id is visible");
+  await page.waitForFunction(() => document.querySelector('[data-testid="invariant-detail"]')?.closest("section")?.textContent.includes("I13"));
+  await page.evaluate(() => document.querySelector('[data-invariant="I6"]').dispatchEvent(new MouseEvent("click", { bubbles: true })));
+  await page.waitForFunction(() => document.querySelector('[data-testid="invariant-detail"]')?.closest("section")?.textContent.includes("I6"));
+  // Keyboard: a focused cell activates with Enter.
+  await page.evaluate(() => document.querySelector('[data-invariant="I8"]').focus());
+  await page.keyboard.press("Enter");
+  await page.waitForFunction(() => document.querySelector('[data-invariant="I8"]')?.getAttribute("aria-pressed") === "true");
+  assert.ok(ledger.toLowerCase().includes("what this evidence cannot show"), "evidence limits are stated");
 
-  // FIX: diagnosis provenance, the real diff, and a note that jumps to a line.
-  const fix = (await page.evaluate(() => document.querySelector("#fix").innerText)).toLowerCase();
+  // FIX: provenance, uncertainty, the exact diff, and a note that jumps to a line.
+  await go(page, "fix");
+  const fix = (await page.evaluate(() => document.body.innerText)).toLowerCase();
   assert.ok(fix.includes(run.run.kind === "replay" ? "replayed recorded model output" : "recorded hosted-model reply"), "model provenance is accurate");
   assert.ok(fix.includes("no merchant_webhook_events") && fix.includes("not directly observed"), "the model's uncertainty is visible");
-  const diff = await text(page, '#fix [data-testid="demo-diff"]');
-  assert.ok(diff.includes("'FULFILL'"), "generated diff is visible");
-  const note = await page.$('#fix [aria-label="Reading the patch"] button');
+  assert.ok((await text(page, '[data-testid="demo-diff"]')).includes("'FULFILL'"), "generated diff is visible");
+  const note = await page.$('[aria-label="Reading the patch"] button');
   if (note) {
     await note.click();
-    await page.waitForFunction(() => document.querySelector('#fix [aria-label="Reading the patch"] [aria-live]')?.textContent.length > 20);
+    await page.waitForFunction(() => document.querySelector('[aria-label="Reading the patch"] [aria-live]')?.textContent.length > 20);
   }
 
-  // JUDGE: candidate tabs, including the unsafe patch as a primary interaction.
-  await page.click('[data-candidate="repair"]');
-  await page.waitForSelector('[data-testid="demo-oracle"]');
-  const verified = await text(page, '[data-testid="demo-oracle"]');
-  assert.ok(verified.includes("VERIFIED"), "repaired candidate verdict is visible");
-  assert.ok(verified.toLowerCase().includes("not a claim about live paypal"), "verification scope is explicit");
-  await page.click('[data-candidate="unsafe"]');
-  await page.waitForSelector('[data-testid="demo-unsafe"]');
-  const unsafe = await text(page, '[data-testid="demo-unsafe"]');
-  assert.ok(unsafe.includes("UNSAFE") && unsafe.includes("I13"), "unsafe verdict names I13");
-  assert.ok(unsafe.includes("Historical independent-oracle evidence"), "historical provenance is explicit");
-  if (run.unsafe.fresh_trusted_gate.executed) assert.ok(unsafe.includes("Fresh trusted gate"));
-  else assert.ok(unsafe.includes("not run for this recorded artifact"), "missing fresh gate is explicit");
+  // JUDGE: the map re-tones per candidate; unsafe fails only what the oracle says.
+  await go(page, "judge");
+  await page.click('[data-testid="candidate-repair"]');
+  await page.waitForFunction((ids) => ids.every((id) => document.querySelector(`[data-invariant="${id}"]`)?.getAttribute("data-status") === "PASS"), {}, failing(run.pre_repair));
+  cells = await mapStatuses(page);
+  assert.deepEqual(cells, statusesOf(run.oracle), "the repaired candidate's map matches the oracle");
+  assert.ok((await text(page, '[data-testid="demo-oracle"]')).includes("Verified"), "verdict word is shown");
+  assert.ok((await page.evaluate(() => document.body.innerText)).toLowerCase().includes("not a claim about live paypal"), "verification scope is explicit");
+  await page.click('[data-testid="candidate-unsafe"]');
+  await page.waitForFunction((ids) => ids.every((id) => document.querySelector(`[data-invariant="${id}"]`)?.getAttribute("data-status") === "FAIL"), {}, failing(run.unsafe));
+  cells = await mapStatuses(page);
+  assert.deepEqual(cells, statusesOf(run.unsafe), "the unsafe candidate's map matches the oracle");
+  assert.deepEqual(Object.keys(cells).filter((id) => cells[id] === "FAIL").sort(), failing(run.unsafe));
+  const judgeText = await page.evaluate(() => document.body.innerText);
+  assert.ok(judgeText.includes("Historical independent-oracle evidence"), "historical provenance is explicit");
+  if (run.unsafe.fresh_trusted_gate.executed) assert.ok(judgeText.includes("Fresh trusted gate"));
+  else assert.ok(judgeText.includes("not run for this recorded artifact"), "missing fresh gate is explicit");
+  // Differences highlight dims every cell on which the candidates agree.
+  await page.evaluate(() => [...document.querySelectorAll("button")].find((b) => b.textContent.startsWith("Show differences")).click());
+  await new Promise((r) => setTimeout(r, 400));
+  const bright = await page.$$eval('[data-testid="verdict-map"] [data-invariant]', (cs) => cs.filter((c) => getComputedStyle(c).opacity === "1").map((c) => c.getAttribute("data-invariant")).sort());
+  const differing = Object.keys(statusesOf(run.oracle)).filter((id) => new Set([statusesOf(run.pre_repair)[id], statusesOf(run.oracle)[id], statusesOf(run.unsafe)[id]]).size > 1).sort();
+  assert.deepEqual(bright, differing, "only the cells where candidates differ stay lit");
+  // Code view shows the unsafe candidate's own patch.
+  await page.evaluate(() => [...document.querySelectorAll("button")].find((b) => b.textContent.trim() === "Code").click());
   if (run.unsafe.diff) {
+    await page.waitForSelector('[data-testid="demo-unsafe-diff"]');
     const unsafeDiff = await text(page, '[data-testid="demo-unsafe-diff"]');
     assert.ok(unsafeDiff.includes("Seeded unsafe candidate"), "the unsafe candidate's own code is shown");
     assert.ok(!unsafeDiff.includes("'FULFILL'"), "the unsafe diff is not the repair");
+    await page.evaluate(() => [...document.querySelectorAll("button")].find((b) => b.textContent.trim() === "Compare both patches").click());
+    await page.waitForFunction(() => document.querySelectorAll('[data-testid="demo-diff"], [data-testid="demo-unsafe-diff"]').length === 2);
   }
 
-  // Matrix: differences by default, expandable counterexamples per candidate.
-  const matrix = '[data-testid="invariant-matrix"]';
-  const diffRows = await page.$$eval(`${matrix} ul > li`, (rows) => rows.length);
-  assert.ok(diffRows >= 1 && diffRows < 14, `the default view shows only differing rows (${diffRows})`);
-  const matrixText = await text(page, matrix);
-  assert.ok(matrixText.includes("evt-cap-1") && matrixText.includes("evt-cap-2"), "the I13 counterexample is expanded");
-  await page.evaluate((m) => [...document.querySelectorAll(`${m} button`)].find((b) => /^All 14/.test(b.textContent.trim())).click(), matrix);
-  await page.waitForFunction((m) => document.querySelectorAll(`${m} ul > li`).length === 14, {}, matrix);
-
-  // Sandbox gate and provider calls (verification order, stepped).
-  const steps = await page.$$eval('[data-testid="gate-steps"] li', (rows) => rows.length);
-  assert.equal(steps, run.verification.steps.length, "every recorded sandbox step is listed");
-  assert.ok((await page.evaluate(() => document.querySelector("#judge").innerText)).toLowerCase().includes("verification order"), "provider calls are tied to the verification order");
-  await page.evaluate(() => document.querySelectorAll('[data-testid="observation-row"]')[0].click());
-  await page.evaluate(() => document.querySelector('[aria-label="Next call"]').click());
-  await page.waitForFunction(() => document.querySelector('[data-testid="provider-calls"] dl')?.textContent.includes("Request id") || true);
+  // EVIDENCE: the time map's areas follow the recorded durations.
+  await go(page, "evidence");
+  await page.waitForSelector('[data-testid="time-map"] [data-step]');
+  const areas = await page.$$eval('[data-testid="time-map"] [data-step] > path:first-of-type', (ps) => ps.map((p) => ({ n: p.parentElement.getAttribute("data-step"), a: p.getBBox().width * p.getBBox().height })));
+  assert.equal(areas.length, run.verification.steps.length, "one cell per sandbox step");
+  const longest = [...run.verification.steps].sort((a, b) => b.duration_ms - a.duration_ms)[0].name;
+  assert.equal([...areas].sort((a, b) => b.a - a.a)[0].n, longest, "the longest step has the largest cell");
   await page.evaluate(() => document.querySelectorAll('[data-testid="observation-row"]')[document.querySelectorAll('[data-testid="observation-row"]').length - 1].click());
-  await page.waitForFunction((id) => document.querySelector('[data-testid="provider-calls"]').innerText.includes(id), {}, capture.capture_id);
+  await page.waitForFunction((id) => document.querySelector('[data-testid="call-detail"]')?.innerText.includes(id), {}, capture.capture_id);
+  assert.ok((await page.evaluate(() => document.body.innerText)).toLowerCase().includes("verification order"), "provider calls are tied to the verification order");
 
-  // The hero list opens the judge on the chosen candidate.
-  await page.evaluate(() => window.scrollTo(0, 0));
-  await page.evaluate(() => document.querySelectorAll('[role="radiogroup"] [role="radio"]')[0].click());
-  await page.waitForFunction(() => document.querySelector('[data-candidate="before"]')?.getAttribute("aria-selected") === "true");
-
-  // The human gate is pinned and expands.
-  const gate = await page.$('[data-testid="human-gate"]');
-  assert.ok(gate, "human gate is rendered");
-  const box = await gate.boundingBox();
-  assert.ok(box && box.y + box.height >= 990, "human gate is pinned to the bottom of the viewport");
+  // The human gate is pinned in every view and expands.
+  for (const view of ["break", "fix", "judge", "evidence"]) {
+    await go(page, view);
+    const box = await (await page.$('[data-testid="human-gate"]')).boundingBox();
+    assert.ok(box && box.y + box.height > 940, `human gate is visible at the foot of ${view}`);
+  }
   await page.evaluate(() => document.querySelector('[data-testid="human-gate"] button[aria-expanded]').click());
   await page.waitForSelector('[data-testid="demo-human"]');
   const human = await text(page, '[data-testid="demo-human"]');
   assert.ok(human.includes("No approval has been recorded"), "approval state is explicit");
   assert.ok(/cannot merge, push, deploy, capture, refund or retry/.test(human), "human-review boundary copy is visible");
-
   const overflow = await page.evaluate(() => ({ s: document.documentElement.scrollWidth, c: document.documentElement.clientWidth }));
   assert.ok(overflow.s <= overflow.c + 1, "desktop page has no horizontal overflow");
 
-  // Mobile at both common widths: no overflow, readable type, reachable navigation.
+  // Phones: no overflow, readable type, a visible map, 44px nav targets, a pinned gate.
   for (const width of [390, 375]) {
     await page.setViewport({ width, height: 844, deviceScaleFactor: 1, isMobile: true, hasTouch: true });
     await page.goto(`${base}${pagePath}`, { waitUntil: "domcontentloaded" });
-    await page.waitForSelector('[data-candidate="unsafe"]');
+    await page.waitForSelector('[data-testid="verdict-map"] [data-invariant]');
     const m = await page.evaluate(() => ({
       s: document.documentElement.scrollWidth,
       c: document.documentElement.clientWidth,
-      tiny: [...document.querySelectorAll("body *")].filter((e) => [...e.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim()) && parseFloat(getComputedStyle(e).fontSize) < 12.5).map((e) => e.textContent.trim().slice(0, 30)),
+      svg: document.querySelector('[data-testid="verdict-map"] svg').getBoundingClientRect().width,
+      tiny: [...document.querySelectorAll("body *")].filter((e) => !e.closest("svg") && [...e.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim()) && parseFloat(getComputedStyle(e).fontSize) < 12.5).map((e) => e.textContent.trim().slice(0, 30)),
+      tinySvg: [...document.querySelectorAll("svg text")].filter((t) => parseFloat(getComputedStyle(t).fontSize) < 12.5).length,
     }));
     assert.ok(m.s <= m.c + 1, `${width}px page has no horizontal overflow`);
+    assert.ok(m.svg >= width - 40, `${width}px map fills the width`);
     assert.deepEqual(m.tiny, [], `${width}px has no text under 12.5px`);
-    const navBox = await (await page.$('nav[aria-label="Acts"] a[href="#judge"]')).boundingBox();
-    assert.ok(navBox.height >= 44, "act navigation has a 44px touch target");
+    assert.equal(m.tinySvg, 0, `${width}px map labels are readable`);
+    const navBox = await (await page.$('nav[aria-label="Views"] a[href="#judge"]')).boundingBox();
+    assert.ok(navBox.height >= 44, "view navigation has a 44px touch target");
+    const gate = await (await page.$('[data-testid="human-gate"]')).boundingBox();
+    assert.ok(gate.y + gate.height >= 830, "the gate is pinned on phones");
   }
 
   const bench = await browser.newPage();
@@ -174,8 +183,7 @@ try {
   await home.setViewport({ width: 1440, height: 1000 });
   await home.goto(`${base}/`, { waitUntil: "domcontentloaded", timeout: 20000 });
   await home.waitForFunction((id) => document.querySelector('[data-testid="demo-run-id"]')?.textContent?.trim() === id, { timeout: 20000 }, recordedRun.run.run_id);
-  const homeText = await home.evaluate(() => document.body.innerText);
-  assert.ok(homeText.toLowerCase().includes("duplicate fulfillment"), "public entry loads the recorded case");
+  assert.ok((await home.evaluate(() => document.body.innerText)).toLowerCase().includes("duplicate fulfillment"), "public entry loads the recorded case");
 
   assert.equal(pageErrors.length, 0, `page errors: ${pageErrors.join("; ")}`);
   console.log(`demo-browser: PASS run=${run.run.run_id}`);

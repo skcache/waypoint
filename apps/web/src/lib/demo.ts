@@ -75,6 +75,8 @@ export interface DemoCounterexample {
 
 export interface DemoInvariant {
   id: string;
+  /** The oracle's own name for the invariant. */
+  title?: string;
   status: string;
   summary: string;
   counterexample?: DemoCounterexample;
