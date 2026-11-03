@@ -97,6 +97,12 @@ test-demo-paths: ## Safety tests for the fixed demo artifact directory
 	@bash scripts/test-demo-paths.sh
 
 demo-check: test-demo-paths ## Full DB-backed verification, then the deterministic demo
+	@make --no-print-directory db-up
+	@for _ in $$(seq 1 30); do \
+		if docker compose exec -T db pg_isready -U waypoint -d waypoint >/dev/null 2>&1; then break; fi; \
+		sleep 1; \
+	done
+	@make --no-print-directory db-migrate
 	cd $(API_DIR) && REQUIRE_DATABASE_TESTS=1 go test -count=1 -timeout 900s ./...
 	@$(MAKE) --no-print-directory demo
 
