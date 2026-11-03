@@ -337,3 +337,50 @@ export function receiptModel(doc: DemoExport, column: Column): ReceiptModel {
 export function surfaceOf(m: ReceiptModel) {
   return { status: m.status, fulfilled: m.effects.length > 0 };
 }
+
+/** A failed rule is given this many times the space of a rule that held. */
+export const FAIL_WEIGHT = 4;
+
+export interface RuleTile {
+  id: string;
+  title: string;
+  status: string;
+  summary: string;
+  counterexample?: DemoInvariant["counterexample"];
+  weight: number;
+}
+
+/** The oracle's rules for one candidate, in I1..I14 order, weighted for the board. */
+export function ruleTiles(e: DemoEval): RuleTile[] {
+  return [...e.invariants]
+    .sort((a, b) => Number(a.id.slice(1)) - Number(b.id.slice(1)))
+    .map((i) => ({
+      id: i.id,
+      title: i.title ?? i.summary,
+      status: i.status,
+      summary: i.summary,
+      counterexample: i.counterexample,
+      weight: i.status === "FAIL" ? FAIL_WEIGHT : 1,
+    }));
+}
+
+/** The four numbers the walkthrough leads with, each read straight from the export. */
+export function storyFigures(doc: DemoExport) {
+  const before = receiptModel(doc, "before");
+  const repair = receiptModel(doc, "repair");
+  const unsafe = receiptModel(doc, "unsafe");
+  const lines = doc.patch.diff.split("\n");
+  const added = lines.filter((l) => l.startsWith("+") && !l.startsWith("+++")).length;
+  const removed = lines.filter((l) => l.startsWith("-") && !l.startsWith("---")).length;
+  return {
+    incident: { fulfilled: before.fulfilled, captured: before.captured, statusFlagged: before.statusFlagged, failed: before.failed },
+    repair: { added, removed, file: doc.patch.changed_files[0] ?? "patch" },
+    check: {
+      accepted: [repair, unsafe].filter((m) => m.verdict === "VERIFIED").length,
+      candidates: 2,
+      unsafeFailed: unsafe.failed,
+      surfaceSame: repair.status === unsafe.status,
+    },
+    review: { waiting: doc.human_review.status === "ACCEPTED_FOR_HUMAN_REVIEW" ? 1 : 0 },
+  };
+}

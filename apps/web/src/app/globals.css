@@ -3,140 +3,89 @@
 /*
   Waypoint art direction.
 
-  Dark by default, light on request (html[data-theme]). The page is a quiet
-  graphite room with one luminous object in it: the receipt, printed on warm
-  paper. Colour is rationed: vermilion means "alarm", the soft green means
-  "clear", and nothing else is saturated. Status never travels as colour alone:
-  every mark also has a word or a glyph.
+  One instrument, not a page. A quiet rail on the left says where you are in the
+  story and leads with a single number; a stage fills the rest of the screen with
+  one dominant visual. On the board, area and tone carry meaning: a rule that
+  failed is given more space and the only saturated colour, a rule that held is
+  quiet, a rule that does not apply is dotted, and an accepted candidate is the
+  only one that lights up. Dark by default, light on request (html[data-theme]).
+  Status never travels as colour alone: every mark also has a word.
 */
 :root {
   color-scheme: dark;
-  --paper: oklch(0.95 0.008 90);
-  --ink: oklch(0.145 0.003 90);
-  --alarm: oklch(0.68 0.2 33);
-  --clear: oklch(0.84 0.14 140);
-  --sheet: oklch(0.975 0.006 90);
-  --sheet-ink: oklch(0.2 0.008 90);
+  /* PayPal's palette: deep navy ground, blue for what is accepted, its yellow for what needs attention. */
+  --pp-navy: oklch(0.33 0.14 262); /* #003087 */
+  --pp-blue: oklch(0.52 0.17 252); /* #0070ba */
+  --pp-sky: oklch(0.7 0.13 233); /* #009cde */
+  --pp-yellow: oklch(0.86 0.15 85); /* #ffc439 */
+  
+  --ink: oklch(0.2 0.07 262);
+  --alarm: var(--pp-yellow);
+  --sheet: oklch(0.985 0.004 250);
+  --sheet-ink: oklch(0.22 0.06 262);
 
-  /* base field */
-  --c-bg: oklch(0.145 0.003 90);
-  --c-surface: oklch(0.2 0.004 90);
-  --c-sunk: oklch(0.115 0.003 90);
-  --c-text: oklch(0.95 0.006 90);
-  --c-muted: oklch(0.76 0.005 90);
-  --c-faint: oklch(0.64 0.005 90);
-  --c-line: oklch(0.28 0.004 90);
-  --c-line-strong: oklch(0.44 0.005 90);
-  --c-fail: oklch(0.73 0.17 30);
-  --c-fail-soft: oklch(0.27 0.07 30);
-  --c-pass: oklch(0.84 0.14 140);
-  --c-pass-soft: oklch(0.27 0.06 140);
-  --c-warn: oklch(0.8 0.12 80);
-  --c-warn-soft: oklch(0.28 0.05 80);
-  --c-accent: oklch(0.95 0.006 90);
-  --c-on-accent: oklch(0.145 0.003 90);
-  --c-hot: var(--alarm);
-  --t-keyword: oklch(0.78 0.12 300);
-  --t-string: oklch(0.8 0.1 145);
-  --t-comment: oklch(0.62 0.01 90);
-  --t-number: oklch(0.8 0.11 70);
-  --t-type: oklch(0.8 0.09 235);
-  --t-sql: oklch(0.78 0.14 40);
+  --c-bg: oklch(0.19 0.065 262);
+  --c-surface: oklch(0.235 0.07 262);
+  --c-sunk: oklch(0.15 0.055 262);
+  --c-text: oklch(0.96 0.01 250);
+  --c-muted: oklch(0.79 0.03 255);
+  --c-faint: oklch(0.67 0.04 256);
+  --c-line: oklch(0.31 0.06 262);
+  --c-line-strong: oklch(0.47 0.08 258);
+  --c-fail: oklch(0.86 0.15 85);
+  --c-fail-soft: oklch(0.31 0.06 85);
+  --c-pass: oklch(0.8 0.12 235);
+  --c-pass-soft: oklch(0.3 0.09 245);
+  --c-warn: oklch(0.86 0.15 85);
+  --c-warn-soft: oklch(0.3 0.06 85);
+  --c-accent: oklch(0.78 0.12 233);
+  --c-on-accent: oklch(0.2 0.07 262);
+
+  --tile-held: oklch(0.3 0.09 260);
+  --tile-held-ink: oklch(0.93 0.02 250);
+  --tile-lit: var(--pp-blue);
+  --tile-lit-ink: oklch(0.99 0.004 250);
+  --tile-fail: var(--pp-yellow);
+  --tile-fail-ink: oklch(0.22 0.08 262);
+  --tile-na-line: oklch(0.5 0.07 258);
+
+  --t-keyword: oklch(0.8 0.12 300);
+  --t-string: oklch(0.82 0.1 175);
+  --t-comment: oklch(0.65 0.04 255);
+  --t-number: oklch(0.86 0.13 85);
+  --t-type: oklch(0.8 0.11 235);
+  --t-sql: oklch(0.8 0.13 60);
 }
 
 :root[data-theme="light"] {
   color-scheme: light;
-  --paper: oklch(0.955 0.006 100);
-  --ink: oklch(0.15 0.004 100);
-  --alarm: oklch(0.67 0.225 33);
-  --clear: oklch(0.91 0.2 125);
-  --sheet: oklch(0.985 0.004 95);
-  --sheet-ink: oklch(0.2 0.008 95);
+  --c-bg: oklch(0.965 0.006 250);
+  --c-surface: oklch(0.99 0.003 250);
+  --c-sunk: oklch(0.93 0.01 250);
+  --c-text: oklch(0.24 0.07 262);
+  --c-muted: oklch(0.4 0.05 262);
+  --c-faint: oklch(0.49 0.05 260);
+  --c-line: oklch(0.88 0.012 250);
+  --c-line-strong: oklch(0.64 0.03 255);
+  --c-fail: oklch(0.45 0.12 60);
+  --c-fail-soft: oklch(0.95 0.07 90);
+  --c-pass: oklch(0.45 0.15 252);
+  --c-pass-soft: oklch(0.94 0.03 240);
+  --c-warn: oklch(0.45 0.12 60);
+  --c-warn-soft: oklch(0.95 0.07 90);
+  --c-accent: var(--pp-navy);
+  --c-on-accent: oklch(0.99 0.004 250);
 
-  --c-bg: var(--paper);
-  --c-surface: oklch(0.985 0.003 100);
-  --c-sunk: oklch(0.92 0.006 100);
-  --c-text: var(--ink);
-  --c-muted: oklch(0.38 0.005 100);
-  --c-faint: oklch(0.46 0.005 100);
-  --c-line: oklch(0.84 0.006 100);
-  --c-line-strong: oklch(0.55 0.006 100);
-  --c-fail: oklch(0.5 0.21 30);
-  --c-fail-soft: oklch(0.94 0.04 30);
-  --c-pass: oklch(0.42 0.12 145);
-  --c-pass-soft: oklch(0.94 0.07 125);
-  --c-warn: oklch(0.45 0.12 70);
-  --c-warn-soft: oklch(0.95 0.06 90);
-  --c-accent: var(--ink);
-  --c-on-accent: var(--paper);
+  --tile-held: oklch(0.89 0.025 250);
+  --tile-held-ink: oklch(0.28 0.08 262);
+  --tile-na-line: oklch(0.62 0.03 255);
+
   --t-keyword: oklch(0.42 0.14 300);
-  --t-string: oklch(0.42 0.1 145);
-  --t-comment: oklch(0.5 0.01 100);
+  --t-string: oklch(0.42 0.1 175);
+  --t-comment: oklch(0.52 0.03 255);
   --t-number: oklch(0.48 0.12 60);
-  --t-type: oklch(0.42 0.1 235);
-  --t-sql: oklch(0.48 0.17 33);
-}
-
-/* Dark: three depths of the same graphite. The break scene gets a faint ember, nothing more. */
-.field-paper {
-  --c-bg: oklch(0.175 0.004 90);
-  --c-surface: oklch(0.22 0.004 90);
-  background: var(--c-bg);
-  color: var(--c-text);
-}
-
-.field-ink {
-  --c-bg: oklch(0.125 0.003 90);
-  --c-surface: oklch(0.18 0.004 90);
-  background: var(--c-bg);
-  color: var(--c-text);
-}
-
-.field-alarm {
-  --c-bg: oklch(0.145 0.003 90);
-  background:
-    radial-gradient(60% 55% at 88% 12%, color-mix(in oklch, var(--alarm) 20%, transparent), transparent 70%),
-    radial-gradient(45% 40% at 0% 100%, color-mix(in oklch, var(--alarm) 9%, transparent), transparent 70%),
-    var(--c-bg);
-  color: var(--c-text);
-}
-
-/* Light: the original paper, ink and vermilion fields. */
-:root[data-theme="light"] .field-paper {
-  --c-bg: var(--paper);
-  --c-surface: oklch(0.985 0.003 100);
-}
-
-:root[data-theme="light"] .field-ink {
-  --c-bg: var(--ink);
-  --c-surface: oklch(0.22 0.004 100);
-  --c-sunk: oklch(0.11 0.004 100);
-  --c-text: var(--paper);
-  --c-muted: oklch(0.78 0.005 100);
-  --c-faint: oklch(0.67 0.005 100);
-  --c-line: oklch(0.32 0.005 100);
-  --c-line-strong: oklch(0.52 0.005 100);
-  --c-fail: oklch(0.74 0.19 33);
-  --c-fail-soft: oklch(0.28 0.08 33);
-  --c-pass: var(--clear);
-  --c-pass-soft: oklch(0.3 0.07 125);
-  --c-accent: var(--clear);
-  --c-on-accent: var(--ink);
-  color-scheme: dark;
-}
-
-:root[data-theme="light"] .field-alarm {
-  --c-bg: var(--alarm);
-  --c-surface: color-mix(in oklch, var(--ink) 12%, var(--alarm));
-  --c-text: var(--ink);
-  --c-muted: color-mix(in oklch, var(--ink) 82%, var(--alarm));
-  --c-faint: color-mix(in oklch, var(--ink) 68%, var(--alarm));
-  --c-line: color-mix(in oklch, var(--ink) 30%, var(--alarm));
-  --c-line-strong: color-mix(in oklch, var(--ink) 70%, var(--alarm));
-  --c-accent: var(--ink);
-  --c-on-accent: var(--alarm);
-  --c-hot: var(--paper);
-  background: var(--c-bg);
+  --t-type: oklch(0.42 0.12 245);
+  --t-sql: oklch(0.48 0.15 50);
 }
 
 @theme inline {
@@ -157,12 +106,11 @@
   --color-accent: var(--c-accent);
   --color-on-accent: var(--c-on-accent);
   --color-alarm: var(--alarm);
-  --color-hot: var(--c-hot);
   --color-paper: var(--paper);
-  --color-night: var(--ink);
-  --color-clear: var(--clear);
-  --color-sheet: var(--sheet);
-  --color-sheet-ink: var(--sheet-ink);
+  --color-tile: var(--tile-held);
+  --color-tile-ink: var(--tile-held-ink);
+  --color-lit: var(--tile-lit);
+  --color-lit-ink: var(--tile-lit-ink);
   --radius-panel: 6px;
   --font-sans: "Archivo Variable", ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -171,7 +119,6 @@
 @layer base {
   html {
     scroll-behavior: smooth;
-    scroll-padding-top: 64px;
     -webkit-text-size-adjust: 100%;
     background: var(--c-bg);
   }
@@ -180,26 +127,21 @@
     background: var(--c-bg);
     color: var(--c-text);
     font-family: var(--font-sans);
-    font-size: 17px;
+    font-size: 16px;
     line-height: 1.5;
     font-variant-numeric: tabular-nums;
     text-rendering: optimizeLegibility;
   }
 
   ::selection {
-    background: var(--clear);
-    color: var(--ink);
+    background: var(--c-accent);
+    color: var(--c-on-accent);
   }
 
   :focus-visible {
-    outline: 3px solid var(--clear);
-    outline-offset: 2px;
-    border-radius: 3px;
-  }
-
-  :root[data-theme="light"] .field-paper :focus-visible,
-  .receipt :focus-visible {
-    outline-color: var(--ink);
+    outline: 2px solid var(--c-accent);
+    outline-offset: 3px;
+    border-radius: 4px;
   }
 
   summary {
@@ -216,23 +158,15 @@
   .mono {
     font-family: var(--font-mono);
     font-variant-numeric: tabular-nums;
-    font-size: 0.92em;
+    font-size: max(0.92em, 12.5px);
   }
 
-  /* The display voice: confident, sentence case, tightly set. */
-  .poster {
-    font-weight: 600;
-    letter-spacing: -0.04em;
-    line-height: 0.96;
-  }
-
-  /* Rubber stamps and ticket chips keep the old condensed capitals. */
-  .poster-caps {
-    font-weight: 800;
-    font-stretch: 66%;
-    text-transform: uppercase;
-    letter-spacing: -0.012em;
-    line-height: 0.88;
+  /* The lead number: very light, very large, tightly set. */
+  .numeral {
+    font-weight: 240;
+    letter-spacing: -0.06em;
+    line-height: 0.82;
+    font-variant-numeric: lining-nums;
   }
 
   .scrollbar-none {
@@ -242,60 +176,8 @@
     display: none;
   }
 
-  /* Thermal receipt paper with torn top and bottom edges. */
-  .receipt {
-    --s: 9px;
-    position: relative;
-    color: var(--sheet-ink);
-    background-color: var(--sheet);
-    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 .5 0'/></filter><rect width='100%' height='100%' filter='url(%23n)' opacity='.06'/></svg>");
-    -webkit-mask:
-      conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) bottom / calc(2 * var(--s)) 51% repeat-x,
-      conic-gradient(from 135deg at top, #0000, #000 1deg 89deg, #0000 90deg) top / calc(2 * var(--s)) 51% repeat-x;
-    mask:
-      conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) bottom / calc(2 * var(--s)) 51% repeat-x,
-      conic-gradient(from 135deg at top, #0000, #000 1deg 89deg, #0000 90deg) top / calc(2 * var(--s)) 51% repeat-x;
-  }
-
-  .receipt-shadow {
-    filter: drop-shadow(0 30px 44px color-mix(in oklch, black 55%, transparent)) drop-shadow(0 0 1px color-mix(in oklch, white 30%, transparent));
-  }
-
-  /* The auditor's highlighter: a slanted marker stroke that draws in. */
-  .marker {
-    background-image: linear-gradient(100deg, transparent 0.4em, var(--clear) 0.4em, var(--clear) calc(100% - 0.4em), transparent calc(100% - 0.4em));
-    background-repeat: no-repeat;
-    background-size: 0% 62%;
-    background-position: 0 70%;
-    transition: background-size 520ms cubic-bezier(0.2, 0.8, 0.2, 1);
-  }
-  .marker[data-on="true"] {
-    background-size: 100% 62%;
-  }
-  .marker-alarm {
-    background-image: linear-gradient(100deg, transparent 0.4em, var(--alarm) 0.4em, var(--alarm) calc(100% - 0.4em), transparent calc(100% - 0.4em));
-  }
-
-  /* Reveal on scroll. Content is visible by default; script sets data-state="out" first. */
-  .reveal {
-    transition: opacity 700ms cubic-bezier(0.16, 1, 0.3, 1), transform 700ms cubic-bezier(0.16, 1, 0.3, 1);
-  }
-  .reveal[data-state="out"] {
-    opacity: 0;
-    transform: translateY(28px);
-  }
-
-  /* A receipt printing: the paper feeds out of the slot, top first. */
-  .print {
-    transition: clip-path 1100ms cubic-bezier(0.4, 0, 0.2, 1);
-    clip-path: inset(0 0 0 0);
-  }
-  .print[data-state="out"] {
-    clip-path: inset(0 0 100% 0);
-  }
-
-  .stamp-slam {
-    animation: slam 420ms cubic-bezier(0.2, 1.5, 0.4, 1) both;
+  .enter {
+    animation: enter 520ms cubic-bezier(0.16, 1, 0.3, 1) both;
   }
 
   .line-pulse {
@@ -303,24 +185,21 @@
   }
 }
 
-@keyframes slam {
-  0% {
+@keyframes enter {
+  from {
     opacity: 0;
-    transform: rotate(var(--r, -8deg)) scale(1.7);
+    transform: translateY(10px);
   }
-  60% {
+  to {
     opacity: 1;
-  }
-  100% {
-    opacity: 0.93;
-    transform: rotate(var(--r, -8deg)) scale(1);
+    transform: none;
   }
 }
 
 @keyframes line-pulse {
   0%,
   35% {
-    background-color: color-mix(in oklch, var(--clear) 60%, transparent);
+    background-color: color-mix(in oklch, var(--c-accent) 35%, transparent);
   }
   100% {
     background-color: transparent;
@@ -332,17 +211,9 @@
     scroll-behavior: auto;
   }
 
-  .stamp-slam,
+  .enter,
   .line-pulse {
     animation: none !important;
-    opacity: 0.93;
-  }
-
-  .print[data-state="out"],
-  .reveal[data-state="out"] {
-    clip-path: none;
-    opacity: 1;
-    transform: none;
   }
 
   *,
@@ -354,22 +225,22 @@
   }
 }
 
-/* A code slip: a raised graphite panel in dark, cream paper in light. */
+/* A code slip: a raised navy panel in dark, a white sheet in light. */
 .paper {
-  --c-bg: oklch(0.2 0.004 90);
-  --c-surface: oklch(0.235 0.004 90);
-  --c-sunk: oklch(0.17 0.004 90);
-  --c-text: oklch(0.93 0.006 90);
-  --c-muted: oklch(0.75 0.005 90);
-  --c-faint: oklch(0.64 0.005 90);
-  --c-line: oklch(0.3 0.004 90);
-  --c-line-strong: oklch(0.46 0.005 90);
-  --c-fail: oklch(0.74 0.17 30);
-  --c-fail-soft: oklch(0.27 0.07 30);
-  --c-pass: oklch(0.84 0.14 140);
-  --c-pass-soft: oklch(0.27 0.06 140);
-  --c-accent: var(--paper);
-  --c-on-accent: var(--ink);
+  --c-bg: oklch(0.22 0.065 262);
+  --c-surface: oklch(0.26 0.07 262);
+  --c-sunk: oklch(0.18 0.06 262);
+  --c-text: oklch(0.94 0.012 250);
+  --c-muted: oklch(0.78 0.03 255);
+  --c-faint: oklch(0.67 0.04 256);
+  --c-line: oklch(0.32 0.06 262);
+  --c-line-strong: oklch(0.48 0.08 258);
+  --c-fail: oklch(0.86 0.15 85);
+  --c-fail-soft: oklch(0.32 0.06 85);
+  --c-pass: oklch(0.8 0.12 235);
+  --c-pass-soft: oklch(0.3 0.09 245);
+  --c-accent: oklch(0.78 0.12 233);
+  --c-on-accent: oklch(0.2 0.07 262);
   background: var(--c-bg);
   color: var(--c-text);
   color-scheme: dark;
@@ -377,18 +248,18 @@
 
 :root[data-theme="light"] .paper {
   --c-bg: var(--sheet);
-  --c-surface: oklch(0.95 0.006 95);
-  --c-sunk: oklch(0.92 0.007 95);
+  --c-surface: oklch(0.955 0.008 250);
+  --c-sunk: oklch(0.93 0.01 250);
   --c-text: var(--sheet-ink);
-  --c-muted: oklch(0.38 0.008 95);
-  --c-faint: oklch(0.46 0.008 95);
-  --c-line: oklch(0.86 0.007 95);
-  --c-line-strong: oklch(0.55 0.008 95);
-  --c-fail: oklch(0.5 0.21 30);
-  --c-fail-soft: oklch(0.94 0.04 30);
-  --c-pass: oklch(0.4 0.12 145);
-  --c-pass-soft: oklch(0.94 0.07 125);
-  --c-accent: var(--ink);
-  --c-on-accent: var(--paper);
+  --c-muted: oklch(0.4 0.05 262);
+  --c-faint: oklch(0.49 0.05 260);
+  --c-line: oklch(0.88 0.012 250);
+  --c-line-strong: oklch(0.64 0.03 255);
+  --c-fail: oklch(0.45 0.12 60);
+  --c-fail-soft: oklch(0.95 0.07 90);
+  --c-pass: oklch(0.45 0.15 252);
+  --c-pass-soft: oklch(0.94 0.03 240);
+  --c-accent: var(--pp-navy);
+  --c-on-accent: oklch(0.99 0.004 250);
   color-scheme: light;
 }

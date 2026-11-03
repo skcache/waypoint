@@ -8,6 +8,7 @@ import {
   formatMicros, gateSteps, humanGate, orderIdentities, verdictWord,
 } from "./evidence.ts";
 import { diffStats, parseDiff, tokenizeLine } from "./diff.ts";
+import { FAIL_WEIGHT, ruleTiles, storyFigures } from "./evidence.ts";
 
 const doc = JSON.parse(readFileSync(new URL("../../public/demo/recorded.json", import.meta.url), "utf8"));
 
@@ -171,4 +172,25 @@ test("looks fixed, is not: the repair and the unsafe patch share a surface and d
   assert.equal(unsafe.statusFlagged, false);
   assert.equal(new Set([before.orderId, repair.orderId, unsafe.orderId]).size, 3, "three distinct order identities");
   assert.equal(before.ticks.length, 14);
+});
+
+test("rule tiles carry the oracle's own titles and give failed rules more space", () => {
+  const before = ruleTiles(doc.pre_repair);
+  assert.deepEqual(before.map((t) => t.id), Array.from({ length: 14 }, (_, i) => `I${i + 1}`));
+  assert.deepEqual(before.filter((t) => t.weight === FAIL_WEIGHT).map((t) => t.id), ["I8", "I13", "I14"]);
+  assert.ok(before.every((t) => t.title && t.title.length > 3));
+  assert.ok(ruleTiles(doc.oracle).every((t) => t.weight === 1), "an accepted candidate has no oversized tile");
+  assert.deepEqual(ruleTiles(doc.unsafe).filter((t) => t.weight === FAIL_WEIGHT).map((t) => t.id), ["I13"]);
+  assert.equal(before.find((t) => t.id === "I13").counterexample.effect_count, 2);
+});
+
+test("story figures are the incident count, the patch size, the verdict tally and the review state", () => {
+  const f = storyFigures(doc);
+  assert.equal(f.incident.fulfilled, 2);
+  assert.equal(f.incident.captured, 1);
+  assert.equal(f.incident.statusFlagged, true);
+  assert.deepEqual(f.repair, { added: 11, removed: 5, file: "apps/api/internal/merchant/webhook.go" });
+  assert.equal(f.check.accepted, 1, "one of the two candidate patches is accepted");
+  assert.deepEqual(f.check.unsafeFailed, ["I13"]);
+  assert.equal(f.review.waiting, 1);
 });

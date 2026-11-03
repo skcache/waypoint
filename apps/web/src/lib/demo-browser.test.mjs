@@ -1,9 +1,9 @@
-// Browser-level test for the poster case file. It needs a running Next.js server
-// and a Chrome/Chromium binary (CHROME_PATH). It proves the page's own claim in a
-// real browser: at the surface the AI repair and the unsafe patch render
-// identically, and under the judge's lens every tick, effect count and stamp
-// matches the export. It also drives the story beats, the patches, the workpaper,
-// the sandbox bar, the provider calls, the pinned signature bar and the phone layout.
+// Browser-level test for the Waypoint walkthrough. It needs a running Next.js server
+// and a Chrome/Chromium binary (CHROME_PATH). It proves the page's own claims in a
+// real browser: every tile, count and verdict on the board matches the export, a
+// failed rule really is given more space, the AI repair and the seeded unsafe patch
+// share one order status while their ledgers differ, the human-review boundary is
+// always on screen, the theme toggle persists, and phones have no overflow.
 import puppeteer from "puppeteer-core";
 import assert from "node:assert/strict";
 
@@ -37,19 +37,22 @@ for (const from of ["/trace", "/checkout"]) {
 
 const statusOf = (e) => Object.fromEntries(e.invariants.map((i) => [i.id, i.status]));
 const failing = (e) => e.invariants.filter((i) => i.status === "FAIL").map((i) => i.id).sort();
-const evals = { before: run.pre_repair, repair: run.oracle, unsafe: run.unsafe };
 
 const browser = await puppeteer.launch({ executablePath: chrome, headless: true, args: ["--no-sandbox"] });
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-const setLens = (page, v) =>
-  page.evaluate((val) => {
-    const el = document.querySelector('[data-testid="lens"]');
-    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(el, String(val));
-    el.dispatchEvent(new Event("input", { bubbles: true }));
-  }, v);
-const ticks = (page, id) =>
-  page.$$eval(`[data-testid="${id}"] [data-tick]`, (els) => Object.fromEntries(els.map((e) => [e.getAttribute("data-tick"), e.getAttribute("data-status")])));
-const scrollToSel = (page, sel, off = 0) => page.evaluate((s, o) => window.scrollTo(0, document.querySelector(s).getBoundingClientRect().top + scrollY + o), sel, off);
+const click = (page, sel) => page.evaluate((s) => document.querySelector(s).click(), sel);
+const text = (page, sel) => page.$eval(sel, (el) => el.textContent.replace(/\s+/g, " ").trim());
+const tiles = (page) =>
+  page.$$eval('[data-testid="board"] [data-tile]', (els) =>
+    Object.fromEntries(els.map((e) => { const r = e.getBoundingClientRect(); return [e.getAttribute("data-tile"), { status: e.getAttribute("data-status"), area: r.width * r.height, bg: getComputedStyle(e).backgroundColor }]; })),
+  );
+const tileStatuses = async (page) => Object.fromEntries(Object.entries(await tiles(page)).map(([k, v]) => [k, v.status]));
+const step = async (page, n) => {
+  await click(page, `[data-step-row="${n}"]`);
+  await page.waitForFunction((k) => document.querySelector('[data-testid="step-count"]')?.textContent.includes(`Step ${k} of`), {}, n);
+  await wait(900);
+};
+const hydrated = (page) => page.waitForFunction(() => Object.keys(document.querySelector('[data-testid="next"]') ?? {}).some((k) => k.startsWith("__react")), { timeout: 20000 });
 
 try {
   const page = await browser.newPage();
@@ -58,108 +61,103 @@ try {
   page.on("pageerror", (err) => pageErrors.push(String(err)));
   await page.goto(`${base}${pagePath}`, { waitUntil: "domcontentloaded", timeout: 20000 });
   await page.waitForFunction((id) => document.querySelector('[data-testid="demo-run-id"]')?.textContent?.trim() === id, { timeout: 20000 }, run.run.run_id);
-  await page.waitForFunction(() => Object.keys(document.querySelector('[data-testid="lens"]') ?? {}).some((k) => k.startsWith("__react")), { timeout: 20000 });
-  await page.addStyleTag({ content: "html{scroll-behavior:auto!important}" });
+  await hydrated(page);
+  assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), "dark", "dark is the default theme");
 
-  // BREAK: the product in one line, a receipt that matches the pre-repair verdict, story beats that light its lines.
-  const h1 = (await page.$eval("h1", (el) => el.textContent)).toLowerCase();
-  assert.ok(h1.includes("one payment") && h1.includes("fulfillments"), "the headline states the incident");
-  assert.ok((await page.evaluate(() => document.body.textContent)).toLowerCase().includes("recorded"), "the page says it is recorded evidence");
-  assert.ok((await page.evaluate(() => document.body.textContent)).includes("An AI fixed a payment bug. A separate judge checked the ledger."), "the product in one sentence");
-  assert.deepEqual(await ticks(page, "receipt-incident"), statusOf(run.pre_repair), "the Break receipt ticks are the pre-repair statuses");
-  const rows = await page.$$eval('[data-testid="receipt-incident"] [data-row^="effect"]', (els) => els.length);
-  assert.equal(rows, 2, "the incident receipt prints both fulfillment effects");
-  await scrollToSel(page, "#beat-1", -200);
-  await page.evaluate(() => document.querySelector("#beat-1").nextElementSibling.scrollIntoView({ block: "center" }));
-  await wait(900);
-  const lit = await page.$$eval('[data-testid="receipt-incident"] .marker[data-on="true"]', (els) => els.length);
-  assert.ok(lit >= 1, "a story beat highlights lines on the receipt");
-  await page.evaluate(() => document.querySelector('[data-testid="receipt-incident"] [data-row="effect-1"]').click());
-  await page.waitForFunction(() => document.querySelector('[data-testid="receipt-note"]')?.textContent.includes("I13"));
-  assert.ok((await page.evaluate(() => document.body.textContent)).toLowerCase().includes("what this evidence cannot show"), "evidence limits are stated");
-  await page.evaluate(() => document.querySelector('[data-testid="receipt-incident"] [data-row="effect-1"]').click());
+  // STEP 1, the incident: one lead number, one dominant board, the product in one sentence.
+  const body = (await page.evaluate(() => document.body.textContent)).toLowerCase();
+  assert.ok(body.includes("recorded run") || body.includes("local run"), "the page says what kind of run it shows");
+  assert.ok(body.includes("separate checker tests every repair"), "the product is explained in one sentence");
+  assert.ok((await text(page, '[data-testid="case-label"]')).includes("Duplicate fulfillment"), "the case is named");
+  assert.equal(await text(page, '[data-testid="hero-value"]'), "2", "the lead number is the incident's fulfillment count");
+  assert.equal(await text(page, '[data-testid="fact-fulfilled"]'), "2");
+  assert.equal(await text(page, '[data-testid="fact-captured"]'), "1");
+  assert.equal(await text(page, '[data-testid="fact-verdict"]'), "Rejected");
+  assert.deepEqual(await tileStatuses(page), statusOf(run.pre_repair), "the board shows the pre-repair statuses");
+  const t1 = await tiles(page);
+  const heldAreas = Object.values(t1).filter((t) => t.status === "PASS").map((t) => t.area);
+  const meanHeld = heldAreas.reduce((a, b) => a + b, 0) / heldAreas.length;
+  for (const id of failing(run.pre_repair)) assert.ok(t1[id].area / meanHeld > 2.5, `${id} failed, so it takes much more room than a rule that held`);
+  await click(page, '[data-tile="I13"]');
+  await page.waitForFunction(() => document.querySelector('[data-testid="inspector"]')?.textContent.includes("I13"));
+  const insp = await text(page, '[data-testid="inspector"]');
+  assert.ok(insp.includes("2 fulfillment effects") && insp.includes("evt-cap-1"), "the inspector shows the oracle's counterexample");
+  assert.ok((await text(page, '[data-testid="provenance"]')).includes("pre-repair"), "provenance is stated");
 
-  // FIX: provenance, the model's own uncertainty, the exact diff and a note that jumps to a line.
-  await scrollToSel(page, "#fix", 0);
-  await wait(300);
-  const fix = (await page.$eval("#fix", (el) => el.textContent)).toLowerCase();
+  // STEP 2, the AI repair: the exact patch and the sandbox it ran in.
+  await step(page, 2);
+  assert.equal(await text(page, '[data-testid="hero-value"]'), `+${run.patch.diff.split("\n").filter((l) => l.startsWith("+") && !l.startsWith("+++")).length}`);
+  const fix = (await page.$eval('[aria-label="Walkthrough"]', (el) => el.textContent)).toLowerCase();
   assert.ok(fix.includes(run.run.kind === "replay" ? "replayed recorded model output" : "recorded hosted-model reply"), "model provenance is accurate");
   assert.ok(fix.includes("no merchant_webhook_events") && fix.includes("not directly observed"), "the model's uncertainty is visible");
   assert.ok((await page.$eval('[data-testid="demo-diff"]', (el) => el.textContent)).includes("'FULFILL'"), "the generated diff is visible");
-  const note = await page.$('[data-testid="demo-diff"] [aria-label="Reading the patch"] button');
-  if (note) {
-    await note.click();
+  const noteBtn = await page.$('[data-testid="demo-diff"] [aria-label="Reading the patch"] button');
+  if (noteBtn) {
+    await noteBtn.click();
     await page.waitForFunction(() => document.querySelector('[aria-label="Reading the patch"] [aria-live]')?.textContent.length > 20);
   }
+  const steps = run.verification.steps;
+  const widths = await page.$$eval('[data-testid="sandbox"] [role="group"] button', (els) => els.map((e) => ({ n: e.getAttribute("data-step"), w: e.getBoundingClientRect().width })));
+  assert.equal(widths.length, steps.length, "one segment per sandbox step");
+  const longest = [...steps].sort((a, b) => b.duration_ms - a.duration_ms)[0].name;
+  assert.equal([...widths].sort((a, b) => b.w - a.w)[0].n, longest, "the longest step has the widest segment");
 
-  // JUDGE: identical surfaces, different ledgers.
-  await scrollToSel(page, '[data-testid="lens-bar"]', -70);
-  await wait(1200);
-  // Regression: receipts that scroll into view late must still print (a clipped target never reports as visible).
-  for (const col of ["before", "repair", "unsafe"]) {
-    await page.waitForFunction(
-      (c) => {
-        const wrap = document.querySelector(`[data-testid="receipt-${c}"]`)?.closest(".print");
-        return wrap?.dataset.state === "in" && getComputedStyle(wrap).clipPath === "inset(0px)";
-      },
-      { timeout: 5000 },
-      col,
-    );
-  }
-  const surface = (col) => page.$eval(`[data-testid="receipt-${col}"] [data-layer="surface"]`, (el) => el.textContent.replace(/\s+/g, " ").trim());
-  if (run.unsafe.order_status) {
-    assert.equal(await surface("repair"), await surface("unsafe"), "at the surface the AI repair and the unsafe patch are indistinguishable");
-  } else {
-    // An export from before the unsafe status was projected: say so, never invent it.
-    assert.ok((await surface("unsafe")).includes("NOT RECORDED"), "an old export's missing unsafe status is shown as not recorded");
-  }
-  assert.notEqual(await surface("before"), await surface("repair"), "the original's status visibly rolled back");
-  assert.equal(await page.$eval('[data-testid="lens"]', (el) => el.value), "0", "the lens starts at the surface");
-  for (const col of ["before", "repair", "unsafe"]) {
-    assert.equal(await page.$eval(`[data-testid="receipt-${col}"] [data-stamp]`, (el) => el.getAttribute("data-on")), "false", `${col} is not stamped before the lens is dragged`);
-  }
-  await setLens(page, 1000);
+  // STEP 3, the independent check: lit board for the accepted repair, one huge failed tile for the unsafe patch.
+  await step(page, 3);
+  assert.equal(await text(page, '[data-testid="hero-value"]'), "1", "one of two candidate patches is accepted");
+  assert.equal(await text(page, '[data-testid="candidate-facts"] [data-testid="fact-verdict"]'), "Accepted");
+  assert.deepEqual(await tileStatuses(page), statusOf(run.oracle), "the AI repair board matches the oracle");
+  const repairTiles = await tiles(page);
+  const heldBg = new Set(Object.values(repairTiles).filter((t) => t.status === "PASS").map((t) => t.bg));
+  assert.equal(heldBg.size, 1, "all held rules share one tone");
+  const repairFacts = { status: await text(page, '[data-testid="fact-status"]'), fulfilled: await text(page, '[data-testid="fact-fulfilled"]') };
+  assert.equal(repairFacts.fulfilled, "1");
+  assert.ok((await text(page, '[data-testid="provenance"]')).toLowerCase().includes("not a claim about live paypal"), "verification scope is explicit");
+
+  await click(page, '[data-testid="candidate-unsafe"]');
+  await page.waitForFunction(() => document.querySelector('[data-testid="candidate-facts"]')?.getAttribute("data-candidate") === "unsafe");
   await wait(900);
-  for (const col of ["before", "repair", "unsafe"]) {
-    assert.deepEqual(await ticks(page, `receipt-${col}`), statusOf(evals[col]), `${col}: ledger ticks match the export`);
-    const stamp = await page.$eval(`[data-testid="receipt-${col}"] [data-stamp]`, (el) => ({ on: el.getAttribute("data-on"), word: el.getAttribute("data-stamp") }));
-    assert.equal(stamp.on, "true", `${col} is stamped once the ledger is read`);
-    assert.equal(stamp.word, failing(evals[col]).length ? "Unsafe" : "Verified", `${col} stamp matches the oracle verdict`);
-    const fx = await page.$$eval(`[data-testid="receipt-${col}"] [data-row^="effect"]`, (els) => els.length);
-    assert.equal(fx, col === "repair" ? 1 : 2, `${col} prints ${col === "repair" ? 1 : 2} fulfillment lines`);
+  assert.deepEqual(await tileStatuses(page), statusOf(run.unsafe), "the unsafe board matches the oracle");
+  const unsafeTiles = await tiles(page);
+  assert.deepEqual(Object.keys(unsafeTiles).filter((k) => unsafeTiles[k].status === "FAIL").sort(), failing(run.unsafe), "the unsafe patch fails exactly what the oracle failed");
+  assert.equal(await text(page, '[data-testid="fact-fulfilled"]'), "2");
+  assert.equal(await text(page, '[data-testid="fact-verdict"]'), "Rejected");
+  const unsafeStatus = await text(page, '[data-testid="fact-status"]');
+  if (run.unsafe.order_status) {
+    assert.equal(unsafeStatus, repairFacts.status, "at the order level the unsafe patch looks exactly like the AI repair");
+    const note = await text(page, '[data-testid="surface-note"]');
+    assert.ok(note.includes("looks the same") && note.includes("2 fulfillments"), "the page says the ledger is what tells them apart");
+  } else {
+    assert.equal(unsafeStatus, "not recorded", "an old export's missing unsafe status is shown as not recorded");
   }
-  const failTicks = await page.$$eval('[data-testid="receipt-unsafe"] [data-status="FAIL"]', (els) => els.map((e) => e.getAttribute("data-tick")).sort());
-  assert.deepEqual(failTicks, failing(run.unsafe), "the unsafe receipt fails exactly what the oracle failed");
-  const outcome = await page.$eval('[data-testid="outcome-unsafe"]', (el) => el.textContent);
-  assert.ok(outcome.includes("I13"), "the outcome names the failed invariant");
-  const prov = await page.evaluate(() => document.querySelector('[data-testid="provenance-unsafe"]').textContent + document.querySelector('[data-testid="provenance-repair"]').textContent);
+  const prov = await text(page, '[data-testid="provenance"]');
   assert.ok(prov.includes("Historical independent-oracle evidence"), "historical provenance is explicit");
-  assert.ok(prov.toLowerCase().includes("not a claim about live paypal"), "verification scope is explicit");
   if (run.unsafe.fresh_trusted_gate.executed) assert.ok(prov.includes("Fresh trusted gate"));
   else assert.ok(prov.includes("not run for this recorded artifact"), "a missing fresh gate is explicit");
-  await page.evaluate(() => document.querySelector('[data-testid="receipt-unsafe"] [data-row="effect-1"]').click());
-  await page.waitForFunction(() => document.querySelector('[data-testid="judge-note"]')?.textContent.includes("I13"));
-  // The guided sweep brings the lens back and forth.
-  await page.evaluate(() => [...document.querySelectorAll("button")].find((b) => b.textContent.trim() === "Back to the surface").click());
-  await page.waitForFunction(() => document.querySelector('[data-testid="lens"]').value === "0", { timeout: 5000 });
-  await page.evaluate(() => [...document.querySelectorAll("button")].find((b) => b.textContent.trim() === "Look under the surface").click());
-  await page.waitForFunction(() => document.querySelector('[data-testid="lens"]').value === "1000", { timeout: 5000 });
-  // The two patches, as code.
-  await page.evaluate(() => [...document.querySelectorAll("button")].find((b) => b.textContent.trim() === "Read the two patches").click());
-  await page.waitForSelector('[data-testid="judge-diff-repair"]');
-  assert.ok((await page.$eval('[data-testid="judge-diff-repair"]', (el) => el.textContent)).includes("'FULFILL'"), "the repair's diff is shown");
-  if (run.unsafe.diff) {
-    const unsafeDiff = await page.$eval('[data-testid="demo-unsafe-diff"]', (el) => el.textContent);
-    assert.ok(unsafeDiff.includes("Seeded unsafe candidate"), "the unsafe candidate's own code is shown");
-    assert.ok(!unsafeDiff.includes("'FULFILL'"), "the unsafe diff is not the repair");
+  await click(page, '[data-tile="I13"]');
+  await page.waitForFunction(() => document.querySelector('[data-testid="inspector"]')?.textContent.includes("I13"));
+
+  // STEP 4, human review.
+  await step(page, 4);
+  const human = await text(page, '[data-testid="demo-human"]');
+  assert.ok(human.includes("No human has approved this patch"), "approval state is explicit");
+  assert.ok(/cannot merge, push, deploy, capture, refund or retry/.test(human), "the review-boundary copy is visible");
+  assert.ok(human.includes("Accepted for human review") && human.includes("disposable worktree"), "the review facts come from the export");
+  assert.equal(await text(page, '[data-testid="hero-value"]'), "1", "one patch is waiting for review");
+
+  // The human-review boundary stays on screen at every step.
+  for (const n of [1, 2, 3, 4]) {
+    await step(page, n);
+    const box = await (await page.$('[data-testid="human-gate"]')).boundingBox();
+    assert.ok(box && box.y >= 0 && box.y + box.height <= 900, `the review boundary is on screen at step ${n}`);
+    assert.ok((await text(page, '[data-testid="human-gate"]')).toLowerCase().includes("no human approval"), "the boundary states there is no approval");
   }
 
-  // PROOF: workpaper, sandbox bar, provider calls.
-  await scrollToSel(page, "#proof", 0);
-  await wait(300);
+  // Evidence drawer: rule by rule, provider calls, three orders.
+  await page.evaluate(() => [...document.querySelectorAll("header button")].find((b) => b.textContent.trim() === "Evidence").click());
+  await page.waitForSelector('[data-testid="evidence-drawer"]');
   const wp = '[data-testid="workpaper"]';
   const differing = Object.keys(statusOf(run.oracle)).filter((id) => new Set([statusOf(run.pre_repair)[id], statusOf(run.oracle)[id], statusOf(run.unsafe)[id]]).size > 1);
-  assert.equal(await page.$$eval(`${wp} li`, (els) => els.length >= 1), true);
   assert.equal(await page.$$eval(`${wp} button[data-row]`, (els) => els.length), differing.length, "the workpaper opens on the differences");
   await page.evaluate((w) => [...document.querySelectorAll(`${w} button`)].find((b) => /^All 14/.test(b.textContent.trim())).click(), wp);
   await page.waitForFunction((w) => document.querySelectorAll(`${w} button[data-row]`).length === 14, {}, wp);
@@ -167,53 +165,53 @@ try {
   for (const [col, e] of Object.entries({ before: run.pre_repair, repair: run.oracle, unsafe: run.unsafe })) {
     for (const [id, st] of Object.entries(statusOf(e))) assert.equal(marks[`${id}-${col}`], st, `workpaper ${id}/${col}`);
   }
-  const steps = run.verification.steps;
-  const widths = await page.$$eval('[data-testid="sandbox"] [role="group"] button', (els) => els.map((e) => ({ n: e.getAttribute("data-step"), w: e.getBoundingClientRect().width })));
-  assert.equal(widths.length, steps.length, "one segment per sandbox step");
-  const longest = [...steps].sort((a, b) => b.duration_ms - a.duration_ms)[0].name;
-  assert.equal([...widths].sort((a, b) => b.w - a.w)[0].n, longest, "the longest step has the widest segment");
-  await page.evaluate(() => document.querySelectorAll('[data-testid="observation-row"]')[document.querySelectorAll('[data-testid="observation-row"]').length - 1].click());
+  const obsRows = await page.$$('[data-testid="observation-row"]');
+  await obsRows[obsRows.length - 1].click();
   await page.waitForFunction((id) => document.querySelector('[data-testid="call-detail"]')?.textContent.includes(id), {}, capture.capture_id);
-  assert.ok((await page.$eval('[data-testid="provider-calls"]', (el) => el.textContent)).toLowerCase().includes("verification order"), "provider calls are tied to the verification order");
+  assert.ok((await text(page, '[data-testid="provider-calls"]')).toLowerCase().includes("verification order"), "provider calls are tied to the verification order");
+  await page.keyboard.press("Escape");
+  await page.waitForFunction(() => !document.querySelector('[data-testid="evidence-drawer"]'));
 
-  // The signature bar is pinned in every scene and expands.
-  for (const sel of ["#break", "#fix", "#judge", "#proof"]) {
-    await scrollToSel(page, sel, 0);
-    await wait(200);
-    const box = await (await page.$('[data-testid="human-gate"]')).boundingBox();
-    assert.ok(box && box.y + box.height >= 880, `the signature bar is visible at the foot of ${sel}`);
-  }
-  await page.evaluate(() => document.querySelector('[data-testid="human-gate"] button[aria-expanded]').click());
-  await page.waitForSelector('[data-testid="demo-human"]');
-  const human = await page.$eval('[data-testid="demo-human"]', (el) => el.textContent);
-  assert.ok(human.includes("No approval has been recorded"), "approval state is explicit");
-  assert.ok(/cannot merge, push, deploy, capture, refund or retry/.test(human), "the review-boundary copy is visible");
   const overflow = await page.evaluate(() => ({ s: document.documentElement.scrollWidth, c: document.documentElement.clientWidth }));
   assert.ok(overflow.s <= overflow.c + 1, "desktop page has no horizontal overflow");
 
-  // Phones: no overflow, readable type, 44px targets, a working lens.
+  // Theme: the toggle switches and the choice survives a reload.
+  await click(page, 'button[aria-label="Switch to light mode"]');
+  assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), "light");
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await hydrated(page);
+  assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), "light", "the theme choice persists");
+  await click(page, 'button[aria-label="Switch to dark mode"]');
+  assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), "dark");
+
+  // Phones: no overflow, readable type, 44px targets, a usable board, the boundary pinned.
   for (const width of [390, 375]) {
     await page.setViewport({ width, height: 844, deviceScaleFactor: 1, isMobile: true, hasTouch: true });
     await page.goto(`${base}${pagePath}`, { waitUntil: "domcontentloaded" });
-    await page.waitForFunction(() => Object.keys(document.querySelector('[data-testid="lens"]') ?? {}).some((k) => k.startsWith("__react")));
-    const m = await page.evaluate(() => ({
-      s: document.documentElement.scrollWidth,
-      c: document.documentElement.clientWidth,
-      tiny: [...document.querySelectorAll("body *")].filter((e) => !e.closest("svg") && [...e.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim()) && parseFloat(getComputedStyle(e).fontSize) < 12.5).map((e) => e.textContent.trim().slice(0, 30)),
-      h1: document.querySelector("h1").getBoundingClientRect().right,
-    }));
-    assert.ok(m.s <= m.c + 1, `${width}px page has no horizontal overflow`);
-    assert.deepEqual(m.tiny, [], `${width}px has no text under 12.5px`);
-    assert.ok(m.h1 <= width, `${width}px headline fits`);
-    const nav = await (await page.$('nav[aria-label="Sections"] a[href="#judge"]')).boundingBox();
-    assert.ok(nav.height >= 44, "section navigation has a 44px touch target");
-    const lens = await (await page.$('[data-testid="lens"]')).boundingBox();
-    assert.ok(lens.height >= 44, "the lens slider has a 44px touch target");
-    await setLens(page, 1000);
+    await hydrated(page);
     await wait(700);
-    assert.deepEqual(await ticks(page, "receipt-unsafe"), statusOf(run.unsafe), `${width}px: the lens works on a phone`);
+    for (const n of [1, 3]) {
+      if (n === 3) {
+        await click(page, '[data-step-row="3"]');
+        await wait(900);
+      }
+      const m = await page.evaluate(() => ({
+        s: document.documentElement.scrollWidth,
+        c: document.documentElement.clientWidth,
+        tiny: [...document.querySelectorAll("body *")].filter((e) => !e.closest("svg") && [...e.childNodes].some((x) => x.nodeType === 3 && x.textContent.trim()) && parseFloat(getComputedStyle(e).fontSize) < 12.5).map((e) => e.textContent.trim().slice(0, 30)),
+      }));
+      assert.ok(m.s <= m.c + 1, `${width}px step ${n} has no horizontal overflow`);
+      assert.deepEqual(m.tiny, [], `${width}px step ${n} has no text under 12.5px`);
+    }
+    for (const sel of ['[data-testid="next"]', 'button[aria-label="Back"]', '[data-step-row="2"]']) {
+      assert.ok((await (await page.$(sel)).boundingBox()).height >= 44, `${sel} has a 44px touch target at ${width}px`);
+    }
+    assert.deepEqual(await tileStatuses(page), statusOf(run.oracle), `${width}px: the board renders every rule`);
     const gate = await (await page.$('[data-testid="human-gate"]')).boundingBox();
-    assert.ok(gate.y + gate.height >= 830, "the signature bar is pinned on phones");
+    assert.ok(gate.y + gate.height <= 844 && gate.y > 600, `${width}px: the review boundary is pinned to the foot of the screen`);
+    await click(page, '[data-testid="candidate-unsafe"]');
+    await wait(900);
+    assert.deepEqual(await tileStatuses(page), statusOf(run.unsafe), `${width}px: switching versions works on a phone`);
   }
 
   const bench = await browser.newPage();
