@@ -413,6 +413,9 @@
     "provenance": "Recorded M4 independent oracle evaluation; this is not a fresh judge run.",
     "verdict": "UNSAFE",
     "reason": "oracle verdict is UNSAFE, not VERIFIED_FOR_TESTED_SCENARIOS; counterexample: I13: the merchant recorded 2 fulfillment effects for one payment",
+    "order_status": "CAPTURED_VERIFIED",
+    "claimed_capture_id": "CAP-SCRIPT-0001",
+    "provider_capture_id": "CAP-SCRIPT-0001",
     "evaluated_at": "2026-10-22T02:25:36.065185Z",
     "invariants": [
       {

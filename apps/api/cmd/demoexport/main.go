@@ -259,14 +259,17 @@ type eval struct {
 }
 
 type unsafe struct {
-	Kind        string      `json:"kind"`
-	Source      string      `json:"source"`
-	Provenance  string      `json:"provenance"`
-	Verdict     string      `json:"verdict"`
-	Reason      string      `json:"reason"`
-	EvaluatedAt string      `json:"evaluated_at,omitempty"`
-	Invariants  []invariant `json:"invariants"`
-	FreshGate   freshGate   `json:"fresh_trusted_gate"`
+	Kind              string      `json:"kind"`
+	Source            string      `json:"source"`
+	Provenance        string      `json:"provenance"`
+	Verdict           string      `json:"verdict"`
+	Reason            string      `json:"reason"`
+	OrderStatus       string      `json:"order_status,omitempty"`
+	ClaimedCaptureID  string      `json:"claimed_capture_id,omitempty"`
+	ProviderCaptureID string      `json:"provider_capture_id,omitempty"`
+	EvaluatedAt       string      `json:"evaluated_at,omitempty"`
+	Invariants        []invariant `json:"invariants"`
+	FreshGate         freshGate   `json:"fresh_trusted_gate"`
 	// Diff is the seeded candidate's own patch, read from the file beside the
 	// recorded unsafe evaluation. It is optional: a recorded evaluation with no
 	// sibling patch.diff simply exports without it.
@@ -496,6 +499,7 @@ func run(from, out, mode, source, sourceLabel, unsafePath, unsafeSource, unsafeL
 		Unsafe: unsafe{
 			Kind: "seeded", Source: unsafeSource, Provenance: "Recorded M4 independent oracle evaluation; this is not a fresh judge run.",
 			Verdict: unsafeEval.Verdict, Reason: unsafeEval.Reason, EvaluatedAt: unsafeEval.EvaluatedAt,
+			OrderStatus: unsafeEval.OrderStatus, ClaimedCaptureID: unsafeEval.ClaimedCaptureID, ProviderCaptureID: unsafeEval.ProviderCaptureID,
 			Invariants: unsafeEval.Invariants, FreshGate: fresh,
 			Diff: unsafeDiff.text, DiffDigest: unsafeDiff.digest, ChangedFiles: unsafeDiff.files,
 		},

@@ -477,6 +477,9 @@ func TestExportRecordedEvidenceIsSanitizedAndTyped(t *testing.T) {
 	if doc.HumanReview.DeveloperTreeApplied || doc.HumanReview.Deployed || !doc.HumanReview.CandidatePatchAppliedInDisposableWorktree {
 		t.Fatalf("human review = %+v", doc.HumanReview)
 	}
+	if doc.Unsafe.OrderStatus != "CAPTURED_VERIFIED" || doc.Unsafe.ProviderCaptureID == "" {
+		t.Fatalf("the unsafe candidate's own order status and capture id must be exported: %+v", doc.Unsafe)
+	}
 	for name, list := range map[string][]invariant{"pre_repair": doc.PreRepair.Invariants, "oracle": doc.Oracle.Invariants, "unsafe": doc.Unsafe.Invariants} {
 		for _, inv := range list {
 			if strings.TrimSpace(inv.Title) == "" {
