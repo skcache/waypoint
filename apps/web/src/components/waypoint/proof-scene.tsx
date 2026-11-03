@@ -36,7 +36,7 @@ export function ProofScene({ doc }: { doc: DemoExport }) {
     <section id="proof" className="field-ink" data-scene="proof">
       <div className="mx-auto w-full max-w-[1440px] px-5 pb-40 pt-24 sm:px-8 lg:px-12 lg:pb-48 lg:pt-36">
         <Reveal>
-          <h2 className="poster text-[clamp(3.6rem,10.5vw,10rem)]">The proof.</h2>
+          <h2 className="poster text-[clamp(2.8rem,6.6vw,6.2rem)]">The proof.</h2>
           <p className="mt-8 max-w-[44ch] text-[clamp(1.15rem,1.8vw,1.45rem)] leading-[1.4] text-muted">
             Everything behind the receipts: the {rows.length} invariants side by side, the sandbox the repair ran in, and the provider calls it made.
           </p>
@@ -46,15 +46,15 @@ export function ProofScene({ doc }: { doc: DemoExport }) {
         <div className="mt-20" data-testid="workpaper">
           <div className="flex flex-wrap items-end justify-between gap-4">
             <h3 className="poster text-[clamp(2rem,4vw,3.4rem)]">Workpaper</h3>
-            <div className="flex border-2 border-line-strong" role="group" aria-label="Row filter">
+            <div className="flex rounded-full border border-line-strong p-0.5" role="group" aria-label="Row filter">
               {[{ v: true, t: `Differences (${differing.length})` }, { v: false, t: `All ${rows.length}` }].map((o) => (
-                <button key={String(o.v)} type="button" aria-pressed={only === o.v} onClick={() => setOnly(o.v)} className="min-h-11 px-4 text-[15px] font-semibold aria-pressed:bg-clear aria-pressed:text-night">
+                <button key={String(o.v)} type="button" aria-pressed={only === o.v} onClick={() => setOnly(o.v)} className="min-h-11 px-4 text-[15px] font-semibold aria-pressed:bg-accent aria-pressed:text-on-accent aria-pressed:rounded-full">
                   {o.t}
                 </button>
               ))}
             </div>
           </div>
-          <div className="mt-6 border-t-2 border-paper">
+          <div className="mt-6 border-t border-line-strong">
             <div className="grid grid-cols-[minmax(0,1fr)_repeat(3,3rem)] items-end gap-1 border-b border-line py-3 text-[13px] font-semibold text-faint sm:grid-cols-[1fr_repeat(3,7rem)] sm:gap-2 sm:text-[15px]">
               <span>Invariant</span>
               {COLS.map((c) => <span key={c.key} className="text-center"><span className="sm:hidden">{c.short}</span><span className="max-sm:hidden">{c.label}</span></span>)}
@@ -133,7 +133,7 @@ export function ProofScene({ doc }: { doc: DemoExport }) {
                 aria-pressed={step === s.name}
                 aria-label={`${s.name}: ${formatMs(s.duration_ms)}`}
                 onClick={() => setStep(s.name)}
-                style={{ flexGrow: s.duration_ms, flexBasis: 0, background: step === s.name ? "var(--clear)" : s.passed ? "var(--paper)" : "var(--alarm)" }}
+                style={{ flexGrow: s.duration_ms, flexBasis: 0, background: step === s.name ? "var(--clear)" : s.passed ? "var(--c-text)" : "var(--alarm)" }}
                 className="min-w-[6px] transition-colors hover:opacity-85"
               />
             ))}
@@ -172,7 +172,7 @@ export function ProofScene({ doc }: { doc: DemoExport }) {
           </p>
           <ol className="mt-8 grid" style={{ gridTemplateColumns: `repeat(${nodes.length}, minmax(0, 1fr))` }} aria-label="Provider calls">
             {nodes.map((n, i) => (
-              <li key={n.obs.seq} className="relative flex flex-col items-start border-t-2 border-line-strong pt-4" style={{ borderColor: i <= call ? "var(--paper)" : undefined }}>
+              <li key={n.obs.seq} className="relative flex flex-col items-start border-t-2 border-line-strong pt-4" style={{ borderColor: i <= call ? "var(--c-text)" : undefined }}>
                 <button type="button" data-testid="observation-row" aria-pressed={call === i} onClick={() => setCall(i)} className="text-left">
                   <span className={`poster block text-[clamp(2rem,4vw,3.4rem)] ${call === i ? "text-clear" : ""}`}>{n.obs.seq}</span>
                   <span className="mono block text-[17px] font-bold">{n.obs.method}</span>
@@ -198,7 +198,7 @@ export function ProofScene({ doc }: { doc: DemoExport }) {
         </div>
 
         {/* Orders and next */}
-        <div className="mt-28 grid gap-10 border-t-2 border-paper pt-10 lg:grid-cols-[1fr_auto] lg:items-end">
+        <div className="mt-28 grid gap-10 border-t border-line-strong pt-10 lg:grid-cols-[1fr_auto] lg:items-end">
           <div>
             <h3 className="poster text-[clamp(2rem,4vw,3.4rem)]">Three orders, kept apart</h3>
             <div className="mt-5 flex flex-wrap gap-x-8 gap-y-3 text-[15px] text-faint">
@@ -207,7 +207,7 @@ export function ProofScene({ doc }: { doc: DemoExport }) {
               {ids.unsafeRun ? <span className="inline-flex items-center gap-2">Unsafe run <CopyChip value={ids.unsafeRun} label={shortId(ids.unsafeRun, 8, 4)} /></span> : null}
             </div>
           </div>
-          <a href="/benchmark" className="inline-flex h-14 items-center bg-clear px-6 text-[17px] font-semibold text-night transition-transform hover:-translate-y-0.5">
+          <a href="/benchmark" className="inline-flex h-12 items-center rounded-full bg-accent px-6 text-[16px] font-medium text-on-accent transition-transform hover:-translate-y-0.5">
             One case is a demonstration. See the held-out benchmark (preliminary)
           </a>
         </div>

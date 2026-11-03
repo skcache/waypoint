@@ -86,7 +86,7 @@ export function Stamp({
       style={{ ["--r" as string]: `${rotate}deg`, transform: `rotate(${rotate}deg)`, color, mixBlendMode: "multiply", filter: "url(#rough)" }}
     >
       <div className="border-[5px] px-4 py-1.5 text-center" style={{ borderColor: color, borderRadius: 6 }}>
-        <div className="poster text-[48px] leading-[0.95]">{word}</div>
+        <div className="poster-caps text-[48px] leading-[0.95]">{word}</div>
         {detail ? <div className="mono mt-1 text-[13px] font-bold uppercase tracking-wide">{detail}</div> : null}
       </div>
     </div>

@@ -69,7 +69,7 @@ export function JudgeScene({ doc }: { doc: DemoExport }) {
       <div className="field-paper">
         <div className="mx-auto w-full max-w-[1440px] px-5 pb-24 pt-24 sm:px-8 lg:px-12 lg:pb-32 lg:pt-36">
           <Reveal>
-            <h2 className="poster text-[clamp(3.8rem,11vw,10.5rem)]">
+            <h2 className="poster text-[clamp(3.2rem,8.5vw,8rem)]">
               Looks fixed.
               <br />
               <span className="marker marker-alarm px-[0.1em]" data-on={lens > 0.5 ? "true" : "false"}>Is it?</span>
@@ -80,9 +80,9 @@ export function JudgeScene({ doc }: { doc: DemoExport }) {
             </p>
           </Reveal>
 
-          <div className="sticky top-14 z-30 -mx-5 mt-10 border-y-2 border-night bg-background px-5 py-3 sm:-mx-8 sm:px-8 lg:mx-0 lg:border-2 lg:border-night lg:px-5" data-testid="lens-bar">
+          <div className="sticky top-14 z-30 -mx-5 mt-10 border-y border-line bg-background/90 px-5 py-3 backdrop-blur-xl sm:-mx-8 sm:px-8 lg:mx-0 lg:rounded-2xl lg:border lg:border-line-strong/60 lg:px-5" data-testid="lens-bar">
             <div className="grid grid-cols-[1fr_auto] items-center gap-x-4 gap-y-1 lg:flex lg:flex-wrap lg:gap-x-6">
-              <label htmlFor="lens" className="poster text-[28px]">The judge&rsquo;s lens</label>
+              <label htmlFor="lens" className="text-[19px] font-semibold tracking-[-0.03em]">The judge&rsquo;s lens</label>
               <div className="order-last col-span-2 flex min-w-0 flex-1 items-center gap-3 lg:order-none lg:min-w-[240px]">
                 <span className={`text-[15px] font-semibold ${lens < 0.5 ? "" : "opacity-45"}`}>Surface</span>
                 <input
@@ -97,14 +97,14 @@ export function JudgeScene({ doc }: { doc: DemoExport }) {
                     setLens(Number(e.target.value) / 1000);
                   }}
                   aria-valuetext={lens < 0.12 ? "Surface" : stamped ? "Ledger" : `${Math.round(lens * 100)} percent down`}
-                  className="h-11 w-full min-w-0 cursor-ew-resize appearance-none bg-transparent [&::-moz-range-thumb]:h-9 [&::-moz-range-thumb]:w-5 [&::-moz-range-thumb]:rounded-none [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-alarm [&::-moz-range-track]:h-1 [&::-moz-range-track]:bg-night [&::-webkit-slider-runnable-track]:h-1 [&::-webkit-slider-runnable-track]:bg-night [&::-webkit-slider-thumb]:-mt-4 [&::-webkit-slider-thumb]:h-9 [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-none [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-night [&::-webkit-slider-thumb]:bg-alarm"
+                  className="h-11 w-full min-w-0 cursor-ew-resize appearance-none bg-transparent [&::-moz-range-thumb]:h-7 [&::-moz-range-thumb]:w-7 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-alarm [&::-moz-range-track]:h-1 [&::-moz-range-track]:bg-line-strong [&::-webkit-slider-runnable-track]:h-1 [&::-webkit-slider-runnable-track]:bg-line-strong [&::-webkit-slider-thumb]:-mt-3 [&::-webkit-slider-thumb]:h-7 [&::-webkit-slider-thumb]:w-7 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-background [&::-webkit-slider-thumb]:bg-alarm"
                 />
                 <span className={`text-[15px] font-semibold ${lens >= 0.5 ? "" : "opacity-45"}`}>Ledger</span>
               </div>
               <button
                 type="button"
                 onClick={() => sweep(lens > 0.5 ? 0 : 1)}
-                className="inline-flex h-11 items-center bg-night px-4 text-[15px] font-semibold text-paper transition-transform hover:-translate-y-0.5 lg:h-12 lg:px-5 lg:text-[16px]"
+                className="inline-flex h-11 items-center rounded-full bg-accent px-5 text-[15px] font-medium text-on-accent transition-transform hover:-translate-y-0.5"
               >
                 {lens > 0.5 ? "Back to the surface" : "Look under the surface"}
               </button>
@@ -152,7 +152,7 @@ export function JudgeScene({ doc }: { doc: DemoExport }) {
             ))}
           </div>
 
-          <div className="mt-6 min-h-[5.5rem] max-w-[70ch] border-t-2 border-night pt-4" aria-live="polite" data-testid="judge-note">
+          <div className="mt-6 min-h-[5.5rem] max-w-[70ch] border-t border-line-strong pt-4" aria-live="polite" data-testid="judge-note">
             {pickedInv && pickedInv.length ? (
               pickedInv.map((inv) => (
                 <p key={inv.id} className="text-[17px] leading-snug">
@@ -170,7 +170,7 @@ export function JudgeScene({ doc }: { doc: DemoExport }) {
               type="button"
               aria-expanded={code}
               onClick={() => setCode((v) => !v)}
-              className="inline-flex h-14 items-center bg-night px-6 text-[17px] font-semibold text-paper transition-transform hover:-translate-y-0.5"
+              className="inline-flex h-12 items-center rounded-full bg-accent px-6 text-[16px] font-medium text-on-accent transition-transform hover:-translate-y-0.5"
             >
               {code ? "Hide the patches" : "Read the two patches"}
             </button>

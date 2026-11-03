@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+import { ThemeToggle } from "./theme-toggle";
+
 export function isCaseFile(pathname: string): boolean {
   return pathname === "/" || pathname === "/demo" || pathname === "/incidents";
 }
@@ -22,6 +24,7 @@ export function SiteHeader() {
         <nav aria-label="Primary" className="flex items-center">
           <Link href="/" className={link(false)}>Case file</Link>
           <Link href="/benchmark" className={link(pathname.startsWith("/benchmark"))}>Benchmark</Link>
+          <ThemeToggle />
         </nav>
       </div>
     </header>

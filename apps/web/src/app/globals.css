@@ -3,13 +3,49 @@
 /*
   Waypoint art direction.
 
-  A poster, not a dashboard. Each scene is a full-bleed colour field (vermilion
-  for the break, ink for the fix, paper for the verdict, ink for the proof) with
-  huge condensed type, and the evidence is printed on real receipts. Lime is the
-  auditor's highlighter and means "clear"; vermilion means "alarm". Status never
-  travels as colour alone: every mark also has a word or a glyph.
+  Dark by default, light on request (html[data-theme]). The page is a quiet
+  graphite room with one luminous object in it: the receipt, printed on warm
+  paper. Colour is rationed: vermilion means "alarm", the soft green means
+  "clear", and nothing else is saturated. Status never travels as colour alone:
+  every mark also has a word or a glyph.
 */
 :root {
+  color-scheme: dark;
+  --paper: oklch(0.95 0.008 90);
+  --ink: oklch(0.145 0.003 90);
+  --alarm: oklch(0.68 0.2 33);
+  --clear: oklch(0.84 0.14 140);
+  --sheet: oklch(0.975 0.006 90);
+  --sheet-ink: oklch(0.2 0.008 90);
+
+  /* base field */
+  --c-bg: oklch(0.145 0.003 90);
+  --c-surface: oklch(0.2 0.004 90);
+  --c-sunk: oklch(0.115 0.003 90);
+  --c-text: oklch(0.95 0.006 90);
+  --c-muted: oklch(0.76 0.005 90);
+  --c-faint: oklch(0.64 0.005 90);
+  --c-line: oklch(0.28 0.004 90);
+  --c-line-strong: oklch(0.44 0.005 90);
+  --c-fail: oklch(0.73 0.17 30);
+  --c-fail-soft: oklch(0.27 0.07 30);
+  --c-pass: oklch(0.84 0.14 140);
+  --c-pass-soft: oklch(0.27 0.06 140);
+  --c-warn: oklch(0.8 0.12 80);
+  --c-warn-soft: oklch(0.28 0.05 80);
+  --c-accent: oklch(0.95 0.006 90);
+  --c-on-accent: oklch(0.145 0.003 90);
+  --c-hot: var(--alarm);
+  --t-keyword: oklch(0.78 0.12 300);
+  --t-string: oklch(0.8 0.1 145);
+  --t-comment: oklch(0.62 0.01 90);
+  --t-number: oklch(0.8 0.11 70);
+  --t-type: oklch(0.8 0.09 235);
+  --t-sql: oklch(0.78 0.14 40);
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
   --paper: oklch(0.955 0.006 100);
   --ink: oklch(0.15 0.004 100);
   --alarm: oklch(0.67 0.225 33);
@@ -17,7 +53,6 @@
   --sheet: oklch(0.985 0.004 95);
   --sheet-ink: oklch(0.2 0.008 95);
 
-  /* default field: paper */
   --c-bg: var(--paper);
   --c-surface: oklch(0.985 0.003 100);
   --c-sunk: oklch(0.92 0.006 100);
@@ -42,13 +77,37 @@
   --t-sql: oklch(0.48 0.17 33);
 }
 
+/* Dark: three depths of the same graphite. The break scene gets a faint ember, nothing more. */
 .field-paper {
-  --c-bg: var(--paper);
+  --c-bg: oklch(0.175 0.004 90);
+  --c-surface: oklch(0.22 0.004 90);
   background: var(--c-bg);
   color: var(--c-text);
 }
 
 .field-ink {
+  --c-bg: oklch(0.125 0.003 90);
+  --c-surface: oklch(0.18 0.004 90);
+  background: var(--c-bg);
+  color: var(--c-text);
+}
+
+.field-alarm {
+  --c-bg: oklch(0.145 0.003 90);
+  background:
+    radial-gradient(60% 55% at 88% 12%, color-mix(in oklch, var(--alarm) 20%, transparent), transparent 70%),
+    radial-gradient(45% 40% at 0% 100%, color-mix(in oklch, var(--alarm) 9%, transparent), transparent 70%),
+    var(--c-bg);
+  color: var(--c-text);
+}
+
+/* Light: the original paper, ink and vermilion fields. */
+:root[data-theme="light"] .field-paper {
+  --c-bg: var(--paper);
+  --c-surface: oklch(0.985 0.003 100);
+}
+
+:root[data-theme="light"] .field-ink {
   --c-bg: var(--ink);
   --c-surface: oklch(0.22 0.004 100);
   --c-sunk: oklch(0.11 0.004 100);
@@ -63,12 +122,10 @@
   --c-pass-soft: oklch(0.3 0.07 125);
   --c-accent: var(--clear);
   --c-on-accent: var(--ink);
-  background: var(--c-bg);
-  color: var(--c-text);
   color-scheme: dark;
 }
 
-.field-alarm {
+:root[data-theme="light"] .field-alarm {
   --c-bg: var(--alarm);
   --c-surface: color-mix(in oklch, var(--ink) 12%, var(--alarm));
   --c-text: var(--ink);
@@ -78,8 +135,8 @@
   --c-line-strong: color-mix(in oklch, var(--ink) 70%, var(--alarm));
   --c-accent: var(--ink);
   --c-on-accent: var(--alarm);
+  --c-hot: var(--paper);
   background: var(--c-bg);
-  color: var(--c-text);
 }
 
 @theme inline {
@@ -100,6 +157,7 @@
   --color-accent: var(--c-accent);
   --color-on-accent: var(--c-on-accent);
   --color-alarm: var(--alarm);
+  --color-hot: var(--c-hot);
   --color-paper: var(--paper);
   --color-night: var(--ink);
   --color-clear: var(--clear);
@@ -115,7 +173,7 @@
     scroll-behavior: smooth;
     scroll-padding-top: 64px;
     -webkit-text-size-adjust: 100%;
-    background: var(--paper);
+    background: var(--c-bg);
   }
 
   body {
@@ -139,7 +197,7 @@
     border-radius: 3px;
   }
 
-  .field-paper :focus-visible,
+  :root[data-theme="light"] .field-paper :focus-visible,
   .receipt :focus-visible {
     outline-color: var(--ink);
   }
@@ -161,8 +219,15 @@
     font-size: 0.92em;
   }
 
-  /* The poster voice: heavy, condensed, upper case, tight. */
+  /* The display voice: confident, sentence case, tightly set. */
   .poster {
+    font-weight: 600;
+    letter-spacing: -0.04em;
+    line-height: 0.96;
+  }
+
+  /* Rubber stamps and ticket chips keep the old condensed capitals. */
+  .poster-caps {
     font-weight: 800;
     font-stretch: 66%;
     text-transform: uppercase;
@@ -193,7 +258,7 @@
   }
 
   .receipt-shadow {
-    filter: drop-shadow(0 18px 26px color-mix(in oklch, black 38%, transparent));
+    filter: drop-shadow(0 30px 44px color-mix(in oklch, black 55%, transparent)) drop-shadow(0 0 1px color-mix(in oklch, white 30%, transparent));
   }
 
   /* The auditor's highlighter: a slanted marker stroke that draws in. */
@@ -289,8 +354,28 @@
   }
 }
 
-/* A cream sheet: code slips and anything printed on paper inside a dark field. */
+/* A code slip: a raised graphite panel in dark, cream paper in light. */
 .paper {
+  --c-bg: oklch(0.2 0.004 90);
+  --c-surface: oklch(0.235 0.004 90);
+  --c-sunk: oklch(0.17 0.004 90);
+  --c-text: oklch(0.93 0.006 90);
+  --c-muted: oklch(0.75 0.005 90);
+  --c-faint: oklch(0.64 0.005 90);
+  --c-line: oklch(0.3 0.004 90);
+  --c-line-strong: oklch(0.46 0.005 90);
+  --c-fail: oklch(0.74 0.17 30);
+  --c-fail-soft: oklch(0.27 0.07 30);
+  --c-pass: oklch(0.84 0.14 140);
+  --c-pass-soft: oklch(0.27 0.06 140);
+  --c-accent: var(--paper);
+  --c-on-accent: var(--ink);
+  background: var(--c-bg);
+  color: var(--c-text);
+  color-scheme: dark;
+}
+
+:root[data-theme="light"] .paper {
   --c-bg: var(--sheet);
   --c-surface: oklch(0.95 0.006 95);
   --c-sunk: oklch(0.92 0.007 95);
@@ -300,10 +385,10 @@
   --c-line: oklch(0.86 0.007 95);
   --c-line-strong: oklch(0.55 0.008 95);
   --c-fail: oklch(0.5 0.21 30);
+  --c-fail-soft: oklch(0.94 0.04 30);
   --c-pass: oklch(0.4 0.12 145);
+  --c-pass-soft: oklch(0.94 0.07 125);
   --c-accent: var(--ink);
   --c-on-accent: var(--paper);
-  background: var(--c-bg);
-  color: var(--c-text);
   color-scheme: light;
 }

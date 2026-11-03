@@ -101,19 +101,19 @@ export function BreakScene({ doc, source }: { doc: DemoExport; source: EvidenceS
       <div className="mx-auto grid w-full max-w-[1440px] gap-x-10 px-5 sm:px-8 lg:grid-cols-[minmax(0,1fr)_400px] lg:px-12 xl:grid-cols-[minmax(0,1fr)_420px]">
         <div>
           <div ref={(el) => { stepRefs.current[0] = el; }} data-step={0} className="flex min-h-[calc(100svh-56px)] flex-col justify-between pb-10 pt-8 lg:pb-14 lg:pt-12">
-            <p className="max-w-[34ch] text-[17px] font-medium leading-snug">
+            <p className="max-w-[34ch] text-[16px] leading-snug text-muted">
               An AI fixed a payment bug. A separate judge checked the ledger. This is the {source === "recorded" ? "recorded" : "local"} case.
             </p>
             <div>
-              <h1 className="poster text-[clamp(3.4rem,8vw,8.4rem)]">
+              <h1 className="poster text-[clamp(3rem,7vw,7.2rem)]">
                 One payment.
                 <br />
-                {word(fulfilled)} fulfillments.
+                <span className="text-hot">{word(fulfilled)} fulfillments.</span>
               </h1>
               <p className="mt-8 max-w-[36ch] text-[clamp(1.2rem,2vw,1.6rem)] font-medium leading-[1.3]">
                 {amount} captured once. The merchant&rsquo;s own ledger says it was fulfilled {fulfilled === 2 ? "twice" : "more than once"}.
               </p>
-              <a href="#beat-1" className="mt-8 inline-flex h-14 items-center gap-3 bg-night px-6 text-[17px] font-semibold text-alarm transition-transform hover:-translate-y-0.5">
+              <a href="#beat-1" className="mt-8 inline-flex h-12 items-center gap-3 rounded-full bg-accent px-6 text-[16px] font-medium text-on-accent transition-transform hover:-translate-y-0.5">
                 Follow the money
                 <ArrowDown size={18} weight="bold" aria-hidden />
               </a>
@@ -134,7 +134,7 @@ export function BreakScene({ doc, source }: { doc: DemoExport; source: EvidenceS
               className={`flex min-h-[46svh] items-center py-8 lg:min-h-[64svh] lg:py-10 transition-opacity duration-500 ${step === i + 1 ? "opacity-100" : "lg:opacity-30"}`}
             >
               <Reveal>
-                <h2 className="poster text-[clamp(3rem,7.4vw,7rem)]">{b.title}</h2>
+                <h2 className="poster text-[clamp(2.6rem,5.6vw,5.4rem)]">{b.title}</h2>
                 <p className="mt-6 max-w-[34ch] text-[clamp(1.15rem,1.8vw,1.45rem)] font-medium leading-[1.35]">{b.body}</p>
               </Reveal>
             </div>
@@ -142,7 +142,7 @@ export function BreakScene({ doc, source }: { doc: DemoExport; source: EvidenceS
 
           <div className="pb-24 pt-6">
             {!webhookRows ? (
-              <details className="max-w-[560px] border-y-2 border-night">
+              <details className="max-w-[560px] border-y border-line-strong">
                 <summary className="flex min-h-14 items-center text-[17px] font-semibold">What this evidence cannot show</summary>
                 <p className="pb-5 text-[17px] leading-[1.5]">
                   The export has no webhook-delivery rows, and its {doc.incident.observations.length} provider calls belong to the later verification order,

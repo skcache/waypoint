@@ -10,6 +10,7 @@ import { FixScene } from "./fix-scene";
 import { InkDefs } from "./kit";
 import { JudgeScene } from "./judge-scene";
 import { ProofScene } from "./proof-scene";
+import { ThemeToggle } from "../theme-toggle";
 import { SignatureBar } from "./signature-bar";
 import type { EvidenceSource } from "./types";
 
@@ -44,9 +45,9 @@ function Header() {
     return () => io.disconnect();
   }, []);
   return (
-    <header className={`${field} sticky top-0 z-40 transition-colors duration-300`} data-field={field}>
+    <header className={`${field} sticky top-0 z-40 transition-colors duration-300 [border-bottom:1px_solid_color-mix(in_oklch,var(--c-text)_8%,transparent)] backdrop-blur-xl`} data-field={field}>
       <div className="mx-auto flex h-14 w-full max-w-[1440px] items-center justify-between px-3 sm:px-8 lg:px-12">
-        <a href="#break" className="poster inline-flex min-h-11 items-center px-2 text-[26px]" aria-label="Waypoint, back to the top">
+        <a href="#break" className="inline-flex min-h-11 items-center px-2 text-[19px] font-semibold tracking-[-0.03em]" aria-label="Waypoint, back to the top">
           Waypoint
         </a>
         <nav aria-label="Sections" className="flex items-center">
@@ -55,14 +56,15 @@ function Header() {
               key={s.id}
               href={`#${s.id}`}
               aria-current={active === s.id ? "location" : undefined}
-              className={`inline-flex min-h-11 items-center px-2.5 text-[15px] font-semibold sm:px-3.5 ${active === s.id ? "underline decoration-2 underline-offset-[7px]" : "opacity-70 hover:opacity-100"}`}
+              className={`inline-flex min-h-11 items-center px-2.5 text-[15px] font-medium sm:px-3.5 ${active === s.id ? "text-ink" : "text-muted hover:text-ink"}`}
             >
               {s.label}
             </a>
           ))}
-          <Link href="/benchmark" className="inline-flex min-h-11 items-center px-3.5 text-[15px] font-semibold opacity-70 hover:opacity-100 max-sm:hidden">
+          <Link href="/benchmark" className="inline-flex min-h-11 items-center px-3.5 text-[15px] font-medium text-muted hover:text-ink max-sm:hidden">
             Benchmark
           </Link>
+          <ThemeToggle className="ml-1" />
         </nav>
       </div>
     </header>

@@ -100,11 +100,11 @@ export function Receipt({
     <article className={`receipt-shadow ${className}`} data-testid={testId} data-candidate={model.column} data-lens={lens.toFixed(2)} aria-label={`${model.label} receipt`}>
       <div className="receipt pb-7 pt-9" style={vars}>
         <header className="px-5 sm:px-6 text-center">
-          <p className="poster text-[30px]">Waypoint</p>
+          <p className="poster-caps text-[30px]">Waypoint</p>
           <p className="mono mt-1 text-[13px] uppercase leading-snug opacity-80">{caseLabel}</p>
         </header>
         <div className="relative mt-4 flex h-[60px] items-center justify-between px-5 sm:px-6">
-          <p className="poster inline-block bg-[var(--sheet-ink)] px-2.5 py-1 text-[17px] leading-none text-[var(--sheet)]">{model.label}</p>
+          <p className="poster-caps inline-block bg-[var(--sheet-ink)] px-2.5 py-1 text-[17px] leading-none text-[var(--sheet)]">{model.label}</p>
           <Stamp
             word={verified ? "Verified" : model.verdict === "UNSAFE" ? "Unsafe" : "Inconclusive"}
             tone={verified ? "ink" : "alarm"}

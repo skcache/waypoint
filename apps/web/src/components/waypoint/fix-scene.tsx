@@ -17,7 +17,7 @@ export function FixScene({ doc }: { doc: DemoExport }) {
     <section id="fix" className="field-ink" data-scene="fix">
       <div id="fix-intro" className="mx-auto w-full max-w-[1440px] px-5 py-24 sm:px-8 lg:px-12 lg:py-36">
         <Reveal>
-          <h2 className="poster text-[clamp(3.6rem,10.5vw,10rem)]">
+          <h2 className="poster text-[clamp(2.8rem,6.6vw,6.2rem)]">
             The AI rewrote
             <br />
             <span className="text-clear">{files.length === 1 ? "one file." : `${files.length} files.`}</span>

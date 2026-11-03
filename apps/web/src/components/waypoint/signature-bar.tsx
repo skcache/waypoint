@@ -19,7 +19,7 @@ export function SignatureBar({ doc, source }: { doc: DemoExport; source: Evidenc
   const h = doc.human_review;
   const applied = g.merged || g.deployed;
   return (
-    <div data-testid="human-gate" className="field-ink fixed inset-x-0 bottom-0 z-50 border-t-2 border-paper">
+    <div data-testid="human-gate" className="field-ink fixed inset-x-0 bottom-0 z-50 border-t border-line-strong/70 backdrop-blur-xl">
       {open ? (
         <div id="gate-sheet" data-testid="demo-human" className="mx-auto max-h-[62dvh] w-full max-w-[1440px] overflow-auto px-5 py-6 sm:px-8 lg:px-12">
           <div className="grid gap-8 md:grid-cols-2">
@@ -49,9 +49,9 @@ export function SignatureBar({ doc, source }: { doc: DemoExport; source: Evidenc
         className="mx-auto flex min-h-14 w-full max-w-[1440px] items-center gap-4 px-5 text-left sm:px-8 lg:px-12"
       >
         <LockKey size={20} weight="fill" className="shrink-0 text-clear" aria-hidden />
-        <span className="poster shrink-0 text-[20px]">{applied ? "Candidate applied" : "Candidate only"}</span>
+        <span className="shrink-0 text-[17px] font-semibold tracking-[-0.02em]">{applied ? "Candidate applied" : "Candidate only"}</span>
         <span className="hidden shrink-0 text-[15px] text-muted sm:inline">Approved by</span>
-        <span className="mb-[-2px] hidden h-px flex-1 self-end border-b-2 border-dotted border-muted max-sm:hidden sm:block" aria-hidden />
+        <span className="mb-[-2px] hidden h-px flex-1 self-end border-b border-dotted border-faint max-sm:hidden sm:block" aria-hidden />
         <span className="min-w-0 flex-1 truncate text-[15px] text-muted sm:flex-none">{applied ? "see details" : <><span className="sm:hidden">unsigned</span><span className="max-sm:hidden">awaiting a human signature</span></>}</span>
         <span className="shrink-0 text-[15px] font-semibold">{open ? "Close" : "Details"}</span>
       </button>
