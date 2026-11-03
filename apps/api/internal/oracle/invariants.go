@@ -3,6 +3,7 @@ package oracle
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"regexp"
 	"sort"
 	"strconv"
@@ -55,6 +56,9 @@ func parseAmountExact(s string) (int64, bool) {
 	}
 	minor, err := strconv.ParseInt(parts[1], 10, 64)
 	if err != nil {
+		return 0, false
+	}
+	if major > (math.MaxInt64-minor)/100 {
 		return 0, false
 	}
 	return major*100 + minor, true
@@ -628,7 +632,7 @@ func classifyClaimAgainstEvidence(ev *Evidence, o LocalOrder) (InvariantResult, 
 						},
 					}, false
 				}
-				matched = true // identity + status + money all corroborated by a read
+				matched = matched || obs.CaptureStatus == "COMPLETED" // a missing status cannot prove completion
 			}
 			continue
 		}
@@ -800,10 +804,10 @@ func checkI7(ev *Evidence) InvariantResult {
 // I8: a verified capture is terminal — no later event may downgrade it and
 // the final local status must remain CAPTURED_VERIFIED.
 func checkI8(ev *Evidence) InvariantResult {
-	verifyEvent := map[string]int64{} // order -> event id of the confirm
+	verifyEvent := map[string]int64{} // order -> event id of the first confirmation
 	for _, e := range ev.Events {
 		if e.EventType == "PROVIDER_CAPTURE_CONFIRMED" || e.EventType == "PROVIDER_CAPTURE_RECOVERED" {
-			if prev, ok := verifyEvent[e.OrderID]; !ok || e.ID > prev {
+			if prev, ok := verifyEvent[e.OrderID]; !ok || e.ID < prev {
 				verifyEvent[e.OrderID] = e.ID
 			}
 		}

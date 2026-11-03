@@ -510,7 +510,7 @@ func (s *Store) BeginCaptureRetry(ctx context.Context, orderID, operationID, own
 	tag, err := tx.Exec(ctx, `
 		UPDATE merchant_orders
 		   SET status = $2, updated_at = now()
-		 WHERE id = $1::uuid AND status IN ('APPROVED', 'CAPTURE_OUTCOME_UNKNOWN', 'RECONCILIATION_REQUIRED')`,
+		 WHERE id = $1::uuid AND status IN ('APPROVED', 'CAPTURE_IN_FLIGHT', 'CAPTURE_OUTCOME_UNKNOWN', 'RECONCILIATION_REQUIRED')`,
 		orderID, StatusCaptureInFlight)
 	if err != nil {
 		return Operation{}, err

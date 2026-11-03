@@ -463,7 +463,10 @@ func (s *Service) Capture(ctx context.Context, orderID string) (Order, error) {
 	result, err := s.api.CaptureOrder(ctx, order.ProviderOrderID, op.ProviderRequestID)
 	if err != nil {
 		detail := failureDetail(op, err)
-		if s.ambiguity.Ambiguous(err) {
+		// A refusal of this retry cannot resolve an earlier send whose
+		// effect is still unknown (including an abandoned in-flight send).
+		// Only the first attempt can be rejected definitively here.
+		if op.AttemptCount > 1 || s.ambiguity.Ambiguous(err) {
 			if _, mErr := s.store.MarkCaptureUnknown(ctx, orderID, op.ID, op.Fence, detail, s.evidenceTier()); mErr != nil {
 				return Order{}, mErr
 			}
