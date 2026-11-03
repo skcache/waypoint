@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { GeistMono } from "geist/font/mono";
-import { GeistSans } from "geist/font/sans";
 
+import "@fontsource-variable/archivo/wdth.css";
 import { SiteHeader } from "@/components/site-header";
 import "./globals.css";
 
@@ -16,7 +16,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className={`${GeistSans.variable} ${GeistMono.variable}`}>
+    <html lang="en" className={GeistMono.variable}>
       <body className="min-h-dvh antialiased">
         <SiteHeader />
         {children}

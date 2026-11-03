@@ -41,6 +41,7 @@ export function CodeViewer({
   testId,
   heading,
   fill = false,
+  maxHeight,
 }: {
   file: string;
   diff: string;
@@ -50,6 +51,8 @@ export function CodeViewer({
   heading?: string;
   /** Fill the parent height and scroll inside it, like a sheet. */
   fill?: boolean;
+  /** A CSS max-height for the scrolling code area when not filling. */
+  maxHeight?: string;
 }) {
   const { lines, hunks } = useMemo(() => parseDiff(diff), [diff]);
   const stats = useMemo(() => diffStats(diff), [diff]);
@@ -81,7 +84,7 @@ export function CodeViewer({
   }
 
   return (
-    <div className={`paper overflow-hidden rounded-[20px] bg-background ${fill ? "flex h-full min-h-0 flex-col" : ""}`} data-testid={testId}>
+    <div className={`paper overflow-hidden rounded-[4px] bg-background shadow-[0_24px_60px_-20px_rgba(0,0,0,0.6)] ${fill ? "flex h-full min-h-0 flex-col" : ""}`} data-testid={testId}>
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-line px-4 py-3">
         <div className="min-w-0">
           {heading ? <p className="mb-0.5 text-[15px] font-medium text-faint">{heading}</p> : null}
@@ -129,7 +132,7 @@ export function CodeViewer({
         </ol>
       ) : null}
 
-      <div className={fill ? "min-h-0 flex-1 overflow-auto" : "max-h-[560px] overflow-auto"}>
+      <div className={fill ? "min-h-0 flex-1 overflow-auto" : "overflow-auto"} style={fill ? undefined : { maxHeight: maxHeight ?? "560px" }}>
         <div className={`mono text-[14px] leading-[1.7] max-sm:min-w-max ${wrap ? "" : "min-w-max"}`}>
           {lines.map((line, i) => {
             if (line.kind === "meta") return null;
@@ -151,7 +154,7 @@ export function CodeViewer({
                 ref={(el) => {
                   rowRefs.current[i] = el;
                 }}
-                className={`grid grid-cols-[2.6rem_1.4rem_1fr] sm:grid-cols-[2.6rem_2.6rem_1.4rem_1fr] ${add ? "bg-ok-soft" : del ? "bg-bad-soft" : ""} ${flash === i ? "line-pulse" : ""}`}
+                className={`grid grid-cols-[2.6rem_1.4rem_1fr] sm:grid-cols-[2.6rem_2.6rem_1.4rem_1fr] ${add ? "bg-[color-mix(in_oklch,var(--clear)_58%,var(--sheet))]" : del ? "bg-[color-mix(in_oklch,var(--alarm)_26%,var(--sheet))]" : ""} ${flash === i ? "line-pulse" : ""}`}
               >
                 <span className="select-none px-2 text-right text-[13px] leading-[1.75] text-faint max-sm:hidden">{line.oldNo ?? ""}</span>
                 <span className="select-none px-2 text-right text-[13px] leading-[1.75] text-faint">{line.newNo ?? ""}</span>

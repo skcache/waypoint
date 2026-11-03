@@ -1,64 +1,85 @@
 @import "tailwindcss";
 
 /*
-  Waypoint tokens.
+  Waypoint art direction.
 
-  A warm charcoal field and tonal cells: near-black, dark, mid beige, cream.
-  Terracotta is the one signal colour and means "the judge found a failure".
-  Everything else is tone. `.paper` re-points the same names to a cream sheet
-  so code reads like a printed page. Status never travels as colour alone: every
-  cell and row also carries a word or a glyph.
+  A poster, not a dashboard. Each scene is a full-bleed colour field (vermilion
+  for the break, ink for the fix, paper for the verdict, ink for the proof) with
+  huge condensed type, and the evidence is printed on real receipts. Lime is the
+  auditor's highlighter and means "clear"; vermilion means "alarm". Status never
+  travels as colour alone: every mark also has a word or a glyph.
 */
 :root {
-  --c-bg: oklch(0.19 0.005 75);
-  --c-surface: oklch(0.25 0.006 75);
-  --c-sunk: oklch(0.15 0.005 75);
-  --c-text: oklch(0.95 0.01 92);
-  --c-muted: oklch(0.74 0.01 88);
-  --c-faint: oklch(0.62 0.01 85);
-  --c-line: oklch(0.33 0.006 75);
-  --c-line-strong: oklch(0.5 0.008 80);
-  --c-fail: oklch(0.52 0.16 33);
-  --c-fail-text: oklch(0.75 0.13 38);
-  --c-fail-soft: oklch(0.3 0.06 33);
-  --c-pass: oklch(0.8 0.09 135);
-  --c-pass-soft: oklch(0.29 0.04 135);
-  --c-warn: oklch(0.82 0.11 85);
-  --c-warn-soft: oklch(0.3 0.045 85);
-  --c-accent: oklch(0.93 0.02 95);
-  --c-on-accent: oklch(0.19 0.005 75);
-  --cell-na: oklch(0.145 0.004 75);
-  --cell-dark: oklch(0.27 0.006 75);
-  --cell-mid: oklch(0.68 0.012 92);
-  --cell-cream: oklch(0.93 0.016 95);
-  --cell-ink: oklch(0.2 0.006 75);
+  --paper: oklch(0.955 0.006 100);
+  --ink: oklch(0.15 0.004 100);
+  --alarm: oklch(0.67 0.225 33);
+  --clear: oklch(0.91 0.2 125);
+  --sheet: oklch(0.985 0.004 95);
+  --sheet-ink: oklch(0.2 0.008 95);
+
+  /* default field: paper */
+  --c-bg: var(--paper);
+  --c-surface: oklch(0.985 0.003 100);
+  --c-sunk: oklch(0.92 0.006 100);
+  --c-text: var(--ink);
+  --c-muted: oklch(0.38 0.005 100);
+  --c-faint: oklch(0.46 0.005 100);
+  --c-line: oklch(0.84 0.006 100);
+  --c-line-strong: oklch(0.55 0.006 100);
+  --c-fail: oklch(0.5 0.21 30);
+  --c-fail-soft: oklch(0.94 0.04 30);
+  --c-pass: oklch(0.42 0.12 145);
+  --c-pass-soft: oklch(0.94 0.07 125);
+  --c-warn: oklch(0.45 0.12 70);
+  --c-warn-soft: oklch(0.95 0.06 90);
+  --c-accent: var(--ink);
+  --c-on-accent: var(--paper);
   --t-keyword: oklch(0.42 0.14 300);
   --t-string: oklch(0.42 0.1 145);
-  --t-comment: oklch(0.52 0.02 85);
+  --t-comment: oklch(0.5 0.01 100);
   --t-number: oklch(0.48 0.12 60);
   --t-type: oklch(0.42 0.1 235);
-  --t-sql: oklch(0.48 0.15 38);
+  --t-sql: oklch(0.48 0.17 33);
 }
 
-.paper {
-  --c-bg: oklch(0.93 0.016 95);
-  --c-surface: oklch(0.895 0.018 93);
-  --c-sunk: oklch(0.87 0.02 92);
-  --c-text: oklch(0.22 0.01 75);
-  --c-muted: oklch(0.38 0.012 80);
-  --c-faint: oklch(0.46 0.012 82);
-  --c-line: oklch(0.8 0.02 92);
-  --c-line-strong: oklch(0.62 0.02 88);
-  --c-fail: oklch(0.5 0.17 33);
-  --c-fail-text: oklch(0.45 0.17 33);
-  --c-fail-soft: oklch(0.87 0.05 38);
-  --c-pass: oklch(0.4 0.09 140);
-  --c-pass-soft: oklch(0.88 0.06 135);
-  --c-accent: oklch(0.45 0.1 250);
-  --c-on-accent: oklch(0.97 0.01 95);
+.field-paper {
+  --c-bg: var(--paper);
   background: var(--c-bg);
   color: var(--c-text);
-  color-scheme: light;
+}
+
+.field-ink {
+  --c-bg: var(--ink);
+  --c-surface: oklch(0.22 0.004 100);
+  --c-sunk: oklch(0.11 0.004 100);
+  --c-text: var(--paper);
+  --c-muted: oklch(0.78 0.005 100);
+  --c-faint: oklch(0.67 0.005 100);
+  --c-line: oklch(0.32 0.005 100);
+  --c-line-strong: oklch(0.52 0.005 100);
+  --c-fail: oklch(0.74 0.19 33);
+  --c-fail-soft: oklch(0.28 0.08 33);
+  --c-pass: var(--clear);
+  --c-pass-soft: oklch(0.3 0.07 125);
+  --c-accent: var(--clear);
+  --c-on-accent: var(--ink);
+  background: var(--c-bg);
+  color: var(--c-text);
+  color-scheme: dark;
+}
+
+.field-alarm {
+  --c-bg: var(--alarm);
+  --c-surface: color-mix(in oklch, var(--ink) 12%, var(--alarm));
+  --c-text: var(--ink);
+  --c-muted: color-mix(in oklch, var(--ink) 82%, var(--alarm));
+  --c-faint: color-mix(in oklch, var(--ink) 68%, var(--alarm));
+  --c-line: color-mix(in oklch, var(--ink) 30%, var(--alarm));
+  --c-line-strong: color-mix(in oklch, var(--ink) 70%, var(--alarm));
+  --c-accent: var(--ink);
+  --c-on-accent: var(--alarm);
+  background: var(--c-bg);
+  color: var(--c-text);
 }
 
 @theme inline {
@@ -70,7 +91,7 @@
   --color-faint: var(--c-faint);
   --color-line: var(--c-line);
   --color-line-strong: var(--c-line-strong);
-  --color-bad: var(--c-fail-text);
+  --color-bad: var(--c-fail);
   --color-bad-soft: var(--c-fail-soft);
   --color-ok: var(--c-pass);
   --color-ok-soft: var(--c-pass-soft);
@@ -78,43 +99,49 @@
   --color-warn-soft: var(--c-warn-soft);
   --color-accent: var(--c-accent);
   --color-on-accent: var(--c-on-accent);
-  --color-cell-na: var(--cell-na);
-  --color-cell-dark: var(--cell-dark);
-  --color-cell-mid: var(--cell-mid);
-  --color-cell-cream: var(--cell-cream);
-  --color-cell-ink: var(--cell-ink);
-  --color-fail-fill: var(--c-fail);
-  --radius-panel: 14px;
-  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --color-alarm: var(--alarm);
+  --color-paper: var(--paper);
+  --color-night: var(--ink);
+  --color-clear: var(--clear);
+  --color-sheet: var(--sheet);
+  --color-sheet-ink: var(--sheet-ink);
+  --radius-panel: 6px;
+  --font-sans: "Archivo Variable", ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
 @layer base {
   html {
-    color-scheme: dark;
-    background: var(--c-bg);
+    scroll-behavior: smooth;
+    scroll-padding-top: 64px;
     -webkit-text-size-adjust: 100%;
+    background: var(--paper);
   }
 
   body {
     background: var(--c-bg);
     color: var(--c-text);
     font-family: var(--font-sans);
-    font-size: 16px;
+    font-size: 17px;
     line-height: 1.5;
     font-variant-numeric: tabular-nums;
     text-rendering: optimizeLegibility;
   }
 
   ::selection {
-    background: color-mix(in oklch, var(--cell-cream) 35%, transparent);
-    color: var(--c-text);
+    background: var(--clear);
+    color: var(--ink);
   }
 
   :focus-visible {
-    outline: 2px solid var(--cell-cream);
+    outline: 3px solid var(--clear);
     outline-offset: 2px;
-    border-radius: 4px;
+    border-radius: 3px;
+  }
+
+  .field-paper :focus-visible,
+  .receipt :focus-visible {
+    outline-color: var(--ink);
   }
 
   summary {
@@ -123,11 +150,6 @@
 
   button {
     cursor: pointer;
-  }
-
-  * {
-    scrollbar-width: thin;
-    scrollbar-color: var(--c-line-strong) transparent;
   }
 }
 
@@ -139,11 +161,13 @@
     font-size: 0.92em;
   }
 
-  /* The big light numeral. */
-  .numeral {
-    font-weight: 300;
-    letter-spacing: -0.045em;
-    line-height: 0.9;
+  /* The poster voice: heavy, condensed, upper case, tight. */
+  .poster {
+    font-weight: 800;
+    font-stretch: 66%;
+    text-transform: uppercase;
+    letter-spacing: -0.012em;
+    line-height: 0.88;
   }
 
   .scrollbar-none {
@@ -153,34 +177,85 @@
     display: none;
   }
 
-  .cell-fill {
-    transition: fill 360ms cubic-bezier(0.16, 1, 0.3, 1), opacity 260ms ease, stroke 260ms ease;
+  /* Thermal receipt paper with torn top and bottom edges. */
+  .receipt {
+    --s: 9px;
+    position: relative;
+    color: var(--sheet-ink);
+    background-color: var(--sheet);
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 .5 0'/></filter><rect width='100%' height='100%' filter='url(%23n)' opacity='.06'/></svg>");
+    -webkit-mask:
+      conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) bottom / calc(2 * var(--s)) 51% repeat-x,
+      conic-gradient(from 135deg at top, #0000, #000 1deg 89deg, #0000 90deg) top / calc(2 * var(--s)) 51% repeat-x;
+    mask:
+      conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) bottom / calc(2 * var(--s)) 51% repeat-x,
+      conic-gradient(from 135deg at top, #0000, #000 1deg 89deg, #0000 90deg) top / calc(2 * var(--s)) 51% repeat-x;
+  }
+
+  .receipt-shadow {
+    filter: drop-shadow(0 18px 26px color-mix(in oklch, black 38%, transparent));
+  }
+
+  /* The auditor's highlighter: a slanted marker stroke that draws in. */
+  .marker {
+    background-image: linear-gradient(100deg, transparent 0.4em, var(--clear) 0.4em, var(--clear) calc(100% - 0.4em), transparent calc(100% - 0.4em));
+    background-repeat: no-repeat;
+    background-size: 0% 62%;
+    background-position: 0 70%;
+    transition: background-size 520ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+  .marker[data-on="true"] {
+    background-size: 100% 62%;
+  }
+  .marker-alarm {
+    background-image: linear-gradient(100deg, transparent 0.4em, var(--alarm) 0.4em, var(--alarm) calc(100% - 0.4em), transparent calc(100% - 0.4em));
+  }
+
+  /* Reveal on scroll. Content is visible by default; script sets data-state="out" first. */
+  .reveal {
+    transition: opacity 700ms cubic-bezier(0.16, 1, 0.3, 1), transform 700ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .reveal[data-state="out"] {
+    opacity: 0;
+    transform: translateY(28px);
+  }
+
+  /* A receipt printing: the paper feeds out of the slot, top first. */
+  .print {
+    transition: clip-path 1100ms cubic-bezier(0.4, 0, 0.2, 1);
+    clip-path: inset(0 0 0 0);
+  }
+  .print[data-state="out"] {
+    clip-path: inset(0 0 100% 0);
+  }
+
+  .stamp-slam {
+    animation: slam 420ms cubic-bezier(0.2, 1.5, 0.4, 1) both;
   }
 
   .line-pulse {
     animation: line-pulse 1400ms ease-out 1;
   }
-
-  .swap {
-    animation: swap 260ms cubic-bezier(0.16, 1, 0.3, 1) both;
-  }
 }
 
-@keyframes swap {
-  from {
+@keyframes slam {
+  0% {
     opacity: 0;
-    transform: translateY(6px);
+    transform: rotate(var(--r, -8deg)) scale(1.7);
   }
-  to {
+  60% {
     opacity: 1;
-    transform: translateY(0);
+  }
+  100% {
+    opacity: 0.93;
+    transform: rotate(var(--r, -8deg)) scale(1);
   }
 }
 
 @keyframes line-pulse {
   0%,
   35% {
-    background-color: color-mix(in oklch, oklch(0.6 0.12 250) 30%, transparent);
+    background-color: color-mix(in oklch, var(--clear) 60%, transparent);
   }
   100% {
     background-color: transparent;
@@ -188,9 +263,21 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .swap,
+  html {
+    scroll-behavior: auto;
+  }
+
+  .stamp-slam,
   .line-pulse {
     animation: none !important;
+    opacity: 0.93;
+  }
+
+  .print[data-state="out"],
+  .reveal[data-state="out"] {
+    clip-path: none;
+    opacity: 1;
+    transform: none;
   }
 
   *,
@@ -200,4 +287,23 @@
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
   }
+}
+
+/* A cream sheet: code slips and anything printed on paper inside a dark field. */
+.paper {
+  --c-bg: var(--sheet);
+  --c-surface: oklch(0.95 0.006 95);
+  --c-sunk: oklch(0.92 0.007 95);
+  --c-text: var(--sheet-ink);
+  --c-muted: oklch(0.38 0.008 95);
+  --c-faint: oklch(0.46 0.008 95);
+  --c-line: oklch(0.86 0.007 95);
+  --c-line-strong: oklch(0.55 0.008 95);
+  --c-fail: oklch(0.5 0.21 30);
+  --c-pass: oklch(0.4 0.12 145);
+  --c-accent: var(--ink);
+  --c-on-accent: var(--paper);
+  background: var(--c-bg);
+  color: var(--c-text);
+  color-scheme: light;
 }

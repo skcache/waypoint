@@ -1,29 +1,72 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { WarningCircle } from "@phosphor-icons/react";
 
 import type { DemoExport } from "@/lib/demo";
-import { GateLine } from "./gate-line";
-import { BreakCanvas, BreakRail, EvidenceCanvas, EvidenceRail, FixCanvas, FixRail, JudgeCanvas, JudgeRail } from "./views";
-import { VIEWS, type Candidate, type EvidenceSource, type View } from "./types";
+import { BreakScene } from "./break-scene";
+import { FixScene } from "./fix-scene";
+import { InkDefs } from "./kit";
+import { JudgeScene } from "./judge-scene";
+import { ProofScene } from "./proof-scene";
+import { SignatureBar } from "./signature-bar";
+import type { EvidenceSource } from "./types";
 
 type Variant = "showcase" | "demo";
 
-function subscribe(cb: () => void) {
-  window.addEventListener("hashchange", cb);
-  return () => window.removeEventListener("hashchange", cb);
-}
+const SCENES = [
+  { id: "break", label: "Break", field: "field-alarm" },
+  { id: "fix", label: "Fix", field: "field-ink" },
+  { id: "judge", label: "Judge", field: "field-paper" },
+  { id: "proof", label: "Proof", field: "field-ink" },
+] as const;
 
-function useHashView(): [View, (v: View) => void] {
-  const raw = useSyncExternalStore(subscribe, () => window.location.hash.slice(1), () => "");
-  const view = (VIEWS.some((v) => v.id === raw) ? raw : "break") as View;
-  const go = useCallback((v: View) => {
-    window.location.hash = v;
-    window.scrollTo({ top: 0 });
+function Header() {
+  const [field, setField] = useState<string>("field-alarm");
+  const [active, setActive] = useState<string>("break");
+  useEffect(() => {
+    const els = SCENES.map((s) => document.getElementById(s.id)).filter(Boolean) as HTMLElement[];
+    const io = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) {
+          if (!e.isIntersecting) continue;
+          const scene = SCENES.find((s) => s.id === e.target.id);
+          if (scene) {
+            setField(scene.field);
+            setActive(scene.id);
+          }
+        }
+      },
+      { rootMargin: "0px 0px -92% 0px" },
+    );
+    els.forEach((el) => io.observe(el));
+    return () => io.disconnect();
   }, []);
-  return [view, go];
+  return (
+    <header className={`${field} sticky top-0 z-40 transition-colors duration-300`} data-field={field}>
+      <div className="mx-auto flex h-14 w-full max-w-[1440px] items-center justify-between px-3 sm:px-8 lg:px-12">
+        <a href="#break" className="poster inline-flex min-h-11 items-center px-2 text-[26px]" aria-label="Waypoint, back to the top">
+          Waypoint
+        </a>
+        <nav aria-label="Sections" className="flex items-center">
+          {SCENES.map((s) => (
+            <a
+              key={s.id}
+              href={`#${s.id}`}
+              aria-current={active === s.id ? "location" : undefined}
+              className={`inline-flex min-h-11 items-center px-2.5 text-[15px] font-semibold sm:px-3.5 ${active === s.id ? "underline decoration-2 underline-offset-[7px]" : "opacity-70 hover:opacity-100"}`}
+            >
+              {s.label}
+            </a>
+          ))}
+          <Link href="/benchmark" className="inline-flex min-h-11 items-center px-3.5 text-[15px] font-semibold opacity-70 hover:opacity-100 max-sm:hidden">
+            Benchmark
+          </Link>
+        </nav>
+      </div>
+    </header>
+  );
 }
 
 export function Showcase({ initial, variant }: { initial: DemoExport | null; variant: Variant }) {
@@ -31,17 +74,6 @@ export function Showcase({ initial, variant }: { initial: DemoExport | null; var
   const [source, setSource] = useState<EvidenceSource>("recorded");
   const [loading, setLoading] = useState(!initial);
   const [error, setError] = useState("");
-  const [view, go] = useHashView();
-  const [candidate, setCandidate] = useState<Candidate>("repair");
-  const [inv, setInv] = useState("I13");
-  const [mode, setMode] = useState<"map" | "code">("map");
-  const [differences, setDifferences] = useState(false);
-  const [step, setStep] = useState("judge");
-  const bodyRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (bodyRef.current) bodyRef.current.scrollTop = 0;
-  }, [view]);
 
   useEffect(() => {
     let live = true;
@@ -91,78 +123,27 @@ export function Showcase({ initial, variant }: { initial: DemoExport | null; var
   if (loading && !doc) return <Skeleton />;
   if (!doc) return <EvidenceError message={error} />;
 
-  const rail = { doc, go };
-  const head =
-    view === "break" ? <BreakRail {...rail} part="head" inv={inv} setInv={setInv} source={source} /> :
-    view === "fix" ? <FixRail {...rail} part="head" setCandidate={setCandidate} /> :
-    view === "judge" ? <JudgeRail {...rail} part="head" candidate={candidate} setCandidate={setCandidate} inv={inv} mode={mode} setMode={setMode} differences={differences} setDifferences={setDifferences} /> :
-    <EvidenceRail {...rail} part="head" step={step} setStep={setStep} />;
-  const body =
-    view === "break" ? <BreakRail {...rail} part="body" inv={inv} setInv={setInv} source={source} /> :
-    view === "fix" ? <FixRail {...rail} part="body" setCandidate={setCandidate} /> :
-    view === "judge" ? <JudgeRail {...rail} part="body" candidate={candidate} setCandidate={setCandidate} inv={inv} mode={mode} setMode={setMode} differences={differences} setDifferences={setDifferences} /> :
-    <EvidenceRail {...rail} part="body" step={step} setStep={setStep} />;
-  const canvas =
-    view === "break" ? <BreakCanvas doc={doc} inv={inv} setInv={setInv} /> :
-    view === "fix" ? <FixCanvas doc={doc} /> :
-    view === "judge" ? <JudgeCanvas doc={doc} candidate={candidate} inv={inv} setInv={setInv} mode={mode} differences={differences} /> :
-    <EvidenceCanvas doc={doc} step={step} setStep={setStep} />;
-
   return (
-    <main
-      className="min-h-dvh pb-16 lg:grid lg:h-dvh lg:grid-cols-[minmax(420px,480px)_1fr] lg:grid-rows-[auto_minmax(0,1fr)_auto] lg:overflow-hidden lg:pb-0 lg:[grid-template-areas:'head_canvas''body_canvas''gate_canvas']"
-      data-view={view}
-    >
-      <div className="px-5 pt-3 lg:px-7 lg:pt-4 lg:[grid-area:head]">
-        <nav aria-label="Views" className="-mx-2 flex items-center justify-between gap-1 text-[15px]">
-          <Link href="/" className="inline-flex min-h-11 items-center px-2 font-semibold tracking-[-0.01em]" aria-label="Waypoint home">
-            Waypoint
-          </Link>
-          <span className="flex items-center">
-            {VIEWS.map((v) => (
-              <a
-                key={v.id}
-                href={`#${v.id}`}
-                aria-current={view === v.id ? "page" : undefined}
-                onClick={(e) => {
-                  e.preventDefault();
-                  go(v.id);
-                }}
-                className={`inline-flex min-h-11 items-center px-2.5 transition-colors ${view === v.id ? "text-ink underline decoration-line-strong decoration-1 underline-offset-[10px]" : "text-faint hover:text-ink"}`}
-              >
-                {v.label}
-              </a>
-            ))}
-            <Link href="/benchmark" className="inline-flex min-h-11 items-center px-2.5 text-faint transition-colors hover:text-ink max-sm:hidden">
-              Benchmark
-            </Link>
-          </span>
-        </nav>
-        <div key={view} className="swap">{head}</div>
-      </div>
-      <div ref={bodyRef} className="px-5 pb-4 lg:min-h-0 lg:overflow-y-auto lg:px-7 lg:pb-10 lg:[grid-area:body] lg:[mask-image:linear-gradient(to_bottom,black_calc(100%-36px),transparent)]">
-        <div key={view} className="swap">{body}</div>
-      </div>
-      <section aria-label="Map" className="px-3 pt-2 lg:min-h-0 lg:p-4 lg:pl-0 lg:[grid-area:canvas]">
-        <div className="h-[80dvh] min-h-[640px] lg:h-full lg:min-h-0" key={view}>
-          {canvas}
-        </div>
-      </section>
-      <div className="px-5 lg:px-7 lg:[grid-area:gate]">
-        <GateLine doc={doc} source={source} />
-        <p className="sr-only">
-          Run <span data-testid="demo-run-id">{doc.run.run_id}</span>
-        </p>
-      </div>
+    <main className="pb-14">
+      <InkDefs />
+      <Header />
+      <BreakScene doc={doc} source={source} />
+      <FixScene doc={doc} />
+      <JudgeScene doc={doc} />
+      <ProofScene doc={doc} />
+      <p className="sr-only">
+        Run <span data-testid="demo-run-id">{doc.run.run_id}</span>
+      </p>
+      <SignatureBar doc={doc} source={source} />
     </main>
   );
 }
 
 function Skeleton() {
   return (
-    <main className="mx-auto w-full max-w-[1280px] px-5 py-20" aria-busy="true" aria-live="polite">
-      <div className="h-24 w-24 animate-pulse rounded-lg bg-surface motion-reduce:animate-none" />
-      <p className="mt-6 text-sm text-faint">Loading the recorded evidence.</p>
+    <main className="field-alarm min-h-dvh px-5 py-20" aria-busy="true" aria-live="polite">
+      <div className="poster text-[clamp(4rem,12vw,10rem)]">Waypoint</div>
+      <p className="mt-6 text-[17px]">Loading the recorded evidence.</p>
     </main>
   );
 }
@@ -171,7 +152,7 @@ function EvidenceError({ message }: { message: string }) {
   return (
     <main className="mx-auto max-w-[640px] px-5 py-24">
       <WarningCircle size={28} weight="bold" className="text-bad" aria-hidden />
-      <h1 className="mt-4 text-3xl font-semibold tracking-tight">Evidence unavailable</h1>
+      <h1 className="poster mt-4 text-5xl">Evidence unavailable</h1>
       <p className="mt-3 text-base leading-[1.6] text-muted">
         The case file expects the committed sanitized evidence at <span className="mono text-ink">public/demo/recorded.json</span>. Run{" "}
         <span className="mono text-ink">make demo</span> for a fresh local replay.

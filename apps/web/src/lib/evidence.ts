@@ -266,33 +266,74 @@ export function ledgerAutopsy(e: DemoEval): LedgerRow[] {
   return rows;
 }
 
-// Short names for the map cells. The oracle's full title is always shown in the
-// detail; these are presentation text keyed by the oracle's stable invariant id.
-const SHORT_LABELS: Record<string, string> = {
-  I1: "Integer minor units",
-  I2: "Amount bound to order",
-  I3: "Approval is not capture",
-  I4: "Durable before the call",
-  I5: "Ambiguity is not failure",
-  I6: "Capture needs provider proof",
-  I7: "One order, one effect",
-  I8: "No silent rollback",
-  I9: "Divergence is explicit",
-  I10: "Refunds need proof",
-  I11: "Unsafe never applies",
-  I12: "Evidence provenance",
-  I13: "One fulfillment per payment",
-  I14: "Fulfillment needs capture proof",
-};
-
-export function shortLabel(inv: { id: string; title?: string; summary?: string }): string {
-  return SHORT_LABELS[inv.id] ?? inv.title ?? inv.summary ?? inv.id;
-}
-
 export function totalStepMs(steps: DemoStep[]): number {
   return steps.reduce((sum, s) => sum + s.duration_ms, 0);
 }
 
 export function formatMs(ms: number): string {
   return ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(1)} s`;
+}
+
+export interface ReceiptModel {
+  column: Column;
+  label: string;
+  orderId?: string;
+  orderRole: string;
+  /** The raw final order status the oracle recorded. */
+  status: string;
+  capture?: string;
+  captured: number;
+  /** Effect keys are known only when the oracle printed a counterexample. */
+  effects: { key?: string; flagged: boolean }[];
+  fulfilled: number | null;
+  balanced: boolean;
+  ticks: { id: string; status: string }[];
+  failed: string[];
+  verdict: "VERIFIED" | "UNSAFE" | "INCONCLUSIVE";
+  statusFlagged: boolean;
+}
+
+const LABELS: Record<Column, { label: string; role: string }> = {
+  before: { label: "Original code", role: "incident order" },
+  repair: { label: "AI repair", role: "verification order" },
+  unsafe: { label: "Seeded unsafe patch", role: "unsafe candidate's order" },
+};
+
+/** One candidate's receipt: what the oracle recorded, in the order a receipt prints it. */
+export function receiptModel(doc: DemoExport, column: Column): ReceiptModel {
+  const e = column === "before" ? doc.pre_repair : column === "repair" ? doc.oracle : doc.unsafe;
+  const ids = orderIdentities(doc);
+  const orderId = column === "before" ? ids.incident : column === "repair" ? ids.verification : ids.unsafeRun;
+  const i13 = e.invariants.find((i) => i.id === "I13");
+  const count = effectCount(e);
+  const keys = i13?.status === "FAIL" ? i13.counterexample?.effects ?? [] : [];
+  const effects = keys.length
+    ? keys.map((k) => ({ key: cleanEffect(k).split(" ")[0], flagged: true }))
+    : count === 1
+      ? [{ key: undefined, flagged: false }]
+      : [];
+  // The unsafe evaluation carries no capture id, but its own reason names "one payment".
+  const captured = e.provider_capture_id || /for one payment/i.test(e.reason) ? 1 : 0;
+  const fulfilled = count ?? (effects.length || null);
+  return {
+    column,
+    label: LABELS[column].label,
+    orderId,
+    orderRole: LABELS[column].role,
+    status: e.order_status,
+    capture: e.provider_capture_id,
+    captured,
+    effects,
+    fulfilled,
+    balanced: fulfilled !== null && fulfilled === captured,
+    ticks: e.invariants.map((i) => ({ id: i.id, status: i.status })),
+    failed: failedIds(e),
+    verdict: verdictWord(e.verdict),
+    statusFlagged: e.invariants.find((i) => i.id === "I8")?.status === "FAIL",
+  };
+}
+
+/** Everything a glance at the order can see: no counts, no invariants. */
+export function surfaceOf(m: ReceiptModel) {
+  return { status: m.status, fulfilled: m.effects.length > 0 };
 }

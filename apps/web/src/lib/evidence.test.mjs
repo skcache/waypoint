@@ -141,16 +141,34 @@ test("effect keys are shown once when key and event match", async () => {
   assert.equal(cleanEffect("plain"), "plain");
 });
 
-test("every invariant in the export has the oracle's title and a short map label", async () => {
-  const { shortLabel, totalStepMs, formatMs } = await import("./evidence.ts");
+test("every invariant has the oracle's title, and totals come from the export", async () => {
+  const { totalStepMs, formatMs } = await import("./evidence.ts");
   for (const e of [doc.pre_repair, doc.oracle, doc.unsafe]) {
-    for (const inv of e.invariants) {
-      assert.ok(inv.title && inv.title.length > 8, `${inv.id} has a title`);
-      assert.ok(shortLabel(inv).length <= 32, `${inv.id} short label fits a cell`);
-    }
+    for (const inv of e.invariants) assert.ok(inv.title && inv.title.length > 8, `${inv.id} has a title`);
   }
-  assert.equal(shortLabel({ id: "I99", title: "Custom oracle title" }), "Custom oracle title");
   assert.equal(totalStepMs(doc.verification.steps), doc.verification.steps.reduce((a, s) => a + s.duration_ms, 0));
   assert.equal(formatMs(363), "363 ms");
   assert.equal(formatMs(24310), "24.3 s");
+});
+
+test("looks fixed, is not: the repair and the unsafe patch share a surface and differ in the ledger", async () => {
+  const { receiptModel, surfaceOf } = await import("./evidence.ts");
+  const before = receiptModel(doc, "before");
+  const repair = receiptModel(doc, "repair");
+  const unsafe = receiptModel(doc, "unsafe");
+  assert.deepEqual(surfaceOf(repair), surfaceOf(unsafe), "a glance cannot tell the repair from the unsafe patch");
+  assert.equal(surfaceOf(repair).status, "CAPTURED_VERIFIED");
+  assert.notEqual(surfaceOf(before).status, "CAPTURED_VERIFIED", "the original's status visibly rolled back");
+  assert.deepEqual([before.fulfilled, repair.fulfilled, unsafe.fulfilled], [2, 1, 2]);
+  assert.deepEqual([before.balanced, repair.balanced, unsafe.balanced], [false, true, false]);
+  assert.deepEqual(before.failed, ["I8", "I13", "I14"]);
+  assert.deepEqual(unsafe.failed, ["I13"]);
+  assert.deepEqual(repair.failed, []);
+  assert.deepEqual(before.effects.map((e) => e.key), ["evt-cap-1", "evt-cap-2"]);
+  assert.deepEqual(repair.effects, [{ key: undefined, flagged: false }], "no effect key is invented for a passing run");
+  assert.deepEqual([before.captured, repair.captured, unsafe.captured], [1, 1, 1], "one payment in every candidate");
+  assert.equal(before.statusFlagged, true);
+  assert.equal(unsafe.statusFlagged, false);
+  assert.equal(new Set([before.orderId, repair.orderId, unsafe.orderId]).size, 3, "three distinct order identities");
+  assert.equal(before.ticks.length, 14);
 });
