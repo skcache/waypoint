@@ -17,7 +17,13 @@ assert.equal(res.status, 200, `${dataPath} must be served`);
 const run = await res.json();
 assert.ok(run.run?.run_id, "local export has a run id");
 assert.ok(run.run?.evidence_layout, "local export declares its evidence layout");
-const captureID = run.incident?.observations?.map((o) => o.capture_id).find(Boolean);
+const observations = run.incident?.observations ?? [];
+assert.ok(observations.length >= 4, "local export contains the F3 provider observations");
+const sequences = observations.map((o) => o.seq);
+assert.deepEqual(sequences, [...sequences].sort((a, b) => a - b), "observation sequence is ordered");
+assert.equal(new Set(sequences).size, sequences.length, "observation sequence is unique");
+assert.ok(observations.every((o) => o.tier === "F"), "observations carry their tier provenance");
+const captureID = observations.map((o) => o.capture_id).find(Boolean);
 assert.ok(captureID, "local export contains a captured provider observation");
 
 const browser = await puppeteer.launch({
