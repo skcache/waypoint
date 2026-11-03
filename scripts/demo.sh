@@ -8,6 +8,23 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 . "$ROOT/scripts/lib/demo-paths.sh"
 cd "$ROOT"
 
+LOCAL_EXPORT="$ROOT/apps/web/public/demo/local.json"
+WEB_PID=""
+SUCCESS=0
+# A prior successful run must not survive a failed new run.
+rm -f "$LOCAL_EXPORT"
+cleanup() {
+  if [ -n "${WEB_PID:-}" ]; then
+    kill "$WEB_PID" >/dev/null 2>&1 || true
+    wait "$WEB_PID" >/dev/null 2>&1 || true
+    WEB_PID=""
+  fi
+  if [ "${SUCCESS:-0}" -ne 1 ]; then
+    rm -f "$LOCAL_EXPORT"
+  fi
+}
+trap cleanup EXIT
+
 if [ ! -f .env ]; then
   echo "demo: .env is missing. Run: cp .env.example .env" >&2
   exit 1
@@ -103,11 +120,6 @@ echo "==> probing workbench navigation"
 PORT="$(node -e 'const s=require("net").createServer(); s.listen(0,"127.0.0.1",()=>{console.log(s.address().port);s.close()})')"
 "$ROOT/apps/web/node_modules/.bin/next" start -p "$PORT" >"$OUT/web-server.log" 2>&1 &
 WEB_PID=$!
-cleanup() {
-  kill "$WEB_PID" >/dev/null 2>&1 || true
-  wait "$WEB_PID" >/dev/null 2>&1 || true
-}
-trap cleanup EXIT
 
 ready=0
 for _ in $(seq 1 40); do
@@ -159,8 +171,13 @@ else
   echo "==> browser smoke skipped: set CHROME_PATH to Chrome/Chromium for the interactive check"
 fi
 
-trap - EXIT
-cleanup
+# Stop the server before scanning; keep the EXIT trap armed so a failed scan
+# removes the local export rather than presenting a half-verified run.
+if [ -n "${WEB_PID:-}" ]; then
+  kill "$WEB_PID" >/dev/null 2>&1 || true
+  wait "$WEB_PID" >/dev/null 2>&1 || true
+  WEB_PID=""
+fi
 
 echo "==> scanning demo artifacts for private data"
 if grep -RIlE '/Users/|/private/var|/var/folders|sk-or-v1|OPENROUTER_API_KEY|postgres(ql)?://[^ ]+:[^@ ]+@' \
@@ -170,6 +187,9 @@ if grep -RIlE '/Users/|/private/var|/var/folders|sk-or-v1|OPENROUTER_API_KEY|pos
   cat /tmp/waypoint-demo-private.txt >&2
   exit 1
 fi
+
+SUCCESS=1
+trap - EXIT
 
 echo
 echo "DEMO OK"

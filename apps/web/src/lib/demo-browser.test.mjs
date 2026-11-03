@@ -16,6 +16,9 @@ const res = await fetch(`${base}${dataPath}`, { cache: "no-store" });
 assert.equal(res.status, 200, `${dataPath} must be served`);
 const run = await res.json();
 assert.ok(run.run?.run_id, "local export has a run id");
+assert.ok(run.run?.evidence_layout, "local export declares its evidence layout");
+const captureID = run.incident?.observations?.map((o) => o.capture_id).find(Boolean);
+assert.ok(captureID, "local export contains a captured provider observation");
 
 const browser = await puppeteer.launch({
   executablePath: chrome,
@@ -43,6 +46,7 @@ try {
   assert.ok(text.includes(run.run.run_id), "page renders the run id");
   assert.ok(oracle.includes("VERIFIED_FOR_TESTED_SCENARIOS"), "oracle verdict is visible");
   assert.ok(diff.includes("'FULFILL'"), "generated diff is visible");
+  assert.ok(text.includes(captureID.slice(0, 12)), "capture identity is visible");
   assert.ok(unsafe.includes("I13") && unsafe.includes("2 fulfillment effects"), "I13 counterexample is visible");
   assert.ok(human.includes("Candidate patch in disposable worktree") && human.includes("yes"), "candidate worktree fact is visible");
   assert.ok(human.includes("Developer tree applied") && human.includes("no"), "developer tree remains unchanged");

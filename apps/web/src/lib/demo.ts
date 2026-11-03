@@ -19,6 +19,7 @@ export interface DemoRunMeta {
   base_revision: string;
   revision_source: string;
   evidence_tier: string;
+  evidence_layout: "attempt" | "legacy_recorded_root" | string;
   finished_at: string;
   model_recorded_at?: string;
   source: string;
@@ -41,6 +42,10 @@ export interface DemoObservation {
   order_status?: string;
   capture_id?: string;
   capture_status?: string;
+  capture_amount?: string;
+  capture_currency?: string;
+  stale_read?: boolean;
+  source?: string;
   tier?: string;
 }
 
@@ -67,6 +72,8 @@ export interface DemoEval {
   accepted: boolean;
   reason: string;
   order_status: string;
+  claimed_capture_id?: string;
+  provider_capture_id?: string;
   verdict: string;
   evaluated_at?: string;
   invariants: DemoInvariant[];

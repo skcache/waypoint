@@ -64,10 +64,18 @@ DEMO OK
 ```
 
 Artifacts include `report.json`, `report.md`, `incident.json`,
-`observations.json`, `pre-repair-eval.json`, the applied diff, the trusted eval,
-the unsafe test log, and the workbench build/navigation logs. The sanitized
-frontend projection is `apps/web/public/demo/local.json` (gitignored); the
-committed fallback is `apps/web/public/demo/recorded.json`.
+`pre-repair-eval.json`, the accepted attempt's `observations.json`, diff, judge
+eval and bundle, the unsafe test log, and the workbench build/navigation logs.
+The sanitized frontend projection is `apps/web/public/demo/local.json`
+(gitignored); the committed fallback is
+`apps/web/public/demo/recorded.json`.
+
+For a fresh run, the exporter reads only the accepted attempt directory
+(`attempts/attempt-N/`). Missing, stale, or contradictory attempt evidence makes
+the export fail; it never falls back to root observations or attempt-1 files.
+The committed M4 recorded artifact predates that layout and is explicitly marked
+`legacy_recorded_root` in the export. A failed demo removes the local export, so
+the page cannot show a previous successful run as the latest one.
 
 For the interactive browser check, set `CHROME_PATH` when running `make demo`:
 
