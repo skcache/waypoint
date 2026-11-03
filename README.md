@@ -35,15 +35,18 @@ and prints the independent oracle verdict plus the seeded unsafe counterexample.
 cp .env.example .env
 make setup                  # go mod download + npm ci
 make demo                   # starts PostgreSQL, migrates, replays F3, verifies
-make dev-web                # http://localhost:3000/demo
+make dev-web                # http://localhost:3000/ (committed case) and /demo
 ```
 
 Expected: `ACCEPTED_FOR_HUMAN_REVIEW`, `VERIFIED_FOR_TESTED_SCENARIOS`, one
 generated diff, and `I13: the merchant recorded 2 fulfillment effects for one
-payment` for the seeded unsafe candidate. `/demo` renders the same run's
-incident, observations, recorded diagnosis, diff, verification, oracle and
-human boundary. All provider evidence is tier F; no PayPal Sandbox capture is
-made. Full instructions, browser smoke and shutdown: [`DEMO.md`](DEMO.md).
+payment` for the seeded unsafe candidate. `/` and `/demo` share one showcase
+renderer: `/` always uses the committed recorded case, while `/demo` prefers a
+fresh local export when one exists. Both show the incident, observations,
+recorded diagnosis, diff, verification, oracle and human boundary without a
+database, Docker, or model key. All provider evidence is tier F; no PayPal
+Sandbox capture is made. Full instructions, browser smoke and shutdown:
+[`DEMO.md`](DEMO.md).
 
 For an optional fresh hosted-model run, provide `LLM_API_BASE_URL`,
 `LLM_API_KEY`, and `LLM_MODEL`, then run `make demo-live`. It may cost money and
@@ -62,7 +65,7 @@ still does not touch PayPal.
 | Verifier (`apps/api/cmd/fixturecheck` + `apps/api/cmd/judgecheck`) | **Implemented (M3)** — the fixture run (candidate-linked) records only provider observations; a separate **trusted judge** (imports the oracle only, no merchant/replay code) re-reads the durable journal, evaluates the evidence, and writes the verdict plus proof bundle. Acceptance requires a provider-observed capture identity and an oracle `VERIFIED_FOR_TESTED_SCENARIOS`; candidate code cannot run inside, forge, or terminate the judge |
 | PostgreSQL | **Implemented** — versioned migrations `0001`–`0007` (fixture tables in `0004`, capture-ownership lease in `0005`, ownership-generation fence in `0006`, webhook receipts and fulfillment effects in `0007`); `/readyz` reports database readiness |
 | PayPal Sandbox (Orders v2) | **Verified** — real sandbox order creation, genuine buyer approval, provider-confirmed capture (`COMPLETED`), and a provider-rejected malformed request observed end-to-end; the developer-only feasibility spike CLI is retained under `cmd/paypal-spike` |
-| Web app (`apps/web`) | **Implemented (M5)** — read-only incident review console: incident list, three-column investigation detail (provider observations, diagnosis + diff, independent verification), and the B0/B1/B2 benchmark comparison. Renders a sanitized projection produced by `cmd/bench`; review recording is disabled unless an operator configures a reviewer token, and even then it only appends a local note — it never merges, deploys, captures or refunds |
+| Web app (`apps/web`) | **Implemented** — a recorded case-file showcase at `/` plus the local `/demo` replay, both consuming the same typed sanitized projection. The flow covers the incident and provider events, recorded diagnosis, scoped diff, sandbox checks, independent oracle verdict, unsafe counterexample and human boundary. The M5 benchmark remains at `/benchmark`; `/incidents` is an alias for the case file. Review recording is disabled unless an operator configures a reviewer token, and even then it only appends a local note — it never merges, deploys, captures or refunds |
 | Held-out benchmark (`apps/api/internal/bench`, `cmd/bench`) | **Implemented (M5)** — frozen six-case corpus plus one exposed reference, controlled mutations at a pinned base, B0 rule baseline, B1/B2 repair conditions, contamination tests and a machine-readable results dataset. Hosted comparison incomplete: 2/6 attempted (1 accepted, 1 provider-402 error), 4 not run |
 
 ## Merchant fixture (the M1 vertical slice)
@@ -287,8 +290,11 @@ go run ./cmd/bench -freeze                      # record corpus + digest
 go run ./cmd/bench -condition B0                # deterministic baseline (no model)
 go run ./cmd/bench -sanitize                    # public-safe results encoder (no runs)
 go run ./cmd/bench -webonly                     # regenerate the workbench data
-cd ../../apps/web && npm run dev                # /incidents, /benchmark
+cd ../../apps/web && npm run dev                # /, /demo, /benchmark
 ```
+
+The showcase at `/` is the public-facing case file; `/incidents` remains a
+compatibility alias. `/demo` uses the same UI for a fresh local run.
 
 The results actually obtained are in `evidence/m5/results.json` and
 `evidence/m5/README.md`. The browser dataset is an explicit sanitized projection:

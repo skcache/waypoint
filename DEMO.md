@@ -92,12 +92,13 @@ step is reported as skipped rather than silently passing.
 make dev-web          # http://localhost:3000
 ```
 
-Open `/demo` for the current local repair run (or the committed recorded run on
-a public deployment). The page shows the incident, observations, recorded
-diagnosis, generated diff, verification steps, oracle invariants, the historical
-I13 counterexample, the fresh trusted-gate result, and the human-review boundary.
+Open `/` for the committed recorded case, or `/demo` for the current local repair
+run. Both use the same showcase renderer and show the incident, observations,
+recorded diagnosis, generated diff, verification steps, oracle invariants, the
+historical I13 counterexample, the fresh trusted-gate result, and the
+human-review boundary. `/incidents` is a compatibility alias for the case file.
 
-Open `/incidents` for the M5 benchmark console, including **H1-identity-rewrite**
+Open `/benchmark` for the M5 benchmark console, including **H1-identity-rewrite**
 (recorded hosted repair) and **H7-webhook-duplicate-exposed** (unsafe reference).
 Review recording is disabled by default; no button can approve anything.
 
