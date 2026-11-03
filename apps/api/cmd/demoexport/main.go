@@ -229,10 +229,20 @@ type step struct {
 	Passed     bool   `json:"passed"`
 }
 
+type invariantCounterexample struct {
+	OrderID        string   `json:"order_id,omitempty"`
+	FinalStatus    string   `json:"final_status,omitempty"`
+	ConfirmEventID int      `json:"confirm_event_id,omitempty"`
+	EffectCount    int      `json:"effect_count,omitempty"`
+	Effects        []string `json:"effects,omitempty"`
+	EventID        string   `json:"event_id,omitempty"`
+}
+
 type invariant struct {
-	ID      string `json:"id"`
-	Status  string `json:"status"`
-	Summary string `json:"summary"`
+	ID             string                   `json:"id"`
+	Status         string                   `json:"status"`
+	Summary        string                   `json:"summary"`
+	Counterexample *invariantCounterexample `json:"counterexample,omitempty"`
 }
 
 type eval struct {

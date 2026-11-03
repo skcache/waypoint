@@ -164,7 +164,12 @@
       {
         "id": "I8",
         "status": "FAIL",
-        "summary": "final order status rolled back from a verified capture"
+        "summary": "final order status rolled back from a verified capture",
+        "counterexample": {
+          "order_id": "732229b4-03f6-4af1-bbee-6cb80c53619b",
+          "final_status": "APPROVED",
+          "confirm_event_id": 5
+        }
       },
       {
         "id": "I9",
@@ -189,12 +194,25 @@
       {
         "id": "I13",
         "status": "FAIL",
-        "summary": "the merchant recorded 2 fulfillment effects for one payment"
+        "summary": "the merchant recorded 2 fulfillment effects for one payment",
+        "counterexample": {
+          "order_id": "732229b4-03f6-4af1-bbee-6cb80c53619b",
+          "effect_count": 2,
+          "effects": [
+            "evt-cap-1 (evt-cap-1)",
+            "evt-cap-2 (evt-cap-2)"
+          ]
+        }
       },
       {
         "id": "I14",
         "status": "FAIL",
-        "summary": "a fulfillment effect exists for an order that is not CAPTURED_VERIFIED"
+        "summary": "a fulfillment effect exists for an order that is not CAPTURED_VERIFIED",
+        "counterexample": {
+          "order_id": "732229b4-03f6-4af1-bbee-6cb80c53619b",
+          "final_status": "APPROVED",
+          "event_id": "evt-cap-1"
+        }
       }
     ]
   },
@@ -432,7 +450,15 @@
       {
         "id": "I13",
         "status": "FAIL",
-        "summary": "the merchant recorded 2 fulfillment effects for one payment"
+        "summary": "the merchant recorded 2 fulfillment effects for one payment",
+        "counterexample": {
+          "order_id": "b7f23f40-b09b-4d36-9f30-eddd11a1d434",
+          "effect_count": 2,
+          "effects": [
+            "evt-cap-1 (evt-cap-1)",
+            "evt-cap-2 (evt-cap-2)"
+          ]
+        }
       },
       {
         "id": "I14",

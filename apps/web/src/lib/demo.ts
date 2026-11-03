@@ -64,10 +64,20 @@ export interface DemoIncident {
   observations: DemoObservation[];
 }
 
+export interface DemoCounterexample {
+  order_id?: string;
+  final_status?: string;
+  confirm_event_id?: number;
+  effect_count?: number;
+  effects?: string[];
+  event_id?: string;
+}
+
 export interface DemoInvariant {
   id: string;
   status: string;
   summary: string;
+  counterexample?: DemoCounterexample;
 }
 
 export interface DemoEval {

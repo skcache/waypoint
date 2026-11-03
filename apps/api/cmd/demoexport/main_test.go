@@ -456,6 +456,18 @@ func TestExportRecordedEvidenceIsSanitizedAndTyped(t *testing.T) {
 	if doc.Run.Kind != "recorded" || doc.Run.Model == "" || doc.Run.PromptTokens == 0 {
 		t.Fatalf("run = %+v", doc.Run)
 	}
+	var duplicate *invariant
+	for i := range doc.PreRepair.Invariants {
+		if doc.PreRepair.Invariants[i].ID == "I13" {
+			duplicate = &doc.PreRepair.Invariants[i]
+		}
+	}
+	if duplicate == nil || duplicate.Counterexample == nil {
+		t.Fatal("the pre-repair duplicate-fulfillment counterexample was not exported")
+	}
+	if duplicate.Counterexample.EffectCount != 2 || len(duplicate.Counterexample.Effects) != 2 {
+		t.Fatalf("I13 counterexample = %+v", duplicate.Counterexample)
+	}
 	if doc.Oracle.Verdict != verifiedVerdict {
 		t.Fatalf("oracle = %+v", doc.Oracle)
 	}
