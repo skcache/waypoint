@@ -52,6 +52,9 @@ For an optional fresh hosted-model run, provide `LLM_API_BASE_URL`,
 `LLM_API_KEY`, and `LLM_MODEL`, then run `make demo-live`. It may cost money and
 still does not touch PayPal.
 
+For the public Vercel preview, see [`VERCEL.md`](VERCEL.md). The project Root
+Directory is `apps/web`; no database or provider credentials are required.
+
 ## Current status
 
 | Area | State |
@@ -65,7 +68,7 @@ still does not touch PayPal.
 | Verifier (`apps/api/cmd/fixturecheck` + `apps/api/cmd/judgecheck`) | **Implemented (M3)** — the fixture run (candidate-linked) records only provider observations; a separate **trusted judge** (imports the oracle only, no merchant/replay code) re-reads the durable journal, evaluates the evidence, and writes the verdict plus proof bundle. Acceptance requires a provider-observed capture identity and an oracle `VERIFIED_FOR_TESTED_SCENARIOS`; candidate code cannot run inside, forge, or terminate the judge |
 | PostgreSQL | **Implemented** — versioned migrations `0001`–`0007` (fixture tables in `0004`, capture-ownership lease in `0005`, ownership-generation fence in `0006`, webhook receipts and fulfillment effects in `0007`); `/readyz` reports database readiness |
 | PayPal Sandbox (Orders v2) | **Verified** — real sandbox order creation, genuine buyer approval, provider-confirmed capture (`COMPLETED`), and a provider-rejected malformed request observed end-to-end; the developer-only feasibility spike CLI is retained under `cmd/paypal-spike` |
-| Web app (`apps/web`) | **Implemented** — a recorded case-file showcase at `/` plus the local `/demo` replay, both consuming the same typed sanitized projection. The flow covers the incident and provider events, recorded diagnosis, scoped diff, sandbox checks, independent oracle verdict, unsafe counterexample and human boundary. The M5 benchmark remains at `/benchmark`; `/incidents` is an alias for the case file. Review recording is disabled unless an operator configures a reviewer token, and even then it only appends a local note — it never merges, deploys, captures or refunds |
+| Web app (`apps/web`) | **Implemented** — a recorded case-file showcase at `/` plus the local `/demo` replay, both consuming the same typed sanitized projection. The flow covers the incident and provider calls, the pre-repair ledger counterexamples, recorded diagnosis, scoped diff, sandbox checks, independent oracle verdict, unsafe counterexample and human boundary. The M5 benchmark remains at `/benchmark`; `/incidents` is an alias for the case file. Review recording is disabled unless an operator configures a reviewer token, and even then it only appends a local note — it never merges, deploys, captures or refunds |
 | Held-out benchmark (`apps/api/internal/bench`, `cmd/bench`) | **Implemented (M5)** — frozen six-case corpus plus one exposed reference, controlled mutations at a pinned base, B0 rule baseline, B1/B2 repair conditions, contamination tests and a machine-readable results dataset. Hosted comparison incomplete: 2/6 attempted (1 accepted, 1 provider-402 error), 4 not run |
 
 ## Merchant fixture (the M1 vertical slice)
