@@ -11,7 +11,7 @@ include .env
 export
 endif
 
-.PHONY: help node-check setup dev-api dev-web dev-merchant merchant-reset db-up db-down db-migrate db-reset test test-api test-integration test-web lint lint-api lint-web build-api build-web demo demo-live demo-check demo-m5 clean
+.PHONY: help node-check test-demo-paths demo-recorded setup dev-api dev-web dev-merchant merchant-reset db-up db-down db-migrate db-reset test test-api test-integration test-web lint lint-api lint-web build-api build-web demo demo-live demo-check demo-m5 clean
 
 node-check: ## Fail early when Node is older than the pinned major
 	@node -e 'const m=+process.versions.node.split(".")[0]; if (m < 22) { console.error("Node 22+ is required (nvm use 22)"); process.exit(1); }'
@@ -75,6 +75,12 @@ build-api: ## Build the API binary to apps/api/bin/server
 build-web: ## Production build of the web app
 	cd $(WEB_DIR) && npm run build
 
+demo-recorded: ## Regenerate the committed public recorded demo export
+	cd $(API_DIR) && go run ./cmd/demoexport -from ../../evidence/m4-live/f3 -out ../../apps/web/public/demo/recorded.json \
+		-mode recorded -source evidence/m4-live/f3 -source-label "M4 recorded F3 hosted run" \
+		-source-report ../../evidence/m4-live/f3/report.json \
+		-unsafe ../../evidence/m4-unsafe-f3/eval.json -unsafe-source evidence/m4-unsafe-f3/eval.json
+
 demo: ## Deterministic recorded-model repair demo (tier F; no live model or PayPal)
 	@bash scripts/demo.sh
 
@@ -83,8 +89,14 @@ demo-live: ## Optional fresh hosted-model repair (requires LLM_* credentials; ma
 	@make --no-print-directory db-up
 	@make --no-print-directory db-migrate
 	cd $(API_DIR) && go run ./cmd/repair -fault F3 -out ../../tmp/demo-live -attempts 2
+	cd $(API_DIR) && go run ./cmd/demoexport -from ../../tmp/demo-live -out ../../apps/web/public/demo/local.json \
+		-mode live -source tmp/demo-live -source-label "Local make demo-live hosted run" \
+		-unsafe ../../evidence/m4-unsafe-f3/eval.json -unsafe-source evidence/m4-unsafe-f3/eval.json
 
-demo-check: ## Full DB-backed verification, then the deterministic demo
+test-demo-paths: ## Safety tests for the fixed demo artifact directory
+	@bash scripts/test-demo-paths.sh
+
+demo-check: test-demo-paths ## Full DB-backed verification, then the deterministic demo
 	cd $(API_DIR) && REQUIRE_DATABASE_TESTS=1 go test -count=1 -timeout 900s ./...
 	@$(MAKE) --no-print-directory demo
 

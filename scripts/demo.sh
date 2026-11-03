@@ -4,6 +4,8 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=scripts/lib/demo-paths.sh
+. "$ROOT/scripts/lib/demo-paths.sh"
 cd "$ROOT"
 
 if [ ! -f .env ]; then
@@ -37,22 +39,15 @@ docker compose exec -T db pg_isready -U waypoint -d waypoint >/dev/null
 echo "==> applying migrations"
 make --no-print-directory db-migrate >/dev/null
 
-OUT="${OUT:-$ROOT/tmp/demo}"
-if [[ "$OUT" != /* ]]; then
-  OUT="$ROOT/$OUT"
-fi
-if [[ "$OUT" == "$ROOT"/tmp/* ]]; then
-  rm -rf "$OUT"
-fi
-mkdir -p "$OUT"
+# Fixed generated-artifact directory; never a caller-supplied cleanup target.
+OUT="$(prepare_demo_dir "$ROOT")" || {
+  echo "demo: refusing unsafe demo artifact directory (symlink or unexpected target)" >&2
+  exit 1
+}
 
 echo "==> replaying the recorded F3 repair (no model call)"
 cd "$ROOT/apps/api"
 go run ./cmd/repair -fault F3 -replay evidence/m4-live/f3 -out "$OUT" -attempts 1
-
-echo
-echo "==> verifying the demo facts"
-go run ./cmd/demo -repo "$ROOT" -out "$OUT"
 
 echo
 echo "==> executing the seeded unsafe candidate through the pipeline"
@@ -61,7 +56,24 @@ if ! REQUIRE_DATABASE_TESTS=1 go test -count=1 -run '^TestPipelineRejectsSeededU
   echo "demo: seeded unsafe candidate was not rejected" >&2
   exit 1
 fi
-echo "seeded unsafe candidate: REJECTED by the trusted gate (2 fulfillment effects)"
+echo "seeded unsafe candidate: rejected by the trusted gate (2 fulfillment effects)"
+
+echo
+echo "==> verifying the demo facts"
+go run ./cmd/demo -repo "$ROOT" -out "$OUT" -unsafe-test-log "$OUT/unsafe-test.log"
+
+echo
+echo "==> exporting the sanitized repair run for the workbench"
+go run ./cmd/demoexport \
+  -from "$OUT" \
+  -out "$ROOT/apps/web/public/demo/local.json" \
+  -mode replay \
+  -source tmp/demo \
+  -source-label "Local make demo replay" \
+  -source-report "$ROOT/evidence/m4-live/f3/report.json" \
+  -unsafe "$ROOT/evidence/m4-unsafe-f3/eval.json" \
+  -unsafe-source evidence/m4-unsafe-f3/eval.json \
+  -unsafe-test-log "$OUT/unsafe-test.log"
 
 echo
 echo "==> checking the review boundary and building the workbench"
@@ -74,7 +86,8 @@ npm run build >"$OUT/web-build.log" 2>&1
 echo "workbench build: ok; review guard tests: ok"
 
 echo "==> probing workbench navigation"
-PORT=3199
+# Pick a fresh port and verify the process we launched is the one serving it.
+PORT="$(node -e 'const s=require("net").createServer(); s.listen(0,"127.0.0.1",()=>{console.log(s.address().port);s.close()})')"
 "$ROOT/apps/web/node_modules/.bin/next" start -p "$PORT" >"$OUT/web-server.log" 2>&1 &
 WEB_PID=$!
 cleanup() {
@@ -85,14 +98,19 @@ trap cleanup EXIT
 
 ready=0
 for _ in $(seq 1 40); do
-  if curl -fsS "http://127.0.0.1:$PORT/" >/dev/null 2>&1; then
+  if ! kill -0 "$WEB_PID" >/dev/null 2>&1; then
+    echo "demo: the launched workbench exited before serving" >&2
+    tail -40 "$OUT/web-server.log" >&2
+    exit 1
+  fi
+  if grep -q "Ready" "$OUT/web-server.log" && curl -fsS "http://127.0.0.1:$PORT/" >/dev/null 2>&1; then
     ready=1
     break
   fi
   sleep 0.5
 done
 if [ "$ready" -ne 1 ]; then
-  echo "demo: workbench did not start" >&2
+  echo "demo: workbench did not start on the freshly selected port" >&2
   tail -40 "$OUT/web-server.log" >&2
   exit 1
 fi
@@ -117,12 +135,24 @@ check_page "/" "Incidents"
 check_page "/incidents" "Held-out payment-integration defects"
 check_page "/incidents/H1-identity-rewrite" "A retry rewrites the durable capture request id"
 check_page "/benchmark" "Benchmark"
+check_page "/demo" "Loading repair evidence"
+
+if [ -n "${CHROME_PATH:-}" ]; then
+  echo "==> browser smoke: /demo"
+  DEMO_URL="http://127.0.0.1:$PORT" \
+    DEMO_SCREENSHOT="${DEMO_SCREENSHOT:-}" \
+    node "$ROOT/apps/web/src/lib/demo-browser.test.mjs"
+else
+  echo "==> browser smoke skipped: set CHROME_PATH to Chrome/Chromium for the interactive check"
+fi
 
 trap - EXIT
 cleanup
 
 echo "==> scanning demo artifacts for private data"
-if grep -RIlE '/Users/|/private/var|/var/folders|sk-or-v1|OPENROUTER_API_KEY|postgres(ql)?://[^ ]+:[^@ ]+@' "$OUT" >/tmp/waypoint-demo-private.txt 2>/dev/null; then
+if grep -RIlE '/Users/|/private/var|/var/folders|sk-or-v1|OPENROUTER_API_KEY|postgres(ql)?://[^ ]+:[^@ ]+@' \
+  "$OUT" "$ROOT/apps/web/public/demo/local.json" "$ROOT/apps/web/public/demo/recorded.json" \
+  >/tmp/waypoint-demo-private.txt 2>/dev/null; then
   echo "demo: private data found in:" >&2
   cat /tmp/waypoint-demo-private.txt >&2
   exit 1
@@ -131,5 +161,5 @@ fi
 echo
 echo "DEMO OK"
 echo "  artifacts: $OUT"
-echo "  workbench: make dev-web  ->  http://localhost:3000/incidents"
+echo "  run/workbench: make dev-web  ->  http://localhost:3000/demo"
 echo "  PostgreSQL is still running; stop it with: make db-down"

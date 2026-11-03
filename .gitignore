@@ -61,3 +61,6 @@ pgdata/
 
 # Local demo artifacts
 /tmp/
+
+# Local repair-run export for `make demo` (the recorded export is committed)
+/apps/web/public/demo/local.json

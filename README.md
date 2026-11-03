@@ -35,14 +35,15 @@ and prints the independent oracle verdict plus the seeded unsafe counterexample.
 cp .env.example .env
 make setup                  # go mod download + npm ci
 make demo                   # starts PostgreSQL, migrates, replays F3, verifies
-make dev-web                # http://localhost:3000/incidents
+make dev-web                # http://localhost:3000/demo
 ```
 
 Expected: `ACCEPTED_FOR_HUMAN_REVIEW`, `VERIFIED_FOR_TESTED_SCENARIOS`, one
 generated diff, and `I13: the merchant recorded 2 fulfillment effects for one
-payment` for the seeded unsafe candidate. All provider evidence is tier F; no
-PayPal Sandbox capture is made. Full instructions and shutdown:
-[`DEMO.md`](DEMO.md).
+payment` for the seeded unsafe candidate. `/demo` renders the same run's
+incident, observations, recorded diagnosis, diff, verification, oracle and
+human boundary. All provider evidence is tier F; no PayPal Sandbox capture is
+made. Full instructions, browser smoke and shutdown: [`DEMO.md`](DEMO.md).
 
 For an optional fresh hosted-model run, provide `LLM_API_BASE_URL`,
 `LLM_API_KEY`, and `LLM_MODEL`, then run `make demo-live`. It may cost money and

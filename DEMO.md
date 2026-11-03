@@ -23,12 +23,15 @@ make demo
 
 `make demo` starts local PostgreSQL, applies migrations, replays the F3
 duplicate-webhook incident, builds and verifies the candidate, executes the
-seeded unsafe candidate, builds the workbench, and probes its navigation.
-The fixture generates fresh order/incident IDs and timestamps per run; the
-defect, patch, verdicts and I13 counterexample are deterministic.
+seeded unsafe candidate, exports a sanitized run into the workbench, builds
+the frontend, probes navigation, and (when `CHROME_PATH` is set) runs the
+browser smoke test. The fixture generates fresh order/incident IDs and
+timestamps per run; the defect, patch, verdicts and I13 counterexample are
+deterministic.
 
 First run may take a few minutes: Docker pulls the Go sandbox image and prefetches
-the module cache. Later runs are faster.
+the module cache. Later runs are faster. `tmp/demo` is a fixed generated-artifact
+directory; `make test-demo-paths` covers traversal and symlink attempts.
 
 ## Expected output
 
@@ -47,28 +50,48 @@ WAYPOINT — DETERMINISTIC REPAIR DEMO
 3. GENERATED DIFF      1 changed file(s)
 4. CANDIDATE VERIFIED  patch=true build=true trusted_tests=true
 5. INDEPENDENT ORACLE  VERIFIED_FOR_TESTED_SCENARIOS
-6. UNSAFE SEED         UNSAFE · I13: the merchant recorded 2 fulfillment effects for one payment
-7. HUMAN BOUNDARY      ACCEPTED_FOR_HUMAN_REVIEW · applied_to_worktree=false deployed=false
+6a. HISTORICAL ORACLE  UNSAFE · I13: the merchant recorded 2 fulfillment effects for one payment
+    source: evidence/m4-unsafe-f3/eval.json (recorded M4 independent judge; not executed now)
+6b. FRESH EXECUTION    trusted gate rejected the candidate (2 fulfillment effects)
+7. HUMAN BOUNDARY      ACCEPTED_FOR_HUMAN_REVIEW
+   candidate_patch_applied_in_disposable_worktree=true
+   developer_tree_applied=false deployed=false human_approval_required=true
 
 DEMO OK
   artifacts: .../tmp/demo
-  workbench: make dev-web  ->  http://localhost:3000/incidents
+  run/workbench: make dev-web  ->  http://localhost:3000/demo
   PostgreSQL is still running; stop it with: make db-down
 ```
 
 Artifacts include `report.json`, `report.md`, `incident.json`,
-`pre-repair-eval.json`, the applied diff, the trusted eval, the unsafe test log,
-and the workbench build/navigation logs.
+`observations.json`, `pre-repair-eval.json`, the applied diff, the trusted eval,
+the unsafe test log, and the workbench build/navigation logs. The sanitized
+frontend projection is `apps/web/public/demo/local.json` (gitignored); the
+committed fallback is `apps/web/public/demo/recorded.json`.
+
+For the interactive browser check, set `CHROME_PATH` when running `make demo`:
+
+```bash
+CHROME_PATH="/path/to/Google Chrome for Testing" make demo
+```
+
+Without a browser path the HTTP navigation probe still runs, and the browser
+step is reported as skipped rather than silently passing.
 
 ## Browse the workbench
 
 ```bash
-make dev-web          # http://localhost:3000/incidents
+make dev-web          # http://localhost:3000
 ```
 
-Open `/incidents`, then **H1-identity-rewrite** (recorded hosted repair) and
-**H7-webhook-duplicate-exposed** (unsafe counterexample). Review recording is
-disabled by default; no button can approve anything.
+Open `/demo` for the current local repair run (or the committed recorded run on
+a public deployment). The page shows the incident, observations, recorded
+diagnosis, generated diff, verification steps, oracle invariants, the historical
+I13 counterexample, the fresh trusted-gate result, and the human-review boundary.
+
+Open `/incidents` for the M5 benchmark console, including **H1-identity-rewrite**
+(recorded hosted repair) and **H7-webhook-duplicate-exposed** (unsafe reference).
+Review recording is disabled by default; no button can approve anything.
 
 Shutdown:
 
