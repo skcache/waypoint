@@ -27,9 +27,6 @@ export default function Page() {
   return (
     <div className="space-y-8">
       <header className="border-b border-line pb-6">
-        <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-faint">
-          Waypoint / evaluation
-        </p>
         <h1 className="mt-2 text-2xl font-semibold tracking-tight">Benchmark</h1>
         <p className="mt-2 max-w-3xl text-sm leading-6 text-muted">
           The same six held-out incidents and the same initial evidence, compared across a
@@ -45,10 +42,10 @@ export default function Page() {
           return (
             <div key={condition.id} className="rounded-panel border border-line bg-surface">
               <div className="flex h-9 items-center justify-between border-b border-line px-3.5">
-                <h2 className="text-[10px] font-medium uppercase tracking-[0.12em] text-muted">
+                <h2 className="text-[13px] font-medium text-muted">
                   {conditionLabel[condition.id] ?? condition.id}
                 </h2>
-                <span className="mono text-[10px] text-faint">
+                <span className="mono text-[13px] text-faint">
                   {isB0 ? "no patch" : `${condition.max_attempts} attempt${condition.max_attempts === 1 ? "" : "s"}`}
                 </span>
               </div>
@@ -56,42 +53,42 @@ export default function Page() {
                 {isB0 ? (
                   <>
                     <div className="bg-surface px-3 py-3">
-                      <p className="text-[10px] uppercase tracking-wider text-faint">Diagnosed</p>
+                      <p className="text-[13px] text-faint">Diagnosed</p>
                       <p className="mt-1 text-lg font-semibold tabular-nums">
                         {heldOut.filter((c) => c.runs.B0?.diagnosis_correct).length}/{heldOut.length}
                       </p>
                     </div>
                     <div className="bg-surface px-3 py-3">
-                      <p className="text-[10px] uppercase tracking-wider text-faint">Patches</p>
+                      <p className="text-[13px] text-faint">Patches</p>
                       <p className="mt-1 text-lg font-semibold tabular-nums">0</p>
                     </div>
                     <div className="bg-surface px-3 py-3">
-                      <p className="text-[10px] uppercase tracking-wider text-faint">Accepted</p>
+                      <p className="text-[13px] text-faint">Accepted</p>
                       <p className="mt-1 text-lg font-semibold tabular-nums">0</p>
                     </div>
                   </>
                 ) : (
                   <>
                     <div className="bg-surface px-3 py-3">
-                      <p className="text-[10px] uppercase tracking-wider text-faint">Safe accepted</p>
+                      <p className="text-[13px] text-faint">Safe accepted</p>
                       <p className="mt-1 text-lg font-semibold tabular-nums">
                         {t?.safe_accepted ?? 0}/{heldOut.length}
                       </p>
                     </div>
                     <div className="bg-surface px-3 py-3">
-                      <p className="text-[10px] uppercase tracking-wider text-faint">Unsafe accepted</p>
+                      <p className="text-[13px] text-faint">Unsafe accepted</p>
                       <p className={`mt-1 text-lg font-semibold tabular-nums ${(t?.false_acceptances ?? 0) > 0 ? "text-bad" : ""}`}>
                         {t?.false_acceptances ?? 0}
                       </p>
                     </div>
                     <div className="bg-surface px-3 py-3">
-                      <p className="text-[10px] uppercase tracking-wider text-faint">Errors</p>
+                      <p className="text-[13px] text-faint">Errors</p>
                       <p className="mt-1 text-lg font-semibold tabular-nums">{t?.errors ?? 0}</p>
                     </div>
                   </>
                 )}
               </div>
-              <div className="border-t border-line px-3.5 py-2.5 text-[11px] leading-5 text-muted">
+              <div className="border-t border-line px-3.5 py-2.5 text-[13px] leading-5 text-muted">
                 {condition.description}
                 {!isB0 && t ? ` · ${t.not_run} not run` : ""}
               </div>
@@ -102,17 +99,17 @@ export default function Page() {
 
       <section className="overflow-hidden rounded-panel border border-line bg-surface">
         <div className="flex h-10 items-center justify-between border-b border-line px-4">
-          <h2 className="text-[11px] font-medium uppercase tracking-wider text-muted">
+          <h2 className="text-[13px] font-medium text-muted">
             Per-case results
           </h2>
-          <span className="mono text-[11px] text-faint">
+          <span className="mono text-[13px] text-faint">
             {data.model.id} · temp 0 · max {data.model.max_output_tokens?.toLocaleString()} tokens
           </span>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[980px] border-collapse text-left">
             <thead>
-              <tr className="border-b border-line text-[10px] uppercase tracking-wider text-faint">
+              <tr className="border-b border-line text-[13px] text-faint">
                 <th className="px-4 py-2.5 font-medium">Case</th>
                 <th className="px-4 py-2.5 font-medium">B0 diagnosis</th>
                 <th className="px-4 py-2.5 font-medium">B1</th>
@@ -132,35 +129,35 @@ export default function Page() {
                 const cell = (r: typeof b1) =>
                   r ? (
                     <div>
-                      <span className={`text-[11px] font-medium ${statusTone(r.status)}`}>
+                      <span className={`text-[13px] font-medium ${statusTone(r.status)}`}>
                         {statusLabel(r.status)}
                       </span>
-                      <span className="mono mt-0.5 block whitespace-nowrap text-[10px] text-faint">
+                      <span className="mono mt-0.5 block whitespace-nowrap text-[13px] text-faint">
                         {r.oracle_verdict === "VERIFIED_FOR_TESTED_SCENARIOS" ? "VERIFIED" : r.oracle_verdict || "no oracle"}
                         {r.attempts ? ` · ${r.attempts} att.` : ""}
                       </span>
                     </div>
                   ) : (
-                    <span className="text-[11px] text-muted">not run</span>
+                    <span className="text-[13px] text-muted">not run</span>
                   );
                 return (
                   <tr key={row.case.id} className="border-b border-line/70 last:border-0">
                     <td className="px-4 py-3">
                       <Link href={`/incidents/${encodeURIComponent(row.case.id)}?cond=B2`} className="block">
-                        <span className="block text-[12px] font-medium text-ink hover:text-accent">
+                        <span className="block text-sm font-medium text-ink hover:text-accent">
                           {row.case.title}
                         </span>
-                        <span className="mono mt-0.5 block text-[10px] text-faint">
+                        <span className="mono mt-0.5 block text-[13px] text-faint">
                           {row.case.id} · {row.case.family}
                           {row.case.exposed ? " · exposed" : ""}
                         </span>
                       </Link>
                     </td>
                     <td className="px-4 py-3">
-                      <span className={`text-[11px] ${b0?.diagnosis_correct ? "text-ok" : "text-bad"}`}>
+                      <span className={`text-[13px] ${b0?.diagnosis_correct ? "text-ok" : "text-bad"}`}>
                         {b0?.diagnosis_correct ? "correct" : "wrong"}
                       </span>
-                      <span className="mono mt-0.5 block text-[10px] text-faint">
+                      <span className="mono mt-0.5 block text-[13px] text-faint">
                         {b0?.diagnosis_category ?? "—"}
                       </span>
                     </td>
@@ -169,10 +166,10 @@ export default function Page() {
                     <td className="whitespace-nowrap px-4 py-3 text-right text-xs tabular-nums text-muted">
                       {(b1?.attempts ?? 0) + (b2?.attempts ?? 0)}
                     </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-right text-[11px] tabular-nums text-muted">
+                    <td className="whitespace-nowrap px-4 py-3 text-right text-[13px] tabular-nums text-muted">
                       {fmtTokens(tokens)}
                     </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-right text-[11px] tabular-nums text-muted" title={cost > 0 ? "Estimated from list prices" : "The provider did not report pricing"}>
+                    <td className="whitespace-nowrap px-4 py-3 text-right text-[13px] tabular-nums text-muted" title={cost > 0 ? "Estimated from list prices" : "The provider did not report pricing"}>
                       {cost > 0 ? usd(cost) : "—"}
                     </td>
                   </tr>
@@ -186,7 +183,7 @@ export default function Page() {
       <section className="grid gap-4 md:grid-cols-2">
         <div className="rounded-panel border border-line bg-surface">
           <div className="border-b border-line px-4 py-2.5">
-            <h2 className="text-[10px] font-medium uppercase tracking-[0.12em] text-muted">
+            <h2 className="text-[13px] font-medium text-muted">
               By fault family (B2, held-out)
             </h2>
           </div>
@@ -194,7 +191,7 @@ export default function Page() {
             {byFamily.map((f) => (
               <li key={f.family} className="flex items-center justify-between px-4 py-2.5">
                 <span className="text-xs text-muted">{f.family}</span>
-                <span className="mono text-[11px]">
+                <span className="mono text-[13px]">
                   {f.accepted}/{f.total} accepted
                 </span>
               </li>
@@ -202,10 +199,10 @@ export default function Page() {
           </ul>
         </div>
         <div className="rounded-panel border border-line bg-surface px-4 py-3.5">
-          <h2 className="text-[10px] font-medium uppercase tracking-[0.12em] text-muted">
+          <h2 className="text-[13px] font-medium text-muted">
             Limits of this result
           </h2>
-          <ul className="mt-2 space-y-1.5 text-[11px] leading-5 text-muted">
+          <ul className="mt-2 space-y-1.5 text-[13px] leading-5 text-muted">
             <li>Six held-out cases: raw counts, not a generalization claim or a success rate.</li>
             <li>Zero observed false acceptances does not establish a zero real-world probability.</li>
             <li>All provider evidence is tier F; no PayPal Sandbox transaction or signed webhook was used.</li>
@@ -215,7 +212,7 @@ export default function Page() {
         </div>
       </section>
 
-      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4 text-[11px] text-faint">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4 text-[13px] text-faint">
         <span className="mono">
           corpus {data.digest.replace("sha256:", "").slice(0, 16)} · frozen {data.frozen_at.slice(0, 19)}Z
         </span>

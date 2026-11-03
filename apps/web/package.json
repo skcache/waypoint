@@ -10,7 +10,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "node --test src/lib/review-guard.test.mjs",
+    "test": "node --test src/lib/review-guard.test.mjs src/lib/evidence.test.mjs",
     "test:browser": "node src/lib/demo-browser.test.mjs"
   },
   "dependencies": {

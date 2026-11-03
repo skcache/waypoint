@@ -1,10 +1,10 @@
-import { Showcase } from "@/components/showcase";
+import { Showcase } from "@/components/waypoint/experience";
 import { loadRecordedDemo } from "@/lib/recorded";
 
 export const metadata = {
-  title: "Verified payment repair",
+  title: { absolute: "Waypoint - An AI repaired the bug. A separate judge checked the ledger." },
   description:
-    "An AI engineer investigates a failed PayPal integration, proposes a source repair, and an independent oracle verifies the financial behavior before human review.",
+    "A recorded Waypoint run: an AI diagnoses a payment-fulfillment bug and writes a source patch, then an independent financial oracle accepts the repair and rejects a seeded unsafe one.",
 };
 
 export default async function Page() {

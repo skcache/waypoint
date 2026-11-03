@@ -1,26 +1,72 @@
 @import "tailwindcss";
 
 /*
-  Waypoint product tokens.
+  Waypoint tokens.
 
-  A warm paper ground, ink and hairlines, with one signal-orange accent for
-  interaction. Semantic green, amber and red are used as text, never as glows
-  or decorative status dots. Light theme is intentional: this is a document to
-  inspect, not a dark monitoring console.
+  One cool ground, one ink, one action blue. Surfaces separate by a tone step,
+  not by lines or shadows. The Judge section alone switches the field to ink
+  (`.night` re-points the same variables), because the verdict is the finale.
+  Status colours always travel with a word or glyph, never colour alone.
 */
-@theme {
-  --color-background: oklch(0.972 0.006 82);
-  --color-surface: oklch(0.992 0.003 82);
-  --color-line: oklch(0.86 0.012 82);
-  --color-line-strong: oklch(0.73 0.014 82);
-  --color-ink: oklch(0.19 0.012 70);
-  --color-muted: oklch(0.40 0.012 70);
-  --color-faint: oklch(0.47 0.012 70);
-  --color-accent: oklch(0.50 0.16 35);
-  --color-ok: oklch(0.42 0.10 155);
-  --color-warn: oklch(0.52 0.13 75);
-  --color-bad: oklch(0.47 0.16 25);
-  --radius-panel: 2px;
+:root {
+  --c-bg: oklch(0.985 0.003 240);
+  --c-surface: oklch(0.955 0.006 240);
+  --c-sunk: oklch(0.93 0.008 240);
+  --c-text: oklch(0.2 0.02 255);
+  --c-muted: oklch(0.4 0.02 255);
+  --c-faint: oklch(0.49 0.02 255);
+  --c-line: oklch(0.88 0.008 245);
+  --c-line-strong: oklch(0.72 0.012 250);
+  --c-fail: oklch(0.5 0.2 27);
+  --c-fail-soft: oklch(0.955 0.035 27);
+  --c-pass: oklch(0.45 0.13 150);
+  --c-pass-soft: oklch(0.955 0.04 150);
+  --c-warn: oklch(0.48 0.12 70);
+  --c-warn-soft: oklch(0.96 0.05 88);
+  --c-accent: oklch(0.5 0.18 250);
+  --c-on-accent: oklch(0.99 0.002 240);
+}
+
+.night {
+  --c-bg: oklch(0.185 0.016 255);
+  --c-surface: oklch(0.235 0.018 255);
+  --c-sunk: oklch(0.155 0.016 255);
+  --c-text: oklch(0.96 0.005 250);
+  --c-muted: oklch(0.78 0.012 250);
+  --c-faint: oklch(0.68 0.012 250);
+  --c-line: oklch(0.32 0.018 255);
+  --c-line-strong: oklch(0.46 0.02 255);
+  --c-fail: oklch(0.77 0.16 27);
+  --c-fail-soft: oklch(0.28 0.07 27);
+  --c-pass: oklch(0.83 0.15 150);
+  --c-pass-soft: oklch(0.28 0.06 150);
+  --c-warn: oklch(0.85 0.13 85);
+  --c-warn-soft: oklch(0.3 0.06 85);
+  --c-accent: oklch(0.8 0.12 245);
+  --c-on-accent: oklch(0.18 0.02 255);
+  color-scheme: dark;
+  background: var(--c-bg);
+  color: var(--c-text);
+}
+
+@theme inline {
+  --color-background: var(--c-bg);
+  --color-surface: var(--c-surface);
+  --color-sunk: var(--c-sunk);
+  --color-ink: var(--c-text);
+  --color-muted: var(--c-muted);
+  --color-faint: var(--c-faint);
+  --color-line: var(--c-line);
+  --color-line-strong: var(--c-line-strong);
+  --color-bad: var(--c-fail);
+  --color-bad-soft: var(--c-fail-soft);
+  --color-ok: var(--c-pass);
+  --color-ok-soft: var(--c-pass-soft);
+  --color-warn: var(--c-warn);
+  --color-warn-soft: var(--c-warn-soft);
+  --color-accent: var(--c-accent);
+  --color-on-accent: var(--c-on-accent);
+  --radius-panel: 6px;
   --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
 }
@@ -29,65 +75,85 @@
   html {
     color-scheme: light;
     scroll-behavior: smooth;
+    scroll-padding-top: 72px;
+    -webkit-text-size-adjust: 100%;
   }
 
   body {
+    background: var(--c-bg);
+    color: var(--c-text);
     font-family: var(--font-sans);
-    font-feature-settings: "ss01" 1, "cv11" 1;
+    font-size: 17px;
+    line-height: 1.55;
+    font-variant-numeric: tabular-nums;
     text-rendering: optimizeLegibility;
   }
 
   ::selection {
-    background: color-mix(in oklch, var(--color-accent) 18%, transparent);
+    background: color-mix(in oklch, var(--c-accent) 30%, transparent);
   }
 
   :focus-visible {
-    outline: 2px solid var(--color-accent);
+    outline: 2px solid var(--c-accent);
     outline-offset: 3px;
+    border-radius: 3px;
   }
 
   summary {
     cursor: pointer;
   }
+
+  button {
+    cursor: pointer;
+  }
+
+  * {
+    scrollbar-color: var(--c-line-strong) transparent;
+  }
 }
 
 @layer utilities {
+  /* Monospace is reserved for ids, hashes, effect keys, timestamps and code. */
+  .mono {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    font-size: 0.92em;
+  }
+
+  /* A small heading: sentence case, readable, never tracked uppercase. */
+  .label {
+    font-size: 14px;
+    line-height: 20px;
+    font-weight: 500;
+    color: var(--c-faint);
+  }
+
   .scrollbar-none {
     scrollbar-width: none;
   }
-
   .scrollbar-none::-webkit-scrollbar {
     display: none;
   }
 
-  .tok-keyword {
-  color: var(--color-ink);
-  font-weight: 600;
-}
-
-.tok-string {
-  color: var(--color-muted);
-}
-
-.tok-comment {
-  color: var(--color-faint);
-  font-style: italic;
-}
-
-.stage-enter {
-    animation: stage-enter 360ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  /* The one authored motion: a verdict changing as the candidate changes. */
+  .swap {
+    animation: swap 220ms cubic-bezier(0.16, 1, 0.3, 1) both;
   }
 
-  .mono {
-    font-family: var(--font-mono);
-    font-variant-numeric: tabular-nums;
+  .line-pulse {
+    animation: line-pulse 1400ms ease-out 1;
+  }
+
+  /* Accounting convention: a double rule under a total that must balance. */
+  .double-rule {
+    border-bottom: 3px double var(--c-line-strong);
   }
 }
 
-@keyframes stage-enter {
+@keyframes swap {
   from {
     opacity: 0;
-    transform: translateY(5px);
+    transform: translateY(6px);
   }
   to {
     opacity: 1;
@@ -95,27 +161,42 @@
   }
 }
 
+@keyframes line-pulse {
+  0%,
+  35% {
+    background-color: color-mix(in oklch, var(--c-accent) 32%, transparent);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+/* Code colours for the diff viewer, tuned per ground. */
+:root {
+  --t-keyword: oklch(0.45 0.15 300);
+  --t-string: oklch(0.45 0.12 150);
+  --t-comment: oklch(0.52 0.02 255);
+  --t-number: oklch(0.5 0.14 60);
+  --t-type: oklch(0.45 0.13 235);
+  --t-sql: oklch(0.5 0.17 35);
+}
+.night {
+  --t-keyword: oklch(0.8 0.12 305);
+  --t-string: oklch(0.82 0.12 150);
+  --t-comment: oklch(0.68 0.02 250);
+  --t-number: oklch(0.84 0.11 70);
+  --t-type: oklch(0.82 0.1 235);
+  --t-sql: oklch(0.82 0.13 50);
+}
+
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;
   }
 
-  .tok-keyword {
-  color: var(--color-ink);
-  font-weight: 600;
-}
-
-.tok-string {
-  color: var(--color-muted);
-}
-
-.tok-comment {
-  color: var(--color-faint);
-  font-style: italic;
-}
-
-.stage-enter {
-    animation: none;
+  .swap,
+  .line-pulse {
+    animation: none !important;
   }
 
   *,

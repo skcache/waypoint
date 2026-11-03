@@ -1,10 +1,10 @@
-import { Showcase } from "@/components/showcase";
+import { Showcase } from "@/components/waypoint/experience";
 import { loadRecordedDemo } from "@/lib/recorded";
 
 export const metadata = {
-  title: "Local repair run",
+  title: { absolute: "Waypoint - An AI repaired the bug. A separate judge checked the ledger." },
   description:
-    "A local Waypoint repair run, using the same sanitized evidence projection as the public recorded case file. Falls back to committed evidence when no local export exists.",
+    "A recorded Waypoint run: an AI diagnoses a payment-fulfillment bug and writes a source patch, then an independent financial oracle accepts the repair and rejects a seeded unsafe one.",
 };
 
 export default async function DemoPage() {

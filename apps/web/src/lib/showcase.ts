@@ -1,28 +1,5 @@
 import type { DemoExport, DemoInvariant, DemoObservation } from "@/lib/demo";
 
-export type StageId =
-  | "incident"
-  | "diagnosis"
-  | "patch"
-  | "verification"
-  | "oracle"
-  | "review";
-
-export type CandidateMode = "verified" | "unsafe";
-
-export const STAGES: {
-  id: StageId;
-  label: string;
-  short: string;
-}[] = [
-  { id: "incident", label: "Incident", short: "Failure" },
-  { id: "diagnosis", label: "Diagnosis", short: "Model" },
-  { id: "patch", label: "Patch", short: "Source" },
-  { id: "verification", label: "Execution", short: "Sandbox" },
-  { id: "oracle", label: "Oracle", short: "Money" },
-  { id: "review", label: "Review", short: "Human" },
-];
-
 export const FAULT_TITLES: Record<string, string> = {
   F1: "Ambiguous capture",
   F2: "Dropped capture response",
@@ -100,7 +77,7 @@ export function observationTierLabel(doc: DemoExport): string {
 export function shortId(value?: string, head = 8, tail = 4): string {
   if (!value) return "not exported";
   if (value.length <= head + tail + 1) return value;
-  return `${value.slice(0, head)}…${value.slice(-tail)}`;
+  return `${value.slice(0, head)}…${tail > 0 ? value.slice(-tail) : ""}`;
 }
 
 export function money(minor: number, currency: string): string {
@@ -154,32 +131,4 @@ export function captureObservation(doc: DemoExport): DemoObservation | undefined
 
 export function failedInvariants(items?: DemoInvariant[]): DemoInvariant[] {
   return (items ?? []).filter((item) => item.status !== "PASS" && item.status !== "NOT_APPLICABLE");
-}
-
-export function stageMeta(
-  doc: DemoExport,
-  stage: StageId,
-  candidate: CandidateMode = "verified",
-): string {
-  switch (stage) {
-    case "incident":
-      return `${doc.incident.observations.length} provider calls`;
-    case "diagnosis":
-      return runKindLabel(doc.run.kind);
-    case "patch":
-      return `${doc.patch.changed_files.length} file${doc.patch.changed_files.length === 1 ? "" : "s"}`;
-    case "verification": {
-      const passed = doc.verification.steps.filter((step) => step.passed).length;
-      return `${passed}/${doc.verification.steps.length} checks`;
-    }
-    case "oracle": {
-      if (candidate === "unsafe") {
-        const failures = failedInvariants(doc.unsafe.invariants).length;
-        return `${failures} counterexample${failures === 1 ? "" : "s"}`;
-      }
-      return `${doc.oracle.invariants.length} invariants`;
-    }
-    case "review":
-      return "required";
-  }
 }

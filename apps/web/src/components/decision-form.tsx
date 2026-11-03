@@ -57,18 +57,18 @@ export function DecisionForm({ caseId, condition }: { caseId: string; condition:
   }
 
   if (enabled === null) {
-    return <p className="text-[11px] text-faint">Checking review configuration…</p>;
+    return <p className="text-[13px] text-faint">Checking review configuration…</p>;
   }
 
   if (!enabled) {
     return (
       <div className="space-y-2">
-        <p className="text-[11px] leading-5 text-muted">
+        <p className="text-[13px] leading-5 text-muted">
           Review recording is <span className="text-ink">disabled</span> in this
           deployment. The console is read-only; no anonymous visitor can record an
           integration approval.
         </p>
-        <p className="text-[10px] leading-4 text-faint">
+        <p className="text-[13px] leading-4 text-faint">
           An operator can enable it with a reviewer token in the server environment.
         </p>
       </div>
@@ -83,7 +83,7 @@ export function DecisionForm({ caseId, condition }: { caseId: string; condition:
         onChange={(event) => setToken(event.target.value)}
         placeholder="Reviewer token"
         autoComplete="off"
-        className="w-full rounded-md border border-line bg-background px-2.5 py-1.5 text-xs text-ink outline-none placeholder:text-faint focus:border-accent"
+        className="w-full rounded border border-line bg-background px-2.5 py-1.5 text-xs text-ink outline-none placeholder:text-faint focus:border-accent"
       />
       <div className="flex flex-wrap gap-2">
         {options.map((option) => (
@@ -91,7 +91,7 @@ export function DecisionForm({ caseId, condition }: { caseId: string; condition:
             key={option.value}
             type="button"
             onClick={() => setChoice(option.value)}
-            className={`rounded-md border bg-surface px-2.5 py-1.5 text-[11px] font-medium transition-colors ${
+            className={`rounded border bg-surface px-2.5 py-1.5 text-[13px] font-medium transition-colors ${
               choice === option.value
                 ? option.tone
                 : "border-line text-muted hover:border-line-strong hover:text-ink"
@@ -106,18 +106,18 @@ export function DecisionForm({ caseId, condition }: { caseId: string; condition:
         onChange={(event) => setNote(event.target.value)}
         rows={3}
         placeholder="Review note (optional)"
-        className="w-full resize-none rounded-md border border-line bg-background px-2.5 py-2 text-xs leading-5 text-ink outline-none placeholder:text-faint focus:border-accent"
+        className="w-full resize-none rounded border border-line bg-background px-2.5 py-2 text-xs leading-5 text-ink outline-none placeholder:text-faint focus:border-accent"
       />
       <div className="flex items-center justify-between gap-3">
         <button
           type="button"
           disabled={!choice || !token || state === "saving"}
           onClick={submit}
-          className="rounded-md bg-ink px-3 py-1.5 text-[11px] font-medium text-background disabled:opacity-40"
+          className="rounded bg-ink px-3 py-1.5 text-[13px] font-medium text-background disabled:opacity-40"
         >
           {state === "saving" ? "Recording…" : "Record decision"}
         </button>
-        <span className={`text-[11px] ${state === "error" ? "text-bad" : "text-faint"}`}>
+        <span className={`text-[13px] ${state === "error" ? "text-bad" : "text-faint"}`}>
           {state === "saved" || state === "error"
             ? message
             : "Local record only. No merge, deploy or payment action."}

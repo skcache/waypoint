@@ -135,6 +135,10 @@ export interface DemoExport {
     source: string;
     provenance: string;
     fresh_trusted_gate: { executed: boolean; result: string; detail?: string };
+    /** The seeded candidate's own patch, when the recorded evaluation has one beside it. */
+    diff?: string;
+    diff_digest?: string;
+    changed_files?: string[];
   };
   human_review: {
     status: string;

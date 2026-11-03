@@ -23,7 +23,7 @@ export function generateStaticParams() {
 }
 
 function Mono({ children }: { children: React.ReactNode }) {
-  return <span className="mono text-[11px] text-muted">{children}</span>;
+  return <span className="mono text-[13px] text-muted">{children}</span>;
 }
 
 function Panel({
@@ -38,7 +38,7 @@ function Panel({
   return (
     <section className="overflow-hidden rounded-panel border border-line bg-surface">
       <header className="flex h-9 items-center justify-between gap-3 border-b border-line px-3.5">
-        <h2 className="text-[10px] font-medium uppercase tracking-[0.12em] text-muted">{title}</h2>
+        <h2 className="text-[13px] font-medium text-muted">{title}</h2>
         {meta}
       </header>
       <div className="p-3.5">{children}</div>
@@ -49,7 +49,7 @@ function Panel({
 function Diff({ text }: { text: string }) {
   if (!text) return <p className="text-xs text-faint">No patch was produced.</p>;
   return (
-    <pre className="mono max-h-[520px] overflow-auto rounded-md border border-line bg-background p-3 text-[11px] leading-[1.65]">
+    <pre className="mono max-h-[520px] overflow-auto rounded border border-line bg-background p-3 text-[13px] leading-[1.65]">
       {text.split("\n").map((line, i) => {
         const tone = line.startsWith("+")
           ? "text-ok"
@@ -86,9 +86,9 @@ function Ladder({ run }: { run: ReturnType<typeof runFor> }) {
       <dl className="divide-y divide-line/70">
         {rows.map(([label, value]) => (
           <div key={label} className="flex items-baseline justify-between gap-3 py-1.5">
-            <dt className="text-[11px] text-muted">{label}</dt>
+            <dt className="text-[13px] text-muted">{label}</dt>
             <dd
-              className={`mono text-[11px] ${
+              className={`mono text-[13px] ${
                 value === true
                   ? "text-ok"
                   : value === false
@@ -106,11 +106,11 @@ function Ladder({ run }: { run: ReturnType<typeof runFor> }) {
         ))}
       </dl>
       {evalDoc?.accepted === false && evalDoc.reason ? (
-        <p className="rounded-md border border-line bg-background px-2.5 py-2 text-[11px] leading-5 text-muted">
+        <p className="rounded border border-line bg-background px-2.5 py-2 text-[13px] leading-5 text-muted">
           {evalDoc.reason}
         </p>
       ) : null}
-      <p className="text-[11px] leading-5 text-faint">
+      <p className="text-[13px] leading-5 text-faint">
         {fmtMs(run.latency_ms)} · {fmtTokens(run.prompt_tokens)} prompt /{" "}
         {fmtTokens(run.completion_tokens)} completion · {usd(run.estimated_usd)}
       </p>
@@ -143,11 +143,11 @@ export default async function Page({
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-4 border-b border-line pb-4">
         <div>
-          <Link href="/" className="text-[11px] text-faint hover:text-ink">
+          <Link href="/" className="text-[13px] text-faint hover:text-ink">
             ← Incidents
           </Link>
           <h1 className="mt-1.5 text-xl font-semibold tracking-tight">{row.case.title}</h1>
-          <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-faint">
+          <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px] text-faint">
             <Mono>{row.case.id}</Mono>
             <span className="text-line-strong">/</span>
             <span>{row.case.family}</span>
@@ -159,12 +159,12 @@ export default async function Page({
         </div>
         <dl className="grid grid-cols-2 gap-x-6 gap-y-1 text-right">
           <div>
-            <dt className="text-[10px] uppercase tracking-wider text-faint">Base</dt>
-            <dd className="mono text-[11px]">{shortHash(row.mutation_sha || data.base_sha)}</dd>
+            <dt className="text-[13px] text-faint">Base</dt>
+            <dd className="mono text-[13px]">{shortHash(row.mutation_sha || data.base_sha)}</dd>
           </div>
           <div>
-            <dt className="text-[10px] uppercase tracking-wider text-faint">Model</dt>
-            <dd className="mono text-[11px]">{data.model.id ?? "not configured"}</dd>
+            <dt className="text-[13px] text-faint">Model</dt>
+            <dd className="mono text-[13px]">{data.model.id ?? "not configured"}</dd>
           </div>
         </dl>
       </div>
@@ -174,7 +174,7 @@ export default async function Page({
           <Link
             key={c}
             href={`/incidents/${encodeURIComponent(id)}?cond=${c}`}
-            className={`rounded-md border px-2.5 py-1 text-[11px] ${
+            className={`rounded border px-2.5 py-1 text-[13px] ${
               active === c
                 ? "border-line-strong bg-surface text-ink"
                 : "border-transparent text-muted hover:text-ink"
@@ -183,7 +183,7 @@ export default async function Page({
             {c === "B0" ? "B0 · rules" : c === "B1" ? "B1 · single shot" : "B2 · oracle-guided"}
           </Link>
         ))}
-        <span className="ml-auto text-[11px] text-faint">
+        <span className="ml-auto text-[13px] text-faint">
           Pre-repair: <span className="mono">{pre.verdict}</span> · {pre.order_status}
         </span>
       </div>
@@ -195,7 +195,7 @@ export default async function Page({
             meta={<Mono>{obs.length} events</Mono>}
           >
             {obs.length === 0 ? (
-              <p className="text-[11px] leading-5 text-faint">
+              <p className="text-[13px] leading-5 text-faint">
                 Provider observations are recorded in the run artifacts. This case has no
                 observation file attached to the selected condition.
               </p>
@@ -204,14 +204,14 @@ export default async function Page({
                 {obs.map((o, i) => (
                   <li key={i} className="border-b border-line/70 py-2 first:pt-0 last:border-0">
                     <div className="flex items-baseline justify-between gap-2">
-                      <span className="mono text-[11px] text-ink">
+                      <span className="mono text-[13px] text-ink">
                         {String(o.Seq ?? i + 1).padStart(2, "0")} · {o.Method}
                       </span>
-                      <span className="mono text-[10px] text-faint">
+                      <span className="mono text-[13px] text-faint">
                         {o.Tier ?? "F"} · {o.OrderStatus ?? "—"}
                       </span>
                     </div>
-                    <div className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5 text-[10px] text-faint">
+                    <div className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5 text-[13px] text-faint">
                       {o.RequestID ? <span className="mono">req {shortHash(o.RequestID)}</span> : null}
                       {o.Applied ? <span className="text-ok">applied</span> : null}
                       {o.Replayed ? <span className="text-accent">replayed</span> : null}
@@ -227,19 +227,19 @@ export default async function Page({
           </Panel>
 
           <Panel title="Pre-repair verdict">
-            <p className="text-[11px] leading-5 text-muted">
+            <p className="text-[13px] leading-5 text-muted">
               <span className="mono text-ink">{pre.verdict}</span> · {pre.order_status}
             </p>
             {pre.failing?.length ? (
               <ul className="mt-2 space-y-1.5">
                 {pre.failing.map((f) => (
-                  <li key={f} className="text-[11px] leading-5 text-bad">
+                  <li key={f} className="text-[13px] leading-5 text-bad">
                     {f}
                   </li>
                 ))}
               </ul>
             ) : (
-              <p className="mt-2 text-[11px] text-faint">No invariant counterexample recorded before repair.</p>
+              <p className="mt-2 text-[13px] text-faint">No invariant counterexample recorded before repair.</p>
             )}
           </Panel>
         </div>
@@ -252,18 +252,18 @@ export default async function Page({
             {diag ? (
               <div className="space-y-3">
                 <div>
-                  <p className="text-[10px] font-medium uppercase tracking-[0.12em] text-ink/70">Root cause</p>
+                  <p className="text-[13px] font-medium text-ink/70">Root cause</p>
                   <p className="mt-1 text-[13px] leading-6 text-ink">{diag.root_cause}</p>
                 </div>
                 <div>
-                  <p className="text-[10px] font-medium uppercase tracking-[0.12em] text-ink/70">Mechanism</p>
+                  <p className="text-[13px] font-medium text-ink/70">Mechanism</p>
                   <p className="mt-1 text-xs leading-5 text-muted">{diag.mechanism}</p>
                 </div>
                 <div>
-                  <p className="text-[10px] font-medium uppercase tracking-[0.12em] text-ink/70">Proposed fix</p>
+                  <p className="text-[13px] font-medium text-ink/70">Proposed fix</p>
                   <p className="mt-1 text-xs leading-5 text-muted">{diag.proposed_fix}</p>
                 </div>
-                <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-faint">
+                <div className="flex flex-wrap gap-x-4 gap-y-1 text-[13px] text-faint">
                   {diag.suspected_files?.length ? (
                     <span className="mono">{diag.suspected_files.join(" · ")}</span>
                   ) : null}
@@ -276,8 +276,8 @@ export default async function Page({
                 </div>
                 {diag.uncertainties?.length ? (
                   <div className="border-t border-line pt-2">
-                    <p className="text-[10px] font-medium uppercase tracking-[0.12em] text-ink/70">Uncertainties</p>
-                    <ul className="mt-1 list-disc space-y-1 pl-4 text-[11px] leading-5 text-faint">
+                    <p className="text-[13px] font-medium text-ink/70">Uncertainties</p>
+                    <ul className="mt-1 list-disc space-y-1 pl-4 text-[13px] leading-5 text-faint">
                       {diag.uncertainties.map((u) => (
                         <li key={u}>{u}</li>
                       ))}
@@ -303,7 +303,7 @@ export default async function Page({
           <Panel
             title="Independent verification"
             meta={
-              <span className={`text-[10px] font-medium ${statusTone(run?.status ?? "")}`}>
+              <span className={`text-[13px] font-medium ${statusTone(run?.status ?? "")}`}>
                 {run ? statusLabel(run.status) : "not run"}
               </span>
             }
@@ -313,17 +313,17 @@ export default async function Page({
 
           <Panel title="Oracle findings">
             {evalInvariants.length === 0 ? (
-              <p className="text-[11px] leading-5 text-faint">
+              <p className="text-[13px] leading-5 text-faint">
                 No non-passing invariant recorded for this condition.
               </p>
             ) : (
               <ul className="space-y-2">
                 {evalInvariants.map((inv) => (
                   <li key={inv.id}>
-                    <p className="mono text-[11px] text-bad">
+                    <p className="mono text-[13px] text-bad">
                       {inv.id} · {inv.status}
                     </p>
-                    <p className="mt-0.5 text-[11px] leading-5 text-muted">{inv.summary}</p>
+                    <p className="mt-0.5 text-[13px] leading-5 text-muted">{inv.summary}</p>
                   </li>
                 ))}
               </ul>
@@ -332,7 +332,7 @@ export default async function Page({
 
           <Panel title="Human decision">
             <DecisionForm caseId={row.case.id} condition={active} />
-            <p className="mt-3 border-t border-line pt-2 text-[10px] leading-4 text-faint">
+            <p className="mt-3 border-t border-line pt-2 text-[13px] leading-4 text-faint">
               The console is read-only for payment state. Recording is disabled unless an
               operator configures a reviewer token; a recorded decision is a local note and
               never merges, deploys, captures, refunds, or retries a payment.
