@@ -477,6 +477,13 @@ func TestExportRecordedEvidenceIsSanitizedAndTyped(t *testing.T) {
 	if doc.HumanReview.DeveloperTreeApplied || doc.HumanReview.Deployed || !doc.HumanReview.CandidatePatchAppliedInDisposableWorktree {
 		t.Fatalf("human review = %+v", doc.HumanReview)
 	}
+	for name, list := range map[string][]invariant{"pre_repair": doc.PreRepair.Invariants, "oracle": doc.Oracle.Invariants, "unsafe": doc.Unsafe.Invariants} {
+		for _, inv := range list {
+			if strings.TrimSpace(inv.Title) == "" {
+				t.Fatalf("%s invariant %s has no title", name, inv.ID)
+			}
+		}
+	}
 	want, err := os.ReadFile(filepath.Join(root, "evidence", "m4-unsafe-f3", "patch.diff"))
 	if err != nil {
 		t.Fatal(err)

@@ -241,6 +241,7 @@ type invariantCounterexample struct {
 
 type invariant struct {
 	ID             string                   `json:"id"`
+	Title          string                   `json:"title,omitempty"`
 	Status         string                   `json:"status"`
 	Summary        string                   `json:"summary"`
 	Counterexample *invariantCounterexample `json:"counterexample,omitempty"`
