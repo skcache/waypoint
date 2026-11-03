@@ -644,6 +644,18 @@ func validateAcceptedEvidence(rep *repair.Report, att *repair.Attempt, obs obser
 	if obs.Fault != "" && rep.Fault != "" && obs.Fault != rep.Fault {
 		return fmt.Errorf("observations fault %q does not match report fault %q", obs.Fault, rep.Fault)
 	}
+	if att.Eval != nil && (att.Eval.ClaimedCaptureID != "" || att.Eval.ProviderCaptureID != "") {
+		matchedCapture := false
+		for _, o := range obs.Observations {
+			if o.CaptureID != "" && (o.CaptureID == att.Eval.ClaimedCaptureID || o.CaptureID == att.Eval.ProviderCaptureID) {
+				matchedCapture = true
+				break
+			}
+		}
+		if !matchedCapture {
+			return fmt.Errorf("observations do not contain the capture identity for accepted attempt %d", att.Number)
+		}
+	}
 	if rep.EvidenceTier != "" {
 		for _, o := range obs.Observations {
 			if o.Tier != rep.EvidenceTier {

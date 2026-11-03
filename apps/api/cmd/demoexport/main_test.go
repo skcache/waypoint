@@ -299,6 +299,25 @@ func TestAcceptedAttemptRejectsAmbiguousAndMismatchedEvidence(t *testing.T) {
 		}
 	})
 
+	t.Run("stale observations from another attempt", func(t *testing.T) {
+		dir, _, _ := makeMultiAttemptFixture(t)
+		path := filepath.Join(dir, "attempts", "attempt-2", "observations.json")
+		var obs map[string]any
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := json.Unmarshal(raw, &obs); err != nil {
+			t.Fatal(err)
+		}
+		items := obs["observations"].([]any)
+		items[len(items)-1].(map[string]any)["CaptureID"] = "CAP-one"
+		writeJSON(t, path, obs)
+		if _, err := exportFixture(t, dir); err == nil {
+			t.Fatal("expected stale observations to fail the capture-identity check")
+		}
+	})
+
 	t.Run("wrong oracle verdict", func(t *testing.T) {
 		dir, _, _ := makeMultiAttemptFixture(t)
 		path := filepath.Join(dir, "attempts", "attempt-2", "eval.json")
